@@ -1,0 +1,248 @@
+/* src/components/BulkImporter.css */
+
+.bulk-mode-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 24px;
+}
+
+.bulk-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 10px 0;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  margin-bottom: -1px;
+}
+
+.bulk-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-light);
+}
+
+.bulk-tab:hover:not(.active) {
+  color: var(--text-secondary);
+}
+
+/* ─── Drop Zone ─── */
+.drop-zone {
+  border: 1px dashed var(--border-subtle);
+  padding: 36px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  text-align: center;
+  position: relative;
+}
+
+.drop-zone:hover,
+.drop-zone.dragging {
+  border-color: var(--accent-light);
+  background: rgba(201,148,63,0.04);
+}
+
+.drop-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.drop-zone-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--accent-light);
+  opacity: 0.7;
+}
+
+.drop-zone-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.drop-zone-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ─── Template hint ─── */
+.csv-template {
+  margin-top: 16px;
+}
+
+.csv-template-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.csv-template-code {
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 10.5px;
+  color: var(--accent-light);
+  background: rgba(201,148,63,0.06);
+  border: 1px solid rgba(201,148,63,0.15);
+  padding: 8px 12px;
+  border-radius: 0;
+  display: block;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.btn-download-template {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 5px 12px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.btn-download-template:hover {
+  color: var(--accent-light);
+  border-color: rgba(201,148,63,0.3);
+}
+
+.btn-download-template svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ─── Preview ─── */
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.preview-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-light);
+  letter-spacing: 0.5px;
+}
+
+.btn-clear-file {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 2px 6px;
+  transition: color 0.2s;
+}
+
+.btn-clear-file:hover { color: var(--error); }
+
+.preview-table-wrap {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 16px;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.preview-table th {
+  background: rgba(201,148,63,0.06);
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  position: sticky;
+  top: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.preview-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-table tr:last-child td { border-bottom: none; }
+.preview-table tr:hover td { color: var(--text-primary); }
+
+.preview-more {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px;
+  font-style: italic;
+}
+
+/* ─── Import progress ─── */
+.import-progress-wrap {
+  margin-bottom: 12px;
+}
+
+.import-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.import-progress-bar {
+  height: 2px;
+  background: var(--border-subtle);
+  width: 100%;
+}
+
+.import-progress-fill {
+  height: 2px;
+  background: var(--accent-light);
+  transition: width 0.2s ease;
+}
+
+/* ─── Error list ─── */
+.import-errors {
+  font-size: 11px;
+  color: var(--error);
+  margin-top: 8px;
+  max-height: 80px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}

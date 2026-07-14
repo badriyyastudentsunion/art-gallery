@@ -1,0 +1,160 @@
+/* src/components/FontSwitcher.css */
+
+.fs-root {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Drawer ── */
+.fs-drawer {
+  width: 450px;
+  max-width: 96vw;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  padding: 22px 20px 16px;
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.5);
+
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+
+.fs-drawer--open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.fs-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+/* ── Font List ── */
+.fs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.fs-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255,255,255,0.01);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: var(--transition);
+}
+
+.fs-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-focus);
+}
+
+.fs-item--active {
+  background: var(--input-bg-focus);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(155, 106, 47, 0.15);
+}
+
+/* Preview Aa / ab indicator */
+.fs-item-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  background: var(--bg-primary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  min-width: 65px;
+  justify-content: center;
+}
+
+.fs-preview-heading {
+  font-size: 19px;
+  color: var(--text-primary);
+}
+
+.fs-preview-body {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Font Names Info */
+.fs-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fs-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.fs-item-desc {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+/* ── Trigger Button ── */
+.fs-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  padding: 9px 18px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: var(--transition);
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+}
+
+.fs-trigger:hover {
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+  background: var(--bg-card-hover);
+}
+
+.fs-trigger-icon {
+  font-size: 14px;
+}
+
+.fs-chevron {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.3s ease;
+  opacity: 0.6;
+}
+
+.fs-chevron--up {
+  transform: rotate(180deg);
+}

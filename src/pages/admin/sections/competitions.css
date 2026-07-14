@@ -1,0 +1,177 @@
+/* src/pages/admin/sections/competitions.css */
+
+/* ── Competition Row List ── */
+.ci-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ci-row {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: background 0.15s;
+}
+
+.ci-row:last-child {
+  border-bottom: none;
+}
+
+.ci-row--editing {
+  background: rgba(201, 148, 63, 0.04);
+}
+
+/* Top row: name + badges + actions */
+.ci-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ci-row-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ci-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ci-row-badges {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.ci-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ci-participants-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.ci-participants-btn:hover {
+  border-color: rgba(201, 148, 63, 0.35);
+  color: var(--accent-light);
+}
+
+/* Bottom assign row */
+.ci-row-assigns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ── Inline Dropdown ── */
+.ci-dropdown {
+  position: relative;
+}
+
+.ci-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.ci-dropdown-btn:hover:not(:disabled) {
+  border-color: rgba(201, 148, 63, 0.35);
+  color: var(--text-primary);
+}
+
+.ci-dropdown-btn--filled {
+  border-color: rgba(201, 148, 63, 0.3);
+  color: var(--accent-light);
+  background: rgba(201, 148, 63, 0.06);
+}
+
+.ci-dropdown-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ci-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ci-dropdown-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 10px 14px;
+}
+
+.ci-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.ci-dropdown-item:hover:not(:disabled) {
+  background: rgba(201, 148, 63, 0.06);
+  color: var(--text-primary);
+}
+
+.ci-dropdown-item--selected {
+  color: var(--accent-light);
+}
+
+.ci-dropdown-check {
+  width: 12px;
+  font-size: 10px;
+  color: var(--accent-light);
+  flex-shrink: 0;
+}

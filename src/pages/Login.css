@@ -1,0 +1,630 @@
+/* src/pages/Login.css */
+
+/* ─── Root: Full-viewport two-column grid ─── */
+.login-root {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* ─── Left Panel ─── */
+.login-left {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 52px 64px;
+  border-right: 1px solid var(--border-subtle);
+  z-index: 1;
+}
+
+/* Subtle ambient glow behind left text */
+.login-left::before {
+  content: '';
+  position: absolute;
+  bottom: -10%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(ellipse, var(--glow-a, rgba(155,106,47,0.12)) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Faint grid on left only */
+.login-left::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid-color, rgba(190,155,60,0.03)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color, rgba(190,155,60,0.03)) 1px, transparent 1px);
+  background-size: 56px 56px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.left-top {
+  position: relative;
+  z-index: 1;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.brand-mark svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent-light);
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.left-center {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.hero-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-light);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.hero-title {
+  font-size: clamp(48px, 6vw, 80px);
+  font-weight: 700;
+  line-height: 1.0;
+  color: var(--text-primary);
+  letter-spacing: -2px;
+  margin-bottom: 32px;
+}
+
+.hero-title em {
+  font-style: normal;
+  color: var(--accent-light);
+}
+
+.hero-divider {
+  width: 40px;
+  height: 1px;
+  background: var(--accent);
+  margin-bottom: 24px;
+}
+
+.hero-tagline {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  max-width: 340px;
+  font-weight: 400;
+}
+
+.left-bottom {
+  position: relative;
+  z-index: 1;
+}
+
+.access-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.access-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.access-role {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.access-role::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ─── Right Panel ─── */
+.login-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 52px 72px 52px 64px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-form-inner {
+  width: 100%;
+  max-width: 340px;
+}
+
+.form-header {
+  margin-bottom: 48px;
+}
+
+.form-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+
+.form-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ─── Form ─── */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Underline field style */
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 36px;
+}
+
+.field-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.field-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.field-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 40px 0 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  transition: border-color 0.25s ease;
+}
+
+.field-input::placeholder {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.field-input:hover {
+  border-bottom-color: rgba(201, 148, 63, 0.3);
+}
+
+.field-input:focus {
+  border-bottom-color: var(--accent-light);
+  outline: none;
+}
+
+/* Kill browser autofill background */
+.field-input:-webkit-autofill,
+.field-input:-webkit-autofill:hover,
+.field-input:-webkit-autofill:focus,
+.field-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 9999px var(--bg-primary) inset !important;
+  box-shadow: 0 0 0 9999px var(--bg-primary) inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--text-primary);
+  background-color: var(--bg-primary) !important;
+  transition: background-color 99999s ease-in-out 0s;
+}
+
+/* Animated underline on focus */
+.field-underline {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: var(--accent-light);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.field-input:focus ~ .field-underline {
+  width: 100%;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.password-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.password-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ─── Error ─── */
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 24px;
+  font-size: 12.5px;
+  color: var(--error);
+  animation: shakeX 0.4s ease;
+}
+
+.error-message svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+@keyframes shakeX {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* ─── Submit Button ─── */
+.login-btn {
+  width: 100%;
+  height: 50px;
+  background: var(--accent);
+  border: none;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cream, #ede1c8);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  transition: background 0.2s ease, opacity 0.2s;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.06);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.login-btn:hover {
+  background: var(--accent-light);
+}
+
+.login-btn:hover::after {
+  opacity: 1;
+}
+
+.login-btn:active {
+  opacity: 0.85;
+}
+
+.login-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(237,225,200,0.3);
+  border-top-color: #ede1c8;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Vertical Year Label ─── */
+.year-tag {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* ─── Fade-in animation ─── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.login-left {
+  animation: fadeSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-right {
+  animation: fadeSlideUp 0.6s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.dev-qr-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 32px;
+  padding: 14px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  max-width: 380px;
+}
+
+.dev-qr-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 6px;
+  border: 1px solid rgba(201,148,63,0.15);
+  flex-shrink: 0;
+}
+
+.dev-qr-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dev-qr-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-light);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.dev-qr-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.dev-qr-url {
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.04);
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+  border: 1px solid rgba(255,255,255,0.02);
+}
+
+/* ─────────────────────────────────────
+   Mobile Layout — Creative Single Column
+   ───────────────────────────────────── */
+@media (max-width: 768px) {
+
+  .dev-qr-card {
+    display: none;
+  }
+
+  /* Switch to single column */
+  .login-root {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* ── Ghost watermark — huge decorative text behind everything ── */
+  .login-root::before {
+    content: 'ARTS';
+    position: fixed;
+    bottom: -4vw;
+    right: -6vw;
+    font-size: 52vw;
+    font-weight: 900;
+    line-height: 1;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(201, 148, 63, 0.07);
+    letter-spacing: -4vw;
+    pointer-events: none;
+    z-index: 0;
+    user-select: none;
+  }
+
+  /* ── Left becomes a slim top bar ── */
+  .login-left {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 20px 24px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    animation: none;
+    opacity: 1;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Hide glow pseudo on left for mobile */
+  .login-left::before,
+  .login-left::after {
+    display: none;
+  }
+
+  /* Brand stays left */
+  .left-top {
+    order: 1;
+  }
+
+  .brand-mark {
+    margin-bottom: 0;
+  }
+
+  .brand-name {
+    font-size: 11px;
+  }
+
+  /* Compact year tag top-right */
+  .left-bottom {
+    order: 2;
+    text-align: right;
+  }
+
+  .access-label {
+    display: none;
+  }
+
+  .access-roles {
+    display: none;
+  }
+
+  /* Year shown compact */
+  .left-bottom::after {
+    content: 'BDSA ' attr(data-year);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Hide the large hero block */
+  .left-center {
+    display: none;
+  }
+
+  /* ── Right panel takes full height ── */
+  .login-right {
+    padding: 48px 28px 48px 28px;
+    position: relative;
+    z-index: 2;
+    animation: none;
+    opacity: 1;
+
+    /* Left amber accent line — editorial detail */
+    border-left: 2px solid var(--accent);
+    margin-left: 24px;
+    padding-left: 28px;
+  }
+
+  /* Bigger heading on mobile */
+  .form-header {
+    margin-bottom: 40px;
+  }
+
+  .form-title {
+    font-size: 32px;
+    letter-spacing: -1px;
+    line-height: 1.1;
+    margin-bottom: 6px;
+  }
+
+  /* Slightly larger inputs for touch */
+  .field-input {
+    height: 48px;
+    font-size: 16px; /* prevents iOS zoom */
+  }
+
+  .field-group {
+    margin-bottom: 32px;
+  }
+
+  .login-btn {
+    height: 52px;
+  }
+}
+
+/* Very small screens */
+@media (max-width: 380px) {
+  .login-right {
+    padding: 36px 20px 36px 20px;
+    margin-left: 16px;
+  }
+
+  .form-title {
+    font-size: 26px;
+  }
+}

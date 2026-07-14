@@ -1,0 +1,524 @@
+/* src/pages/invigilator/invigilator.css
+   Native app experience — grouped section cards, iOS/Android settings aesthetic
+   Consistent with admin panel's dark desert theme
+*/
+
+/* ── Shared checkbox ── */
+.check-box {
+  width: 20px; height: 20px;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 5px;
+  background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; cursor: pointer;
+  transition: all 0.15s;
+}
+.check-box.checked {
+  border-color: var(--accent-light);
+  background: var(--accent-light);
+}
+.check-box.checked::after {
+  content: '';
+  width: 10px; height: 6px;
+  border-left: 2px solid #0e0b07;
+  border-bottom: 2px solid #0e0b07;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+/* ── Shared radio ── */
+.radio-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border: 1px solid var(--border-subtle);
+  border-radius: 6px; cursor: pointer; font-size: 12px;
+  color: var(--text-muted); transition: all 0.15s;
+  user-select: none; background: transparent; font-family: inherit;
+}
+.radio-opt.active {
+  border-color: var(--accent-light);
+  color: var(--accent-light);
+  background: rgba(201,148,63,0.07);
+}
+.radio-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  flex-shrink: 0; transition: all 0.15s;
+}
+.radio-dot.active { border-color: var(--accent-light); background: var(--accent-light); }
+
+/* ═══════════════════════════════════════
+   ROOT
+═══════════════════════════════════════ */
+.inv-root {
+  min-height: 100vh;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-primary);
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ═══════════════════════════════════════
+   TOP BAR — iOS navigation bar style
+═══════════════════════════════════════ */
+.inv-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 52px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.inv-back {
+  background: none;
+  border: none;
+  color: var(--accent-light);
+  cursor: pointer;
+  padding: 4px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.inv-back svg { width: 18px; height: 18px; }
+
+.inv-logout {
+  background: none;
+  border: none;
+  color: var(--accent-light);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px;
+}
+
+/* ═══════════════════════════════════════
+   MAIN SCROLL AREA
+═══════════════════════════════════════ */
+.inv-main {
+  flex: 1;
+  padding: 20px 16px 40px;
+  overflow-y: auto;
+}
+
+/* ═══════════════════════════════════════
+   SECTION LABEL — like iOS grouped tables
+═══════════════════════════════════════ */
+.inv-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  margin-top: 24px;
+  padding: 0 4px;
+}
+
+.inv-section-label:first-child { margin-top: 4px; }
+
+/* ═══════════════════════════════════════
+   COMPETITION LIST — grouped cards
+═══════════════════════════════════════ */
+.inv-card-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tab bar */
+.inv-tab-bar {
+  display: flex;
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 16px;
+}
+
+.inv-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 7px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.18s;
+  letter-spacing: 0.3px;
+}
+
+.inv-tab.active {
+  background: var(--accent-light);
+  color: #0e0b07;
+}
+
+/* Grouped card list — all items in one rounded box */
+.inv-group-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.inv-comp-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.inv-comp-card:last-child { border-bottom: none; }
+
+.inv-comp-card:active { background: rgba(201,148,63,0.05); }
+
+.inv-comp-card.done {
+  opacity: 0.7;
+}
+
+.inv-comp-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: rgba(201,148,63,0.08);
+  border: 1px solid rgba(201,148,63,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent-light);
+}
+
+.inv-comp-icon svg { width: 16px; height: 16px; }
+
+.inv-comp-icon.done-icon {
+  background: rgba(100,180,100,0.1);
+  border-color: rgba(100,180,100,0.2);
+  color: #7bc47b;
+}
+
+.inv-comp-body { flex: 1; min-width: 0; }
+
+.inv-comp-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inv-comp-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.inv-comp-chevron {
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.inv-comp-chevron svg { width: 16px; height: 16px; }
+
+/* ═══════════════════════════════════════
+   STATUS BADGES
+═══════════════════════════════════════ */
+.inv-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.inv-status-badge.done {
+  background: rgba(100,180,100,0.12);
+  color: #7bc47b;
+  border: 1px solid rgba(100,180,100,0.2);
+}
+
+.inv-status-badge.pending {
+  background: rgba(201,148,63,0.08);
+  color: var(--accent-light);
+  border: 1px solid rgba(201,148,63,0.15);
+}
+
+/* ═══════════════════════════════════════
+   REPORT DETAIL PAGE
+═══════════════════════════════════════ */
+.inv-report-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Schedule + limit meta row */
+.inv-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 4px 0;
+}
+
+.inv-limit-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  background: rgba(201,148,63,0.08);
+  border: 1px solid rgba(201,148,63,0.18);
+  border-radius: 4px;
+  color: var(--accent-light);
+  letter-spacing: 0.3px;
+}
+
+/* QR bar — competition-level scan */
+.inv-qr-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inv-qr-main-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--accent-light);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.inv-qr-main-btn:active { background: rgba(201,148,63,0.06); }
+
+.inv-qr-main-btn svg { width: 18px; height: 18px; }
+
+.inv-scan-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inv-scan-msg {
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.inv-scan-msg.ok {
+  background: rgba(100,180,100,0.1);
+  border: 1px solid rgba(100,180,100,0.2);
+  color: #7bc47b;
+}
+
+.inv-scan-msg.err {
+  background: rgba(200,80,80,0.08);
+  border: 1px solid rgba(200,80,80,0.15);
+  color: #c47b7b;
+}
+
+/* Code letter badge (after submit) */
+.inv-code-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent-light);
+  background: rgba(201,148,63,0.1);
+  border: 1px solid rgba(201,148,63,0.2);
+  border-radius: 5px;
+  padding: 2px 8px;
+  letter-spacing: 0.5px;
+  min-width: 28px;
+}
+
+/* Chess number badge (read-only from DB) */
+.inv-chess-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
+/* QR cancel button inside modal */
+.inv-qr-cancel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.inv-qr-cancel-btn svg { width: 14px; height: 14px; }
+
+/* Participants list */
+.inv-participants-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.inv-part-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.12s;
+  cursor: pointer;
+}
+
+.inv-part-row:last-child { border-bottom: none; }
+
+.inv-part-row.present {
+  background: rgba(201,148,63,0.03);
+}
+
+/* Submit bar — pinned action button area */
+.inv-submit-bar {
+  margin-top: 8px;
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inv-present-count {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.inv-submit-btn {
+  background: var(--accent-light);
+  color: #0e0b07;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 11px 22px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.15s;
+  letter-spacing: 0.2px;
+}
+
+.inv-submit-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.inv-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.inv-submit-btn:active:not(:disabled) { opacity: 0.82; }
+
+/* ═══════════════════════════════════════
+   SUCCESS STATE
+═══════════════════════════════════════ */
+.inv-success-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(100,180,100,0.2);
+  border-radius: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* ═══════════════════════════════════════
+   EMPTY / LOADING
+═══════════════════════════════════════ */
+.inv-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  gap: 10px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════
+   QR CAMERA MODAL
+═══════════════════════════════════════ */
+.inv-qr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.inv-qr-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px 16px 0 0;
+  padding: 20px 20px 40px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.inv-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+}

@@ -1,0 +1,196 @@
+/* src/components/ThemeSwitcher.css */
+
+.ts-root {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* ── Panel ── */
+.ts-panel {
+  width: 420px;
+  max-width: 96vw;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  padding: 22px 20px 16px;
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.5);
+
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+
+.ts-panel--open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.ts-heading {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+/* ── Theme Grid ── */
+.ts-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+
+.ts-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: transform 0.2s ease;
+}
+
+.ts-card:hover {
+  transform: translateY(-3px);
+}
+
+/* Mini preview box */
+.ts-preview {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  position: relative;
+}
+
+.ts-preview-card {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  padding: 7px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ts-preview-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-bottom: 2px;
+}
+
+.ts-preview-line {
+  height: 4px;
+  border-radius: 2px;
+  opacity: 0.5;
+}
+
+.ts-preview-line--short {
+  width: 60%;
+}
+
+.ts-preview-btn {
+  height: 7px;
+  border-radius: 3px;
+  margin-top: auto;
+  opacity: 0.85;
+}
+
+/* Active ring */
+.ts-active-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 13px;
+  border: 2px solid;
+  pointer-events: none;
+}
+
+.ts-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ts-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ts-name {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.ts-card--active .ts-name {
+  color: var(--text-secondary);
+}
+
+/* ── Trigger Button ── */
+.ts-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  padding: 9px 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+}
+
+.ts-trigger:hover {
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+  background: var(--bg-card-hover);
+}
+
+.ts-trigger-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.ts-trigger-label {
+  font-family: inherit;
+}
+
+.ts-chevron {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.3s ease;
+  opacity: 0.6;
+}
+
+.ts-chevron--up {
+  transform: rotate(180deg);
+}

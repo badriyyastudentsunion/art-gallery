@@ -1,0 +1,286 @@
+/* src/pages/invigilator/InvigilatorDashboard.css */
+
+.invdash-root {
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.invdash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  height: 52px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.invdash-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invdash-brand {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: var(--accent-light);
+}
+
+.invdash-role-badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 8px;
+}
+
+.invdash-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.invdash-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1px solid rgba(201,148,63,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--accent-light);
+}
+
+.invdash-username {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.invdash-signout-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10px;
+  padding: 4px 12px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+
+.invdash-signout-btn:hover {
+  border-color: rgba(201,148,63,0.3);
+  color: var(--text-primary);
+}
+
+.invdash-main {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 36px 24px;
+}
+
+.invdash-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.invdash-count {
+  font-size: 10px;
+  color: var(--accent-light);
+  background: var(--accent-dim);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.invdash-loading {
+  display: flex;
+  justify-content: center;
+  padding: 60px 0;
+}
+
+.invdash-spin {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(201,148,63,0.2);
+  border-top-color: var(--accent-light);
+  border-radius: 50%;
+  animation: invdash-spin 0.7s linear infinite;
+}
+
+@keyframes invdash-spin {
+  to { transform: rotate(360deg); }
+}
+
+.invdash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.invdash-empty svg {
+  width: 32px;
+  height: 32px;
+  opacity: 0.3;
+}
+
+.invdash-empty p {
+  font-size: 13px;
+}
+
+.invdash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.invdash-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: 12px;
+}
+
+.invdash-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.invdash-card-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.invdash-card-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.invdash-badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--accent-light);
+  background: rgba(201,148,63,0.08);
+  border: 1px solid rgba(201,148,63,0.15);
+  padding: 2px 7px;
+}
+
+.invdash-badge-dim {
+  color: var(--text-muted);
+  background: none;
+  border-color: var(--border-subtle);
+}
+
+.invdash-card-max {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Logout Modal ── */
+.invdash-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.invdash-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  padding: 32px 28px;
+  width: min(340px, 90vw);
+}
+
+.invdash-modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.invdash-modal-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.invdash-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.invdash-modal-cancel {
+  flex: 1;
+  height: 38px;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.invdash-modal-cancel:hover {
+  border-color: rgba(201,148,63,0.3);
+  color: var(--text-primary);
+}
+
+.invdash-modal-confirm {
+  flex: 1;
+  height: 38px;
+  background: var(--accent);
+  border: none;
+  color: var(--cream, #ede1c8);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background 0.2s;
+}
+
+.invdash-modal-confirm:hover {
+  background: var(--accent-light);
+}

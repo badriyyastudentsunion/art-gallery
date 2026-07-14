@@ -1,0 +1,104 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background-color: #9b6a2f; /* var(--accent) */
+  color: #ede1c8; /* var(--cream) */
+}
+
+:root {
+  /* ── Desert Theme (Default) ── */
+  --bg-primary:      #0e0b07;
+  --bg-secondary:    #0a0804;
+  --bg-card:         #181208;
+  --bg-card-hover:   #1d160b;
+
+  --border-subtle:   rgba(190, 155, 60, 0.10);
+  --border-focus:    rgba(155, 106, 47, 0.70);
+
+  --accent:          #9b6a2f;
+  --accent-light:    #c9943f;
+  --accent-dim:      rgba(155, 106, 47, 0.15);
+
+  --cream:           #ede1c8;
+  --cream-dim:       rgba(237, 225, 200, 0.60);
+
+  --text-primary:    #ede1c8;
+  --text-secondary:  rgba(237, 225, 200, 0.70);
+  --text-muted:      rgba(237, 225, 200, 0.35);
+
+  --error:           #f87171;
+  --error-bg:        rgba(248, 113, 113, 0.08);
+  --success:         #c9943f;
+
+  --input-bg:        rgba(190, 155, 60, 0.04);
+  --input-bg-focus:  rgba(155, 106, 47, 0.08);
+
+  --shadow-card:     0 25px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(190, 155, 60, 0.08);
+  --shadow-accent:   0 0 30px rgba(155, 106, 47, 0.18);
+
+  /* Helper variables for CSS */
+  --glow-a:          rgba(155, 106, 47, 0.12);
+  --glow-b:          rgba(201, 148, 63, 0.06);
+  --grid-color:      rgba(190,155,60,0.03);
+  --btn-from:        #9b6a2f;
+  --btn-to:          #7a5224;
+  --btn-text:        #ede1c8;
+  --btn-hover-glow:  rgba(155, 106, 47, 0.38);
+  --top-line:        rgba(201,148,63,0.45);
+  --logo-border:     rgba(201, 148, 63, 0.30);
+  --logo-bg-from:    rgba(155,106,47,0.18);
+  --logo-bg-to:      rgba(155,106,47,0.06);
+  --role-border:     rgba(201, 148, 63, 0.15);
+  --role-bg:         rgba(155, 106, 47, 0.05);
+
+  --radius:          12px;
+  --radius-sm:       8px;
+  --transition:      all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border: none;
+  outline: none;
+}
+
+input {
+  font-family: inherit;
+  outline: none;
+  border: none;
+}
+
+/* Hide spin buttons in number inputs */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 999px; }
