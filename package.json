@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "bump": "npm version patch --no-git-tag-version && node scripts/update-version-file.js",
-    "deploy": "npm run bump && git add . && git commit -m \"Bump version & deploy\" && git push origin main"
+    "deploy": "npm run bump && npm run build && git add . && git commit -m \"Bump version & deploy\" && git push origin main && npx firebase-tools deploy --only hosting"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.2",
