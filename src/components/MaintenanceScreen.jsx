@@ -1,6 +1,7 @@
 // src/components/MaintenanceScreen.jsx
 import { useState, useEffect } from 'react'
 import LoginModal from './LoginModal'
+import '../pages/LandingPage.css'
 
 /* ── Icons ── */
 const IconLogIn = () => (
@@ -23,7 +24,7 @@ const InspicoTitleLogo = ({ style = {} }) => (
         <path fill="#fff" d="M286.19,72.16c.19,1.61,1.11,2.4,2.47,2.37h28.11s0,25.68,0,25.68l-53.79-.02V0s53.79,0,53.79,0v23.91s-27.76,0-27.76,0c-1.72-.02-2.68,1.15-2.82,2.9v45.36Z"/>
         <path fill="#fff" d="M257.02,100.21h-34.11s.01-86.79.01-86.79c10.02,7.66,21.58,11.85,34.1,11.91v74.88Z"/>
       </g>
-      <path fill="#B8193C" d="M257.03,20.56c-12.78-.24-24.71-5.29-34.06-14.01l-.05-6.55h34.1s0,20.56,0,20.56Z"/>
+      <path className="lp-red-dot-glitch" fill="#B8193C" d="M257.03,20.56c-12.78-.24-24.71-5.29-34.06-14.01l-.05-6.55h34.1s0,20.56,0,20.56Z"/>
     </g>
   </svg>
 )
