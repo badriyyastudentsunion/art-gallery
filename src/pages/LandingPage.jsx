@@ -1298,10 +1298,12 @@ function GalleryTab() {
           <h2 className="lp-section-title">Event Gallery</h2>
           <p className="lp-section-sub">Live updates, photos, and video feeds</p>
         </div>
-        <div className="lp-live-badge">
-          <span className="lp-live-dot" />
-          Live Feed
-        </div>
+        {liveStreams.length > 0 && (
+          <div className="lp-live-badge">
+            <span className="lp-live-dot" />
+            Live Event
+          </div>
+        )}
       </div>
 
       {/* Active Live Stream Hero */}
@@ -1592,7 +1594,6 @@ export default function LandingPage() {
         <div className="lp-topbar-brand">
           <img className="lp-topbar-logo" src="/inspico-logo.svg" alt="Inspico Logo" />
           <InspicoTitleLogo className="lp-topbar-word" />
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', marginLeft: 6, opacity: 0.8 }}>{APP_VERSION}</span>
         </div>
 
         {/* Desktop nav */}
@@ -1678,6 +1679,11 @@ export default function LandingPage() {
             rulesMap={rulesMap}
           />
         )}
+
+        {/* ── Footer Version Tag ── */}
+        <footer style={{ textAlign: 'center', padding: '24px 0 80px 0', fontSize: 11, color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>
+          Inspico Platform {APP_VERSION}
+        </footer>
       </main>
 
       {/* ── Bottom Navigation (mobile + desktop) ── */}
