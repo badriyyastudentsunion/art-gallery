@@ -269,7 +269,40 @@ function MinimalCountdown() {
 }
 
 /* ══════════ HOME TAB ══════════ */
-function HomeTab({ onLoginClick }) {
+function HomeTab({ onLoginClick, setTab, liveStream }) {
+  const [photos, setPhotos] = useState([])
+  const [currentIndex, setCurrentIndex] = useState(0)
+
+  useEffect(() => {
+    async function loadPhotos() {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'event_media').maybeSingle()
+      if (data?.value) {
+        try {
+          const feed = JSON.parse(data.value)
+          const imgItems = feed.filter(item => item.type === 'photo')
+          setPhotos(imgItems)
+        } catch {}
+      }
+    }
+    loadPhotos()
+
+    const ch = supabase.channel('lp-home-photos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, loadPhotos)
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(ch)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (photos.length <= 1) return
+    const timer = setInterval(() => {
+      setCurrentIndex(prev => (prev + 1) % photos.length)
+    }, 4500)
+    return () => clearInterval(timer)
+  }, [photos])
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -286,7 +319,14 @@ function HomeTab({ onLoginClick }) {
     elements.forEach((el) => observer.observe(el))
 
     return () => observer.disconnect()
-  }, [])
+  }, [photos, liveStream])
+
+  function getYoutubeId(url) {
+    if (!url) return null
+    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i
+    const match = url.trim().match(regExp)
+    return match ? match[1] : null
+  }
 
   return (
     <div className="lp-tab-home">
@@ -361,6 +401,178 @@ function HomeTab({ onLoginClick }) {
             <p className="lp-ml-sub">ആശയമാകുന്നു...</p>
           </div>
         </div>
+
+        {/* Live Broadcast Section (if active) */}
+        {liveStream && (
+          <div style={{
+            width: '100%',
+            maxWidth: '650px',
+            margin: '40px auto 20px auto',
+            background: 'rgba(184, 25, 60, 0.04)',
+            border: '1px solid rgba(184, 25, 60, 0.2)',
+            borderRadius: '16px',
+            padding: '24px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            boxSizing: 'border-box'
+          }} className="lp-scroll-reveal">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#ef4444',
+                animation: 'pulse 1.5s infinite'
+              }} />
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#ff6b8a', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                Active Live Broadcast
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              {(() => {
+                const ytId = getYoutubeId(liveStream.url)
+                return ytId ? (
+                  <div style={{ flex: '1 1 320px', aspectRatio: '16/9', borderRadius: '10px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <iframe
+                      width="100%"
+                      height="100%"
+                      src={`https://www.youtube-nocookie.com/embed/${ytId}`}
+                      title={liveStream.caption}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : null
+              })()}
+              <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', fontWeight: 700, color: '#fff', lineHeight: 1.4 }}>{liveStream.caption}</h3>
+                <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+                  Broadcasting live from the stage. Watch standard streams or open on YouTube.
+                </p>
+                <button
+                  onClick={() => setTab('gallery')}
+                  style={{
+                    background: '#B8193C',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    cursor: 'pointer',
+                    alignSelf: 'flex-start',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#d01f48' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#B8193C' }}
+                >
+                  Watch in Gallery
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dual Marquee Photos Slider Section */}
+        {photos.length > 0 && (
+          <div className="lp-home-gallery-wrap lp-scroll-reveal">
+            <h3 className="lp-home-gallery-title">Live Event Gallery</h3>
+            
+            <div className="lp-marquee-container">
+              {/* Row 1: Slides Left */}
+              {(() => {
+                const list1 = photos.slice(0, Math.ceil(photos.length / 2))
+                const items1 = list1.length > 0 ? list1 : photos
+                // Duplicate for seamless infinite loop
+                const row1 = [...items1, ...items1, ...items1, ...items1]
+                return (
+                  <div className="lp-marquee-row lp-marquee-left">
+                    {row1.map((item, idx) => (
+                      <div
+                        key={`row1-${item.id}-${idx}`}
+                        className="lp-marquee-card"
+                        onClick={() => setTab('gallery')}
+                      >
+                        <img src={item.url} alt={item.caption} className="lp-marquee-img" />
+                        {item.caption && (
+                          <div className="lp-marquee-caption-overlay">
+                            <p className="lp-marquee-caption">{item.caption}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              {/* Row 2: Slides Right (Opposite) */}
+              {(() => {
+                const list2 = photos.slice(Math.ceil(photos.length / 2))
+                const items2 = list2.length > 0 ? list2 : photos
+                // Duplicate for seamless infinite loop
+                const row2 = [...items2, ...items2, ...items2, ...items2]
+                return (
+                  <div className="lp-marquee-row lp-marquee-right">
+                    {row2.map((item, idx) => (
+                      <div
+                        key={`row2-${item.id}-${idx}`}
+                        className="lp-marquee-card"
+                        onClick={() => setTab('gallery')}
+                      >
+                        <img src={item.url} alt={item.caption} className="lp-marquee-img" />
+                        {item.caption && (
+                          <div className="lp-marquee-caption-overlay">
+                            <p className="lp-marquee-caption">{item.caption}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Detail See in Gallery Button */}
+            <button
+              onClick={() => setTab('gallery')}
+              style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '999px',
+                padding: '10px 22px',
+                color: '#fff',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginTop: '6px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.18)'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
+              <span>See details in Gallery section</span>
+              <span style={{ fontSize: '12px' }}>→</span>
+            </button>
+          </div>
+        )}
 
         {/* Teams Section */}
         <div className="lp-teams-section lp-scroll-reveal">
@@ -1223,9 +1435,9 @@ function GalleryTab() {
 
   function getYoutubeId(url) {
     if (!url) return null
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/
-    const match = url.match(regExp)
-    return (match && match[2].length === 11) ? match[2] : null
+    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i
+    const match = url.trim().match(regExp)
+    return match ? match[1] : null
   }
 
   const liveStreams = media.filter(item => item.type === 'live')
@@ -1278,7 +1490,7 @@ function GalleryTab() {
                     <iframe
                       width="100%"
                       height="100%"
-                      src={`https://www.youtube.com/embed/${ytId}`}
+                      src={`https://www.youtube-nocookie.com/embed/${ytId}`}
                       title={currentLive.caption}
                       frameBorder="0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -1343,12 +1555,21 @@ function GalleryTab() {
             return (
               <div
                 key={item.id}
-                className="lp-comp-card lp-scroll-reveal"
                 onClick={() => {
                   if (isPhoto) setLightboxItem(item)
                   else setActiveVideo(item)
                 }}
-                style={{ padding: 0, overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+                style={{
+                  padding: 0,
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: 14,
+                  transition: 'transform 0.2s ease, border-color 0.2s ease'
+                }}
               >
                 {/* Media frame */}
                 <div style={{ height: 180, width: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
@@ -1412,7 +1633,7 @@ function GalleryTab() {
                   <iframe
                     width="100%"
                     height="100%"
-                    src={`https://www.youtube.com/embed/${ytId}?autoplay=1`}
+                    src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1`}
                     title={activeVideo.caption}
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -1544,7 +1765,7 @@ export default function LandingPage() {
 
         {/* Desktop nav */}
         <nav className="lp-desktop-nav">
-          {tabs.filter(t => t.id !== 'home').map(t => (
+          {tabs.map(t => (
             <button key={t.id}
               className={`lp-desktop-nav-btn ${tab === t.id ? 'active' : ''}`}
               onClick={() => setTab(t.id)}>
@@ -1589,7 +1810,7 @@ export default function LandingPage() {
 
       {/* ── Main Content ── */}
       <main className="lp-main">
-        {tab === 'home'    && <HomeTab onLoginClick={() => setShowLogin(true)} />}
+        {tab === 'home'    && <HomeTab onLoginClick={() => setShowLogin(true)} setTab={setTab} liveStream={liveStream} />}
         {tab === 'gallery' && <GalleryTab />}
         {tab === 'points'  && <TeamPointsTab />}
         {tab === 'results' && <ResultsTab />}

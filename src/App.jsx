@@ -55,37 +55,40 @@ function AppRoutes() {
     return <AdminPanel />
   }
 
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const bypassMaintenance = isLocalhost && maintenance.allow_localhost_bypass === true
+
   const isMasterMaintenance = maintenance.all === true
 
   if (!user) {
-    if (isMasterMaintenance || maintenance.landing_page) {
+    if ((isMasterMaintenance || maintenance.landing_page) && !bypassMaintenance) {
       return <MaintenanceScreen title="Public Site Maintenance" notice={maintenance.notice} onRefresh={fetchMaintenance} />
     }
     return <LandingPage />
   }
 
   // Logged-in non-admin roles
-  if (isMasterMaintenance) {
+  if (isMasterMaintenance && !bypassMaintenance) {
     return <MaintenanceScreen title="System Under Maintenance" notice={maintenance.notice} onRefresh={fetchMaintenance} />
   }
 
-  if (user.role === 'Team' && maintenance.team_leaders) {
+  if (user.role === 'Team' && maintenance.team_leaders && !bypassMaintenance) {
     return <MaintenanceScreen title="Team Leaders Dashboard Offline" notice={maintenance.notice} onRefresh={fetchMaintenance} />
   }
 
-  if (user.role === 'Judge' && maintenance.judges) {
+  if (user.role === 'Judge' && maintenance.judges && !bypassMaintenance) {
     return <MaintenanceScreen title="Judges Portal Offline" notice={maintenance.notice} onRefresh={fetchMaintenance} />
   }
 
-  if (user.role === 'Announcer' && maintenance.announcers) {
+  if (user.role === 'Announcer' && maintenance.announcers && !bypassMaintenance) {
     return <MaintenanceScreen title="Announcers Portal Offline" notice={maintenance.notice} onRefresh={fetchMaintenance} />
   }
 
-  if (user.role === 'Invigilator' && maintenance.invigilators) {
+  if (user.role === 'Invigilator' && maintenance.invigilators && !bypassMaintenance) {
     return <MaintenanceScreen title="Invigilators Portal Offline" notice={maintenance.notice} onRefresh={fetchMaintenance} />
   }
 
-  if (user.role === 'Media' && maintenance.media) {
+  if (user.role === 'Media' && maintenance.media && !bypassMaintenance) {
     return <MaintenanceScreen title="Media Portal Offline" notice={maintenance.notice} onRefresh={fetchMaintenance} />
   }
 

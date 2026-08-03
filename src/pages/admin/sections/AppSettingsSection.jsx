@@ -34,6 +34,7 @@ export default function AppSettingsSection() {
     announcers: false,
     invigilators: false,
     media: false,
+    allow_localhost_bypass: false,
     notice: 'System is currently undergoing scheduled maintenance. Please check back shortly.'
   })
 
@@ -219,6 +220,44 @@ export default function AppSettingsSection() {
               </div>
             )
           })}
+        </div>
+
+        {/* Localhost Bypass Settings Card */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 14,
+          padding: 20,
+          marginBottom: 20,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16
+        }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 700, color: '#fff' }}>Localhost Developer Bypass</h3>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+              Allow developers to bypass maintenance blocks and test all portals when running on http://localhost or http://127.0.0.1.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleSingle('allow_localhost_bypass')}
+            style={{
+              background: maintenance.allow_localhost_bypass ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+              border: maintenance.allow_localhost_bypass ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+              color: maintenance.allow_localhost_bypass ? '#34d399' : 'rgba(255,255,255,0.4)',
+              padding: '10px 18px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              fontFamily: 'inherit'
+            }}
+          >
+            {maintenance.allow_localhost_bypass ? '🟢 ENABLED (BYPASS ACTIVE)' : '🛑 DISABLED'}
+          </button>
         </div>
 
         {/* Custom Maintenance Message Setting */}

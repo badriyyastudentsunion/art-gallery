@@ -1,5 +1,6 @@
 // src/components/MaintenanceScreen.jsx
 import { useState, useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
 import LoginModal from './LoginModal'
 import '../pages/LandingPage.css'
 
@@ -9,6 +10,13 @@ const IconLogIn = () => (
     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
     <polyline points="10 17 15 12 10 7" />
     <line x1="15" y1="12" x2="3" y2="12" />
+  </svg>
+)
+const IconLogOut = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, opacity: 0.8 }}>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
   </svg>
 )
 
@@ -30,6 +38,7 @@ const InspicoTitleLogo = ({ style = {} }) => (
 )
 
 export default function MaintenanceScreen({ title = "System Maintenance", notice, onRefresh }) {
+  const { user, logout } = useAuth()
   const [showLoginModal, setShowLoginModal] = useState(false)
 
   // Auto-open on URL hash #admin or #login
@@ -107,42 +116,96 @@ export default function MaintenanceScreen({ title = "System Maintenance", notice
           <img src="/inspico.svg" alt="Inspico" style={{ height: 16, maxWidth: 120 }} />
         </div>
 
-        {/* Login button on topbar right — same style as lp-topbar-login */}
-        <button
-          onClick={() => setShowLoginModal(true)}
-          style={{
-            marginLeft: 'auto',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 18px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 999,
-            color: 'rgba(255,255,255,0.9)',
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.5px',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            transition: 'all 0.2s ease',
-            flexShrink: 0
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'
-            e.currentTarget.style.transform = 'translateY(-1px)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
-            e.currentTarget.style.transform = 'translateY(0)'
-          }}
-        >
-          <IconLogIn />
-          <span>Login</span>
-        </button>
+        {/* Topbar Right: User info + Logout if logged in, or Login button if logged out */}
+        {user ? (
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '4px 12px',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 999,
+              fontSize: 12,
+              color: '#fff'
+            }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', background: '#10B981'
+              }} />
+              <span style={{ fontWeight: 600 }}>{user.name || user.username}</span>
+              <span style={{ fontSize: 10, opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>({user.role})</span>
+            </div>
+            <button
+              onClick={logout}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 16px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                borderRadius: 999,
+                color: '#f87171',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.5px',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.2s ease',
+                flexShrink: 0
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
+              <IconLogOut />
+              <span>Logout</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowLoginModal(true)}
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 18px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 999,
+              color: 'rgba(255,255,255,0.9)',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'all 0.2s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}
+          >
+            <IconLogIn />
+            <span>Login</span>
+          </button>
+        )}
       </header>
 
       {/* ── Main Content — centered text, no box ── */}
