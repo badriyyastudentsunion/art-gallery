@@ -42,13 +42,30 @@ function parseCSV(text) {
   })
 }
 
-function downloadTemplate(columns, sampleRows, filename = 'template.csv') {
+function downloadTemplate(columns, sampleRows = [], filename = 'template.csv') {
   const header = columns.map(c => c.label).join(',')
-  const rows = sampleRows.map(r =>
-    r.map(cell => (cell.includes(',') ? `"${cell}"` : cell)).join(',')
-  ).join('\n')
-  const csv = `${header}\n${rows}`
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const formattedRows = sampleRows.map(row => {
+    if (Array.isArray(row)) {
+      return row.map(cell => {
+        const str = String(cell ?? '')
+        return str.includes(',') || str.includes('\n') || str.includes('"')
+          ? `"${str.replace(/"/g, '""')}"`
+          : str
+      }).join(',')
+    } else if (row && typeof row === 'object') {
+      return columns.map(col => {
+        const cell = row[col.key] ?? row[col.label] ?? ''
+        const str = String(cell ?? '')
+        return str.includes(',') || str.includes('\n') || str.includes('"')
+          ? `"${str.replace(/"/g, '""')}"`
+          : str
+      }).join(',')
+    }
+    return ''
+  }).filter(Boolean)
+
+  const csv = [header, ...formattedRows].join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.style.display = 'none'
@@ -57,9 +74,9 @@ function downloadTemplate(columns, sampleRows, filename = 'template.csv') {
   document.body.appendChild(a)
   a.click()
   setTimeout(() => {
-    document.body.removeChild(a)
+    if (a.parentNode) document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, 100)
+  }, 300)
 }
 
 const CHUNK = 50
@@ -101,10 +118,27 @@ export default function BulkImporter({ columns, sampleRows, onImport, disabled, 
 
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK)
-      // Map CSV row array → object keyed by column key
       const mapped = chunk.map(row => {
         const obj = {}
-        columns.forEach((col, idx) => { obj[col.key] = row[idx] ?? '' })
+        columns.forEach((col) => {
+          // Find matching index from detected CSV headers (case-insensitive, strip spaces)
+          const headerIdx = headers.findIndex(h => {
+            const cleanH = h.trim().toLowerCase()
+            const cleanKey = (col.key || '').trim().toLowerCase()
+            const cleanLabel = (col.label || '').trim().toLowerCase().replace(/\s+/g, '_')
+            return cleanH === cleanKey || cleanH === cleanLabel || cleanH.startsWith(cleanKey)
+          })
+          // Only use header-based index; if not found, empty string (no position fallback to avoid column shift)
+          obj[col.key] = headerIdx !== -1 ? (row[headerIdx] ?? '') : ''
+        })
+
+        // Also preserve raw header keys in object for custom handler lookups
+        headers.forEach((h, hIdx) => {
+          if (obj[h] === undefined) {
+            obj[h] = row[hIdx] ?? ''
+          }
+        })
+
         return obj
       })
 

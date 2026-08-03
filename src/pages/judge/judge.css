@@ -104,15 +104,15 @@
 
 .judge-comp-card:last-child { border-bottom: none; }
 
-.judge-comp-card:active { background: rgba(201,148,63,0.05); }
+.judge-comp-card:active { background: rgba(79, 156, 249,0.05); }
 
 .judge-comp-card.done { opacity: 0.65; }
 
 .judge-comp-icon {
   width: 36px; height: 36px;
   border-radius: 8px;
-  background: rgba(201,148,63,0.08);
-  border: 1px solid rgba(201,148,63,0.15);
+  background: rgba(79, 156, 249,0.08);
+  border: 1px solid rgba(79, 156, 249,0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,9 +139,19 @@
 .judge-comp-meta {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 3px;
+  margin-top: 2px;
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+}
+.judge-comp-meta span::after {
+  content: '·';
+  margin-left: 6px;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.judge-comp-meta span:last-child::after {
+  content: '';
 }
 
 .judge-comp-chevron {
@@ -166,9 +176,9 @@
 }
 
 .judge-status-badge.pending {
-  background: rgba(201,148,63,0.08);
+  background: rgba(79, 156, 249,0.08);
   color: var(--accent-light);
-  border: 1px solid rgba(201,148,63,0.15);
+  border: 1px solid rgba(79, 156, 249,0.15);
 }
 
 /* ═══════════════════════════════════════
@@ -209,8 +219,8 @@
 .judge-code-badge {
   width: 32px; height: 32px;
   border-radius: 8px;
-  background: rgba(201,148,63,0.08);
-  border: 1px solid rgba(201,148,63,0.18);
+  background: rgba(79, 156, 249,0.08);
+  border: 1px solid rgba(79, 156, 249,0.18);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -243,8 +253,8 @@
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 4px;
-  background: rgba(201,148,63,0.1);
-  border: 1px solid rgba(201,148,63,0.2);
+  background: rgba(79, 156, 249,0.1);
+  border: 1px solid rgba(79, 156, 249,0.2);
   color: var(--accent-light);
   letter-spacing: 0.5px;
   min-width: 32px;
@@ -293,4 +303,24 @@
   padding: 48px 20px;
   gap: 10px;
   text-align: center;
+}
+
+/* Redesigned Input Field */
+.judge-score-input-field {
+  transition: all 0.15s ease-out;
+}
+.judge-score-input-field:focus {
+  border-color: var(--accent-light) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  box-shadow: 0 0 0 3px rgba(237, 33, 36, 0.15) !important;
+}
+
+/* Clean chrome/safari input number spinners removal if wanted */
+.judge-score-input-field::-webkit-outer-spin-button,
+.judge-score-input-field::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.judge-score-input-field[type=number] {
+  -moz-appearance: textfield;
 }

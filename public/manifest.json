@@ -1,0 +1,18 @@
+{
+  "short_name": "Inspico",
+  "name": "Inspico - Arts Fest",
+  "description": "Arts Fest Management Platform",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0e0b07",
+  "theme_color": "#0e0b07",
+  "display": "standalone",
+  "orientation": "portrait"
+}

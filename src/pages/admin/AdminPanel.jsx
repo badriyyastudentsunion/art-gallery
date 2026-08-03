@@ -14,6 +14,9 @@ import PointSettingsSection from './sections/PointSettingsSection'
 import ScheduleSection from './sections/ScheduleSection'
 import DashboardSection from './sections/DashboardSection'
 import ResultsSection from './sections/ResultsSection'
+import AnnouncerFlowSection from './sections/AnnouncerFlowSection'
+import MediaSection from './sections/MediaSection'
+import AppSettingsSection from './sections/AppSettingsSection'
 
 // ── Icons ──
 const Icon = ({ d, d2, circle, rect, line, poly }) => (
@@ -31,15 +34,18 @@ const icons = {
   dashboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
   teams:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   categories: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
-  competitions:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>,
+  competitions:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 1 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>,
   participants:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   invigilators:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="3"/></svg>,
   judges:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3 7h7l-6 4 2 7-6-4-6 4 2-7-6-4h7z"/></svg>,
   announcers:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
+  media:       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>,
   stages:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>,
   results:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  'announcer-flow': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   schedule:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
   'point-settings': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>,
+  'app-settings': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
   logout:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
 }
 
@@ -53,10 +59,13 @@ const NAV = [
   { id: 'invigilators', label: 'Invigilators', group: 'People',      features: ['Manage exam & competition invigilators', 'Assign invigilators to stages', 'Track invigilator attendance'] },
   { id: 'judges',       label: 'Judges',       group: 'People',      features: ['Assign judges to events', 'Manage score submissions', 'View judge profiles'] },
   { id: 'announcers',   label: 'Announcers',   group: 'People',      features: ['Manage announcer roster', 'Assign to stages', 'Schedule announcements'] },
+  { id: 'media',        label: 'Media Portal', group: 'People',      features: ['Manage media uploaders', 'Moderate uploaded photos & live links', 'Assign YouTube videos'] },
   { id: 'stages',       label: 'Stages',       group: 'Venue',       features: ['Define stage/hall locations', 'Schedule stage usage', 'Manage stage capacity'] },
   { id: 'schedule',     label: 'Schedule',     group: 'Venue',       features: ['Set date & time per competition', 'Stage/room number', 'View chronological schedule'] },
   { id: 'point-settings', label: 'Point Settings', group: 'Reporting', features: ['Edit grade → points table', 'Placement points by group size', 'Results password'] },
   { id: 'results',      label: 'Results',      group: 'Reporting',   features: ['Compile final scores & rankings', 'Generate result reports', 'Export & publish results'] },
+  { id: 'announcer-flow', label: 'Announcer Flow', group: 'Reporting', features: ['Sequence ready competitions', 'Tally simulator', 'Suspense settings'] },
+  { id: 'app-settings', label: 'App Settings', group: 'System',     features: ['Maintenance mode toggles', 'Disable specific portals/logins', 'Custom maintenance notice'] },
 ]
 
 // Group nav items
@@ -82,18 +91,19 @@ export default function AdminPanel() {
 
       {/* ── Top Bar ── */}
       <header className="admin-topbar">
-        <div className="topbar-left">
-          <div className="topbar-logo">{icons.dashboard}</div>
-          <span className="topbar-brand">Art Gallery</span>
+        <div className="topbar-left" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src="/inspico-logo.svg" alt="Inspico Logo" style={{ height: 22, width: 22, filter: 'brightness(0) invert(1)', flexShrink: 0 }} />
+          <img src="/inspico.svg" alt="Inspico" style={{ height: 16, maxWidth: 100 }} />
           <div className="topbar-sep" />
-          <span className="topbar-section">Admin Panel</span>
+          <span className="topbar-section">Panel</span>
         </div>
         <div className="topbar-right">
           <div className="topbar-user">
-            <div className="topbar-avatar">{initials}</div>
             <span className="topbar-username">{user?.username}</span>
           </div>
-          <span className="topbar-role">{user?.role}</span>
+          {user?.role && user?.role.toLowerCase() !== user?.username?.toLowerCase() && (
+            <span className="topbar-role">{user?.role}</span>
+          )}
           <button className="topbar-logout" onClick={logout}>
             {icons.logout}
             Sign Out
@@ -139,7 +149,10 @@ export default function AdminPanel() {
         {active === 'point-settings' && <PointSettingsSection />}
         {active === 'schedule'       && <ScheduleSection />}
         {active === 'results'        && <ResultsSection />}
-        {!['teams','categories','competitions','participants','invigilators','judges','announcers','stages','point-settings','schedule','dashboard','results'].includes(active) && (
+        {active === 'announcer-flow' && <AnnouncerFlowSection />}
+        {active === 'media'          && <MediaSection />}
+        {active === 'app-settings'   && <AppSettingsSection />}
+        {!['teams','categories','competitions','participants','invigilators','judges','announcers','stages','point-settings','schedule','dashboard','results','announcer-flow','media','app-settings'].includes(active) && (
           <>
             <div className="page-header">
               <div className="page-header-left">

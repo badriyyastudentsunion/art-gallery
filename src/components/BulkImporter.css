@@ -49,7 +49,7 @@
 .drop-zone:hover,
 .drop-zone.dragging {
   border-color: var(--accent-light);
-  background: rgba(201,148,63,0.04);
+  background: var(--accent-dim);
 }
 
 .drop-zone input[type="file"] {
@@ -97,10 +97,10 @@
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 10.5px;
   color: var(--accent-light);
-  background: rgba(201,148,63,0.06);
-  border: 1px solid rgba(201,148,63,0.15);
+  background: var(--input-bg);
+  border: 1px solid var(--border-subtle);
   padding: 8px 12px;
-  border-radius: 0;
+  border-radius: 6px;
   display: block;
   white-space: pre;
   overflow-x: auto;
@@ -122,11 +122,12 @@
   margin-top: 10px;
   transition: all 0.2s;
   letter-spacing: 0.5px;
+  border-radius: 4px;
 }
 
 .btn-download-template:hover {
   color: var(--accent-light);
-  border-color: rgba(201,148,63,0.3);
+  border-color: var(--border-focus);
 }
 
 .btn-download-template svg {
@@ -176,14 +177,14 @@
 }
 
 .preview-table th {
-  background: rgba(201,148,63,0.06);
+  background: var(--accent-dim);
   padding: 7px 10px;
   text-align: left;
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-primary);
   position: sticky;
   top: 0;
   border-bottom: 1px solid var(--border-subtle);

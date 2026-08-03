@@ -29,7 +29,14 @@ export default function ResultsSection() {
   }, [])
 
   useEffect(() => {
-    if (unlocked) fetchCompetitions()
+    if (unlocked) {
+      fetchCompetitions()
+      const ch = supabase.channel('results-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, fetchCompetitions)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, fetchCompetitions)
+        .subscribe()
+      return () => supabase.removeChannel(ch)
+    }
   }, [unlocked])
 
   function tryUnlock(e) {
@@ -56,8 +63,10 @@ export default function ResultsSection() {
     setCategories(cats || [])
 
     // ── Kalaprathipa (stage, non-general) / Sargaprathipa (off-stage, non-general) ──
-    const stageResults   = (pubResults || []).filter(r => r.competitions?.competition_type === 'stage'     && !r.competitions?.categories?.is_general && r.position === 1)
-    const offStageResults= (pubResults || []).filter(r => r.competitions?.competition_type === 'off-stage'  && !r.competitions?.categories?.is_general && r.position === 1)
+    const isGeneral = (c) => c?.categories?.is_general === true || c?.categories?.is_general === 'true'
+    
+    const stageResults   = (pubResults || []).filter(r => r.competitions?.competition_type === 'stage'     && !isGeneral(r.competitions))
+    const offStageResults= (pubResults || []).filter(r => r.competitions?.competition_type === 'off-stage'  && !isGeneral(r.competitions))
 
     // Group by participant/team for total points
     const computeAward = (rows) => {
@@ -115,11 +124,13 @@ export default function ResultsSection() {
       }
     }).sort((a, b) => b.avg_points - a.avg_points)
 
-    // Assign positions with tie support
-    let pos = 1
+    // Assign positions with tie support (Dense Ranking: 1, 1, 2, 3...)
+    let currentPos = 1
     aggregated.forEach((r, i) => {
-      if (i > 0 && r.avg_points < aggregated[i - 1].avg_points) pos = i + 1
-      r.position = pos
+      if (i > 0 && r.avg_points < aggregated[i - 1].avg_points) {
+        currentPos += 1
+      }
+      r.position = currentPos
     })
 
     setResultDetail(aggregated)
@@ -144,22 +155,20 @@ export default function ResultsSection() {
 
   if (!unlocked) {
     return (
-      <div className="dash-root" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <form onSubmit={tryUnlock} style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 280, padding: '32px 24px', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 10 }}>
-          <div style={{ textAlign: 'center' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ width: 32, height: 32, margin: '0 auto 12px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 140px)', width: '100%', padding: '24px' }}>
+        <form onSubmit={tryUnlock} style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 300, textAlign: 'center' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 32, height: 32, margin: '0 auto 14px', display: 'block' }}>
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Results Section</p>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Enter password to access</p>
-          </div>
-          <div className="field">
+            <p style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, letterSpacing: '-0.3px' }}>Results Locked</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.4 }}>Enter master password to access result entry and reports</p>
+          <div className="field" style={{ textAlign: 'left', marginTop: 12 }}>
             <label className="field-lbl">Password</label>
-            <input className="field-inp" type="password" autoComplete="off"
+            <input className="field-inp" type="password" autoComplete="off" placeholder="••••••••"
               value={pwInput} onChange={e => { setPwInput(e.target.value); setPwError('') }} />
           </div>
           {pwError && <p className="form-error">⚠ {pwError}</p>}
-          <button className="btn-submit" type="submit">Unlock</button>
+          <button className="btn-submit" type="submit" style={{ marginTop: 8, height: 38, fontSize: 13, fontWeight: 600 }}>Unlock Results</button>
         </form>
       </div>
     )
@@ -187,8 +196,25 @@ export default function ResultsSection() {
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {/* Filters */}
           <div style={{ padding: '16px 28px', display: 'flex', gap: 10, borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
-            <input className="field-inp" style={{ padding: '6px 10px', fontSize: 12, width: 220 }}
-              value={search} onChange={e => setSearch(e.target.value)} placeholder="Search competitions…" />
+            <div style={{ position: 'relative' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+                   style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: 'var(--text-muted)' }}>
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input className="dash-search-input" style={{ paddingLeft: 30, paddingRight: search ? 30 : 10 }}
+                value={search} onChange={e => setSearch(e.target.value)} placeholder="Search competitions…" />
+              {search && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+                     onClick={() => setSearch('')}
+                     style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.2s' }}
+                     onMouseEnter={(e) => e.target.style.color = 'var(--text-primary)'}
+                     onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              )}
+            </div>
             <select className="field-select" style={{ width: 180, padding: '6px 10px', fontSize: 12 }}
               value={catFilter} onChange={e => setCatFilter(e.target.value)}>
               <option value="">All Categories</option>
@@ -200,7 +226,7 @@ export default function ResultsSection() {
           {(awards.kala.length > 0 || awards.sarga.length > 0) && (
             <div style={{ display: 'flex', gap: 14, padding: '16px 28px', flexWrap: 'wrap' }}>
               {[
-                { label: '🏆 Kalaprathipa', subtitle: 'Top Stage Performer', list: awards.kala, color: 'var(--accent-light)', bg: 'rgba(201,148,63,0.08)' },
+                { label: '🏆 Kalaprathipa', subtitle: 'Top Stage Performer', list: awards.kala, color: 'var(--accent-light)', bg: 'rgba(79, 156, 249,0.08)' },
                 { label: '🏅 Sargaprathipa', subtitle: 'Top Off-Stage Performer', list: awards.sarga, color: '#7baede', bg: 'rgba(100,150,220,0.08)' },
               ].map(award => award.list.length > 0 && (
                 <div key={award.label} style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: award.bg, border: `1px solid ${award.color}40`, borderRadius: 8 }}>
@@ -237,8 +263,8 @@ export default function ResultsSection() {
                     <td>
                       <span className="td-badge" style={{
                         fontSize: 9,
-                        background: c.competition_type === 'stage' ? 'rgba(201,148,63,0.1)' : 'rgba(100,150,220,0.1)',
-                        borderColor: c.competition_type === 'stage' ? 'rgba(201,148,63,0.3)' : 'rgba(100,150,220,0.3)',
+                        background: c.competition_type === 'stage' ? 'rgba(79, 156, 249,0.1)' : 'rgba(100,150,220,0.1)',
+                        borderColor: c.competition_type === 'stage' ? 'rgba(79, 156, 249,0.3)' : 'rgba(100,150,220,0.3)',
                         color: c.competition_type === 'stage' ? 'var(--accent-light)' : '#7baede',
                       }}>
                         {c.competition_type === 'stage' ? 'STAGE' : 'OFF-STAGE'}
@@ -272,7 +298,7 @@ export default function ResultsSection() {
                 </thead>
                 <tbody>
                   {resultDetail.map((r, i) => (
-                    <tr key={r.code_letter} style={{ background: r.position <= 3 ? 'rgba(201,148,63,0.04)' : undefined }}>
+                    <tr key={r.code_letter} style={{ background: r.position <= 3 ? 'rgba(79, 156, 249,0.04)' : undefined }}>
                       <td>
                         <span style={{ fontSize: r.position <= 3 ? 18 : 13 }}>
                           {r.position <= 3 ? ['🥇','🥈','🥉'][r.position - 1] : r.position}
@@ -286,7 +312,7 @@ export default function ResultsSection() {
                       </td>
                       <td style={{ fontWeight: 600 }}>{r.avg_points}</td>
                       <td>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', background: 'rgba(201,148,63,0.1)', border: '1px solid rgba(201,148,63,0.25)', color: 'var(--accent-light)', fontSize: 12, fontWeight: 700, borderRadius: 3 }}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', background: 'rgba(79, 156, 249,0.1)', border: '1px solid rgba(79, 156, 249,0.25)', color: 'var(--accent-light)', fontSize: 12, fontWeight: 700, borderRadius: 3 }}>
                           {r.grade}
                         </span>
                       </td>
@@ -307,7 +333,7 @@ export default function ResultsSection() {
                 const tiedGroups = Object.entries(ties).filter(([, list]) => list.length > 1)
                 if (!tiedGroups.length) return null
                 return (
-                  <div style={{ padding: '14px 16px', background: 'rgba(201,148,63,0.06)', border: '1px solid rgba(201,148,63,0.2)', borderRadius: 6, marginTop: 8 }}>
+                  <div style={{ padding: '14px 16px', background: 'rgba(79, 156, 249,0.06)', border: '1px solid rgba(79, 156, 249,0.2)', borderRadius: 6, marginTop: 8 }}>
                     <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-light)', marginBottom: 8 }}>⚠ TIE DETECTED</p>
                     {tiedGroups.map(([pos, list]) => (
                       <p key={pos} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>

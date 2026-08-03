@@ -17,21 +17,22 @@ async function loadJsQR() {
 }
 
 // ── SVG Icons ──
-const IcoStage    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20h20"/><path d="M6 20V10l6-6 6 6v10"/><path d="M12 20v-6"/></svg>
-const IcoOffStage = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+const IcoStage    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+const IcoOffStage = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}><path d="M18 2L22 6L9 19L5 15L18 2Z" /><path d="M9 19L3 21L5 15" /><path d="M14 6L18 10" /></svg>
 const IcoDone     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 const IcoQR       = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/></svg>
 const IcoChevron  = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
 const IcoBack     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
 const IcoSend     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
 const IcoClose    = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+const IcoPlay     = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
 
 export default function InvigilatorDashboard() {
   const { user, logout } = useAuth()
   const [competitions, setCompetitions]   = useState([])
-  const [selected, setSelected]           = useState(null)
+  const [selectedId, setSelectedId]       = useState(null)
+  const selected = competitions.find(c => c.id === selectedId)
   const [participants, setParticipants]   = useState([])
-  // checkinOrder: array of participant_ids in the order they checked in
   const [checkinOrder, setCheckinOrder]   = useState([])
   const [fetching, setFetching]           = useState(true)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -39,17 +40,77 @@ export default function InvigilatorDashboard() {
   const [submitted, setSubmitted]         = useState(false)
   const [invTab, setInvTab]               = useState('pending')
   const [scanning, setScanning]           = useState(false)
-  const [scanMsg, setScanMsg]             = useState(null) // { text, type }
-  const [submittedCodes, setSubmittedCodes] = useState({}) // pid → code_letter (after submit)
+  const [scanMsg, setScanMsg]             = useState(null)
+  const [submittedCodes, setSubmittedCodes] = useState({})
+  const [updatingSchedId, setUpdatingSchedId] = useState(null)
 
   const videoRef  = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
   const rafRef    = useRef(null)
   const lastScanned = useRef({ code: '', time: 0 })
-  const checkinSetRef = useRef(new Set()) // Synchronous guard to prevent scan race conditions
+  const checkinSetRef = useRef(new Set())
 
   const invigId = user?.invigilatorId || user?.id
+
+  // ── Helper to resolve 1-to-1 or 1-to-many schedule relationship ──
+  const getSchedule = (comp) => {
+    if (!comp?.competition_schedule) return null
+    if (Array.isArray(comp.competition_schedule)) {
+      return comp.competition_schedule[0] || null
+    }
+    return comp.competition_schedule
+  }
+
+  // ── Timer State & Logic ──
+  const [secondsLeft, setSecondsLeft] = useState(null)
+  const schd = getSchedule(selected)
+
+  // Self-heal: If schedule is manually marked as 'ongoing' in DB but actual_start_time is null, set it to now
+  useEffect(() => {
+    if (schd?.status === 'ongoing' && !schd?.actual_start_time) {
+      const nowStr = new Date().toISOString()
+      console.log("Self-healing: setting actual_start_time to", nowStr)
+      supabase.from('competition_schedule')
+        .update({ actual_start_time: nowStr })
+        .eq('id', schd.id)
+        .then(() => fetchCompetitions())
+    }
+  }, [schd?.status, schd?.actual_start_time, schd?.id])
+
+  useEffect(() => {
+    if (schd?.status !== 'ongoing' || !schd?.actual_start_time) {
+      setSecondsLeft(null)
+      return
+    }
+    const durationMs = (schd.estimated_duration_mins || 30) * 60 * 1000
+    
+    // Convert PostgreSQL offset (e.g. +00 or -05) to standard ISO-8601 offset (+00:00 or -05:00)
+    const cleanTimeStr = schd.actual_start_time
+      .replace(' ', 'T')
+      .replace(/([\+\-])(\d{2})$/, '$1$2:00')
+      
+    const startTs = new Date(cleanTimeStr).getTime()
+    
+    const updateTimer = () => {
+      const now = Date.now()
+      const elapsed = now - startTs
+      const remaining = Math.max(0, Math.floor((durationMs - elapsed) / 1000))
+      setSecondsLeft(remaining)
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+
+    return () => clearInterval(interval)
+  }, [schd?.status, schd?.actual_start_time, schd?.estimated_duration_mins])
+
+  const formatTime = (secs) => {
+    if (secs === null) return ''
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
 
   // Realtime updates setup
   useEffect(() => {
@@ -59,9 +120,10 @@ export default function InvigilatorDashboard() {
     const ch = supabase
       .channel('invigilator-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_reports' }, fetchCompetitions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_invigilators', filter: `invigilator_id=eq.${invigId}` }, fetchCompetitions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_invigilators' }, fetchCompetitions)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_participants' }, fetchCompetitions)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, fetchCompetitions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, fetchCompetitions)
       .subscribe()
 
     return () => {
@@ -78,12 +140,16 @@ export default function InvigilatorDashboard() {
       .select('competition_id')
       .eq('invigilator_id', invigId)
 
-    if (!ciRows?.length) { setFetching(false); return }
+    if (!ciRows?.length) { 
+      setCompetitions([])
+      setFetching(false) 
+      return 
+    }
     const ids = ciRows.map(r => r.competition_id)
 
     const [{ data: comps }, { data: repData }] = await Promise.all([
       supabase.from('competitions')
-        .select('*, categories(name), competition_schedule(scheduled_date, scheduled_time, stage_number)')
+        .select('*, categories(name), stages(name), competition_schedule(id, scheduled_date, scheduled_time, status, actual_start_time, actual_end_time, estimated_duration_mins)')
         .in('id', ids)
         .order('created_at'),
       supabase.from('competition_reports')
@@ -97,28 +163,49 @@ export default function InvigilatorDashboard() {
     setFetching(false)
   }
 
+  // Handle Start / Complete actions
+  async function updateStatus(schedId, newStatus) {
+    setUpdatingSchedId(schedId)
+    const payload = { status: newStatus }
+    if (newStatus === 'ongoing') {
+      payload.actual_start_time = new Date().toISOString()
+    } else if (newStatus === 'completed') {
+      payload.actual_end_time = new Date().toISOString()
+    }
+
+    console.log("Updating schedule status:", schedId, payload)
+    const { data, error } = await supabase.from('competition_schedule').update(payload).eq('id', schedId).select()
+    if (error) {
+      console.error("Failed to update status:", error)
+      alert("Database Error: " + error.message)
+    } else {
+      console.log("Update status response:", data)
+    }
+    await fetchCompetitions()
+    setUpdatingSchedId(null)
+  }
+
   // ── Open a competition for reporting ──
-  // Handle hardware/browser back swipe to close detail view instead of exiting app
   useEffect(() => {
     const handlePopState = (e) => {
-      if (selected) {
-        setSelected(null);
+      if (selectedId) {
+        setSelectedId(null);
         setSubmitted(false);
         stopCamera();
         setScanMsg(null);
       }
     };
-    if (selected) {
+    if (selectedId) {
       window.history.pushState({ type: 'invigilator-detail' }, '');
       window.addEventListener('popstate', handlePopState);
     }
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [selected]);
+  }, [selectedId]);
 
   async function openCompetition(comp) {
-    setSelected(comp)
+    setSelectedId(comp.id)
     setLoadingDetail(true)
     setSubmitted(false)
 
@@ -137,7 +224,6 @@ export default function InvigilatorDashboard() {
       .eq('competition_id', comp.id)
 
     if (existing?.length) {
-      // Reconstruct check-in order and submitted codes from database
       const ordered = [...existing].sort((a, b) => a.code_letter.localeCompare(b.code_letter))
       const ids = ordered.map(r => r.participant_id)
       checkinSetRef.current = new Set(ids)
@@ -211,27 +297,26 @@ export default function InvigilatorDashboard() {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const code = window.jsQR?.(imageData.data, imageData.width, imageData.height)
       if (code?.data) {
-        const scannedChess = code.data.trim()
+        const rawText = code.data.trim()
+        const matchHash = rawText.match(/#([a-zA-Z0-9_\-]+)/)
+        const scannedChess = matchHash ? matchHash[1] : (rawText.startsWith('http') ? rawText.split('/').pop() : rawText)
+        
         const now = Date.now()
-        // Cool down to prevent duplicate scanning updates too fast (1.5 seconds)
         if (lastScanned.current.code === scannedChess && now - lastScanned.current.time < 1500) {
           rafRef.current = requestAnimationFrame(scanFrame)
           return
         }
         lastScanned.current = { code: scannedChess, time: now }
 
-        // Find participant with this chess number
         const match = participants.find(p => String(p.chess_number).trim() === scannedChess)
         if (match) {
           if (checkinSetRef.current.has(match.id)) {
             showScanMsg(`${match.name} already checked in`, 'err')
             playErrorBeep()
           } else {
-            // Synchronously record check-in to prevent race condition duplicates
             checkinSetRef.current.add(match.id)
             setCheckinOrder(Array.from(checkinSetRef.current))
             showScanMsg(`✓ Checked in: ${match.name}`, 'ok')
-            // Play premium native barcode scanner sound via Audio Synthesis
             try {
               const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
               const osc = audioCtx.createOscillator()
@@ -242,12 +327,10 @@ export default function InvigilatorDashboard() {
             } catch (e) {}
           }
         } else {
-          // Not found in this competition
-          if (scannedChess.startsWith('http') || scannedChess.length > 20) {
+          if (scannedChess.length > 10 || (rawText.startsWith('http') && !matchHash)) {
             showScanMsg("Wrong QR Code", 'err')
             playErrorBeep()
           } else {
-            // Async check if it exists in participants table at all
             supabase.from('participants').select('id').eq('chess_number', scannedChess).single().then(({data}) => {
               if (data) {
                 showScanMsg(`Chess #${scannedChess} is not in this competition`, 'err')
@@ -270,7 +353,22 @@ export default function InvigilatorDashboard() {
     setScanning(false)
   }
 
-  // ── Submit report — conditional randomized/sequential code letters ──
+  // ── Manual Check-in ──
+  function toggleManualCheckin(pid) {
+    const match = participants.find(p => p.id === pid)
+    if (!match) return
+    if (checkinSetRef.current.has(pid)) {
+      checkinSetRef.current.delete(pid)
+      setCheckinOrder(Array.from(checkinSetRef.current))
+      showScanMsg(`Checked out: ${match.name}`, 'err')
+    } else {
+      checkinSetRef.current.add(pid)
+      setCheckinOrder(Array.from(checkinSetRef.current))
+      showScanMsg(`✓ Checked in: ${match.name}`, 'ok')
+    }
+  }
+
+  // ── Submit report ──
   async function handleSubmit() {
     if (!checkinOrder.length) return
     setSubmitting(true)
@@ -278,8 +376,6 @@ export default function InvigilatorDashboard() {
     const isStage = selected?.competition_type === 'stage'
     let pool = checkinOrder.map((_, i) => String.fromCharCode(65 + i))
 
-    // For stage competitions, shuffle code letters randomly.
-    // For non-stage (off-stage) competitions, keep them exactly in check-in order.
     if (isStage) {
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -318,61 +414,74 @@ export default function InvigilatorDashboard() {
     await fetchCompetitions()
   }
 
-  const schd = selected?.competition_schedule?.[0]
-  // Max participants limit from competition
   const maxLimit = selected?.max_participants_per_team
 
-  // ── RENDER ──
   return (
     <div className="inv-root">
-
       {/* ── Top Bar ── */}
       <header className="inv-topbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {selected && (
-            <button className="inv-back" onClick={() => window.history.back()}>
-              <IcoBack />
-            </button>
-          )}
-          <div>
-            <p style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-              {selected ? 'Check-in' : 'Invigilator'}
-            </p>
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-              {selected ? selected.name : user?.name || user?.username}
-            </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 600, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {selected && (
+              <button className="inv-back" onClick={() => window.history.back()}>
+                <IcoBack />
+              </button>
+            )}
+            <div>
+              <p style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                {selected ? 'Check-in' : 'Invigilator'}
+              </p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {selected ? selected.name : user?.name || user?.username}
+              </p>
+            </div>
           </div>
+          <button className="inv-logout" onClick={logout}>Logout</button>
         </div>
-        <button className="inv-logout" onClick={logout}>Logout</button>
       </header>
 
       <main className="inv-main">
         {!selected ? (
-          /* ═══ Competition List ═══ */
+          /* ── Competition List ── */
           <div className="inv-card-list">
             <div className="inv-tab-bar">
-              {[['pending','Pending'],['completed','Completed']].map(([tab, lbl]) => (
-                <button key={tab}
-                  className={`inv-tab ${invTab === tab ? 'active' : ''}`}
-                  onClick={() => setInvTab(tab)}>
-                  {lbl} ({competitions.filter(c => tab === 'pending' ? !c.reported : c.reported).length})
-                </button>
-              ))}
+              {[['pending','Pending'],['completed','Completed']].map(([tab, lbl]) => {
+                const count = competitions.filter(c => {
+                  const isDone = getSchedule(c)?.status === 'completed'
+                  return tab === 'pending' ? !isDone : isDone
+                }).length
+                return (
+                  <button key={tab}
+                    className={`inv-tab ${invTab === tab ? 'active' : ''}`}
+                    onClick={() => setInvTab(tab)}>
+                    {lbl} ({count})
+                  </button>
+                )
+              })}
             </div>
 
             {fetching ? (
               <div className="inv-center"><div className="spin" style={{ borderTopColor: 'var(--accent-light)', width: 22, height: 22 }} /></div>
-            ) : competitions.filter(c => invTab === 'pending' ? !c.reported : c.reported).length === 0 ? (
+            ) : competitions.filter(c => {
+              const isDone = getSchedule(c)?.status === 'completed'
+              return invTab === 'pending' ? !isDone : isDone
+            }).length === 0 ? (
               <div className="inv-center"><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No {invTab} competitions.</p></div>
             ) : (
               <div className="inv-group-box">
-                {competitions.filter(c => invTab === 'pending' ? !c.reported : c.reported).map(c => {
-                  const s = c.competition_schedule?.[0]
+                {competitions.filter(c => {
+                  const isDone = getSchedule(c)?.status === 'completed'
+                  return invTab === 'pending' ? !isDone : isDone
+                }).map(c => {
+                  const s = getSchedule(c)
                   const isStage = c.competition_type === 'stage'
+                  const schedStatus = s?.status || 'scheduled'
+                  const isDone = schedStatus === 'completed'
+                  
                   return (
-                    <div key={c.id} className={`inv-comp-card ${c.reported ? 'done' : ''}`} onClick={() => openCompetition(c)}>
-                      <div className={`inv-comp-icon ${c.reported ? 'done-icon' : ''}`}>
-                        {c.reported ? <IcoDone /> : (isStage ? <IcoStage /> : <IcoOffStage />)}
+                    <div key={c.id} className={`inv-comp-card ${isDone ? 'done' : ''}`} onClick={() => openCompetition(c)}>
+                      <div className={`inv-comp-icon ${isDone ? 'done-icon' : ''}`}>
+                        {isDone ? <IcoDone /> : (isStage ? <IcoStage /> : <IcoOffStage />)}
                       </div>
                       <div className="inv-comp-body">
                         <p className="inv-comp-name">{c.name}</p>
@@ -382,14 +491,25 @@ export default function InvigilatorDashboard() {
                             {isStage ? 'Stage' : 'Off-Stage'}
                           </span>
                           {s?.scheduled_time && <span>{s.scheduled_time.slice(0, 5)}</span>}
-                          {s?.stage_number && <span>Room {s.stage_number}</span>}
+                          {s?.stages?.name && <span>{s.stages.name}</span>}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                        <span className={`inv-status-badge ${c.reported ? 'done' : 'pending'}`}>
-                          {c.reported ? 'Done' : 'Pending'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={e => e.stopPropagation()}>
+                        
+
+
+                        {/* Status badges */}
+                        {schedStatus === 'ongoing' && (
+                          <span className="inv-status-badge pending" style={{ background: 'var(--error-bg)', color: 'var(--error)', borderColor: 'var(--error)' }}>
+                            LIVE
+                          </span>
+                        )}
+
+                        <span className={`inv-status-badge ${isDone ? 'done' : 'pending'}`}>
+                          {isDone ? 'Done' : 'Pending'}
                         </span>
-                        <span className="inv-comp-chevron"><IcoChevron /></span>
+                        
+                        <span className="inv-comp-chevron" onClick={() => openCompetition(c)} style={{ cursor: 'pointer' }}><IcoChevron /></span>
                       </div>
                     </div>
                   )
@@ -398,16 +518,14 @@ export default function InvigilatorDashboard() {
             )}
           </div>
         ) : (
-          /* ═══ Check-in Detail ═══ */
+          /* ── Check-in Detail ── */
           <div className="inv-report-wrap">
-
-            {/* Schedule + limit info */}
             <div className="inv-meta-row">
               {schd && (
                 <span>
                   {schd.scheduled_date && new Date(schd.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                   {schd.scheduled_time && ` · ${schd.scheduled_time.slice(0, 5)}`}
-                  {schd.stage_number && ` · Room ${schd.stage_number}`}
+                  {schd.stages?.name && ` · ${schd.stages.name}`}
                 </span>
               )}
               {maxLimit && (
@@ -415,7 +533,6 @@ export default function InvigilatorDashboard() {
               )}
             </div>
 
-            {/* QR Scan button — competition-level */}
             <div className="inv-qr-bar">
               <button className="inv-qr-main-btn" onClick={scanning ? stopCamera : startScan}>
                 {scanning ? <IcoClose /> : <IcoQR />}
@@ -437,16 +554,76 @@ export default function InvigilatorDashboard() {
             {loadingDetail ? (
               <div className="inv-center"><div className="spin" style={{ borderTopColor: 'var(--accent-light)', width: 22, height: 22 }} /></div>
             ) : submitted ? (
-              <div className="inv-success-card">
-                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(100,180,100,0.12)', border: '1px solid rgba(100,180,100,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7bc47b' }}>
-                  <IcoDone />
+              <div className="inv-success-card" style={{ gap: 16 }}>
+                
+                {/* Header state */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(100,180,100,0.12)', border: '1px solid rgba(100,180,100,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7bc47b' }}>
+                    <IcoDone />
+                  </div>
+                  <div style={{ textAlign: 'left' }}>
+                    <p style={{ fontWeight: 700, fontSize: 14 }}>Report Submitted</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {checkinOrder.length} participants checked in
+                    </p>
+                  </div>
                 </div>
-                <p style={{ fontWeight: 700, fontSize: 15 }}>Report Submitted</p>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  {checkinOrder.length} participants — Code letters assigned {selected?.competition_type === 'stage' ? 'randomly' : 'sequentially'}
-                </p>
 
-                {/* Code letter result table */}
+                {/* Competition status & action center */}
+                {schd ? (
+                  <div style={{
+                    width: '100%', padding: 14, background: 'var(--bg-secondary)', 
+                    border: '1px solid var(--border-subtle)', borderRadius: 8,
+                    display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center',
+                    marginTop: 4
+                  }}>
+                    {schd.status === 'scheduled' && (
+                      <>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Check-in completed. Start the competition:</p>
+                        <button 
+                          className="btn-submit" 
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 6 }}
+                          onClick={() => updateStatus(schd.id, 'ongoing')}
+                          disabled={updatingSchedId === schd.id}
+                        >
+                          <IcoPlay /> Start Competition
+                        </button>
+                      </>
+                    )}
+
+                    {schd.status === 'ongoing' && (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--error)', display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--error)', letterSpacing: 1 }}>COMPETITION LIVE</span>
+                        </div>
+
+                        {secondsLeft !== null && (
+                          <div style={{ fontSize: 32, fontWeight: 800, color: secondsLeft < 120 ? 'var(--error)' : 'var(--cream)', letterSpacing: 1, fontVariantNumeric: 'tabular-nums', margin: '4px 0' }}>
+                            {secondsLeft === 0 ? "Time's Up!" : formatTime(secondsLeft)}
+                          </div>
+                        )}
+
+                        <button 
+                          className="btn-submit" 
+                          style={{ width: '100%', background: 'var(--error)', borderColor: 'var(--error)', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 6 }}
+                          onClick={() => updateStatus(schd.id, 'completed')}
+                          disabled={updatingSchedId === schd.id}
+                        >
+                          <IcoDone /> End Competition
+                        </button>
+                      </>
+                    )}
+
+                    {schd.status === 'completed' && (
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#7bc47b' }}>✓ Competition Successfully Ended</p>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Note: This competition is not scheduled yet by the Admin.</p>
+                )}
+
+                {/* Participant list assigned codes */}
                 <div className="inv-group-box" style={{ width: '100%', textAlign: 'left', marginTop: 4 }}>
                   {[...checkinOrder].sort((a, b) => {
                     const codeA = submittedCodes[a] || '';
@@ -476,17 +653,15 @@ export default function InvigilatorDashboard() {
               <div className="inv-center"><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No participants registered for this competition.</p></div>
             ) : (
               <>
-                {/* Participants list */}
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 4px 6px' }}>
-                  Scan participant QR code to check in.
+                  Scan participant QR code, or tap a row to manually check in.
                 </p>
                 <div className="inv-participants-list">
                   {participants.map(p => {
                     const isChecked = checkinOrder.includes(p.id)
                     const checkinPos = checkinOrder.indexOf(p.id)
                     return (
-                      <div key={p.id} className={`inv-part-row ${isChecked ? 'present' : ''}`}>
-                        {/* Circle status indicator instead of checkbox */}
+                      <div key={p.id} className={`inv-part-row ${isChecked ? 'present' : ''}`} onClick={() => toggleManualCheckin(p.id)} style={{ cursor: 'pointer' }}>
                         <div style={{
                           width: 14, height: 14, borderRadius: '50%',
                           border: isChecked ? 'none' : '1.5px solid var(--border-subtle)',
@@ -507,7 +682,6 @@ export default function InvigilatorDashboard() {
                           </div>
                         </div>
 
-                        {/* Code Letter Badge displayed on the right side of the row */}
                         {isChecked && (
                           <span className="inv-code-badge" style={{ fontSize: 11, padding: '4px 8px', minWidth: 'auto', borderRadius: 6 }}>
                             {selected?.competition_type === 'stage' ? `#${checkinPos + 1}` : `Code ${String.fromCharCode(65 + checkinPos)}`}
@@ -518,7 +692,6 @@ export default function InvigilatorDashboard() {
                   })}
                 </div>
 
-                {/* Submit bar */}
                 <div className="inv-submit-bar" style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     className="inv-submit-btn"

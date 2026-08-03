@@ -4,6 +4,64 @@ import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import './announcer.css'
 
+// ── SVG Icons ──
+const IcoBack = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+)
+const IcoChevron = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16, opacity: 0.5, color: 'var(--text-muted)' }}>
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+)
+const IcoLock = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+)
+const IcoDone = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+)
+const IcoLogout = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+)
+const IcoStage = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+    <line x1="12" y1="19" x2="12" y2="23"/>
+    <line x1="8" y1="23" x2="16" y2="23"/>
+  </svg>
+)
+const IcoOffStage = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+    <path d="M18 2L22 6L9 19L5 15L18 2Z" />
+    <path d="M9 19L3 21L5 15" />
+    <path d="M14 6L18 10" />
+  </svg>
+)
+const IcoSuccess = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 44, height: 44, color: '#2ed573' }}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+)
+const IcoSpeaker = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
+    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+  </svg>
+)
+
 export default function AnnouncerDashboard() {
   const { user, logout } = useAuth()
   const [competitions, setCompetitions] = useState([])
@@ -13,17 +71,67 @@ export default function AnnouncerDashboard() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
+  const [anncTab, setAnncTab] = useState('pending') // 'pending' or 'completed'
+  const [suspenseActive, setSuspenseActive] = useState(false)
+  const [revealThreshold, setRevealThreshold] = useState(10)
+  const [sequenceIds, setSequenceIds] = useState([])
 
   const announcerId = user?.announcerId || user?.id
 
-  useEffect(() => { fetchCompetitions() }, [])
+  useEffect(() => {
+    fetchCompetitions()
+
+    const channel = supabase
+      .channel('schema-db-changes-annc')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, fetchCompetitions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, fetchCompetitions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, fetchCompetitions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, fetchCompetitions)
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [announcerId])
+
+  // Handle hardware/browser back swipe to close detail view instead of exiting app
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selected) {
+        setSelected(null);
+        setPublished(false);
+      }
+    };
+    if (selected) {
+      window.history.pushState({ type: 'annc-detail' }, '');
+      window.addEventListener('popstate', handlePopState);
+    }
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [selected]);
 
   async function fetchCompetitions() {
     if (!announcerId) { setFetching(false); return }
 
+    // Fetch App Settings
+    const { data: settings } = await supabase.from('app_settings').select('*')
+    const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
+    const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
+    const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
+
+    const active = activeSetting?.value === 'true'
+    const thresh = parseInt(threshSetting?.value || '10')
+    let seqIds = []
+    try {
+      if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
+    } catch (e) {}
+
+    setSuspenseActive(active)
+    setRevealThreshold(thresh)
+    setSequenceIds(seqIds)
+
     const { data: comps } = await supabase
       .from('competitions')
-      .select('*, categories(name), competition_schedule(scheduled_date, scheduled_time)')
+      .select('*, categories(name), competition_schedule(scheduled_date, estimated_duration_mins)')
       .eq('announcer_id', announcerId)
       .order('created_at')
 
@@ -41,93 +149,120 @@ export default function AnnouncerDashboard() {
     const pubMap = {}
     ;(pubResults || []).forEach(r => { pubMap[r.competition_id] = r.published })
 
-    setCompetitions((comps || []).map(c => ({
+    let mapped = (comps || []).map(c => ({
       ...c,
       hasJudgeResults: hasJudgeSet.has(c.id),
       published: pubMap[c.id] || false,
-    })))
+    }))
+
+    if (active && seqIds.length > 0) {
+      const seqSet = new Set(seqIds)
+      // Only show sequenced judged competitions
+      mapped = mapped.filter(c => seqSet.has(c.id))
+      // Sort by the sequence order
+      mapped.sort((a, b) => seqIds.indexOf(a.id) - seqIds.indexOf(b.id))
+    }
+
+    setCompetitions(mapped)
     setFetching(false)
   }
 
   async function openCompetition(comp) {
     if (!comp.hasJudgeResults) return
+    
+    // If suspense mode is active, enforce sequence order
+    if (suspenseActive) {
+      const idx = competitions.findIndex(c => c.id === comp.id)
+      const firstUnpub = competitions.findIndex(c => !c.published)
+      if (!comp.published && idx > firstUnpub) {
+        return
+      }
+    }
+
     setSelected(comp)
     setPublished(comp.published)
     setLoadingDetail(true)
 
-    // Aggregate judge results (average if multiple judges)
-    const { data: jResults } = await supabase
-      .from('judge_results')
-      .select('code_letter, points_raw, grade, judge_id')
-      .eq('competition_id', comp.id)
-      .order('code_letter')
+    try {
+      // Aggregate judge results (average if multiple judges)
+      const { data: jResults } = await supabase
+        .from('judge_results')
+        .select('code_letter, points_raw, grade, judge_id')
+        .eq('competition_id', comp.id)
+        .order('code_letter')
 
-    // Group by code_letter, average points
-    const codeMap = {}
-    ;(jResults || []).forEach(r => {
-      if (!codeMap[r.code_letter]) codeMap[r.code_letter] = { points: [], grades: [] }
-      codeMap[r.code_letter].points.push(r.points_raw)
-      codeMap[r.code_letter].grades.push(r.grade)
-    })
+      // Group by code_letter, average points
+      const codeMap = {}
+      ;(jResults || []).forEach(r => {
+        if (!codeMap[r.code_letter]) codeMap[r.code_letter] = { points: [], grades: [] }
+        codeMap[r.code_letter].points.push(r.points_raw)
+        codeMap[r.code_letter].grades.push(r.grade)
+      })
 
-    // Look up participants from reports
-    const { data: reports } = await supabase
-      .from('competition_reports')
-      .select('code_letter, participant_id, participants(id, name, teams(name))')
-      .eq('competition_id', comp.id)
+      // Look up participants from reports
+      const { data: reports } = await supabase
+        .from('competition_reports')
+        .select('code_letter, participant_id, participants(id, name, teams(name))')
+        .eq('competition_id', comp.id)
 
-    const partMap = {}
-    ;(reports || []).forEach(r => { partMap[r.code_letter] = r.participants })
+      const partMap = {}
+      ;(reports || []).forEach(r => { partMap[r.code_letter] = r.participants })
 
-    const aggregated = Object.entries(codeMap).map(([code, data]) => {
-      const avg = data.points.reduce((a, b) => a + b, 0) / data.points.length
-      const grade = data.grades[0] // use first judge's grade (or recalc)
-      return {
-        code_letter: code,
-        avg_points: Math.round(avg * 10) / 10,
-        grade,
-        participant: partMap[code],
-      }
-    }).sort((a, b) => b.avg_points - a.avg_points)
+      const aggregated = Object.entries(codeMap).map(([code, data]) => {
+        const avg = data.points.reduce((a, b) => a + b, 0) / data.points.length
+        const grade = data.grades[0]
+        return {
+          code_letter: code,
+          avg_points: Math.round(avg * 10) / 10,
+          grade,
+          participant: partMap[code],
+        }
+      }).sort((a, b) => b.avg_points - a.avg_points)
 
-    // Assign positions (handle ties)
-    let pos = 1
-    aggregated.forEach((r, i) => {
-      if (i > 0 && r.avg_points < aggregated[i - 1].avg_points) pos = i + 1
-      r.position = pos
-    })
+      // Load point settings for preview
+      const [{ data: placements }, { data: gradeSettings }] = await Promise.all([
+        supabase.from('placement_points').select('*'),
+        supabase.from('point_settings').select('*')
+      ])
 
-    setResults(aggregated)
-    setLoadingDetail(false)
+      const gs2 = comp.group_size || 1
+      const catKey = gs2 === 1 ? 'individual' : gs2 === 2 ? 'group_2' : gs2 === 3 ? 'group_3' : 'group_45'
+
+      let currentPos = 1
+      aggregated.forEach((r, i) => {
+        if (i > 0 && r.avg_points < aggregated[i - 1].avg_points) {
+          currentPos += 1
+        }
+        r.position = currentPos
+
+        const gs = gradeSettings?.find(g => g.grade === r.grade)
+        r.grade_points = gs?.points || 0
+
+        const pp = placements?.find(p => p.competition_category === catKey && p.position === r.position)
+        r.placement_points = r.position <= 3 ? (pp?.points || 0) : 0
+      })
+
+      setResults(aggregated)
+    } catch (err) {
+      console.error("Error loading announcer detail:", err)
+    } finally {
+      setLoadingDetail(false)
+    }
   }
 
   async function handlePublish() {
     if (!selected || !results.length) return
     setPublishing(true)
 
-    // Load placement points
-    const { data: placements } = await supabase.from('placement_points').select('*')
-    const { data: gradeSettings } = await supabase.from('point_settings').select('*')
-
     const rows = results.map(r => {
-      // Grade points
-      const gs = gradeSettings?.find(g => g.grade === r.grade)
-      const gradePoints = gs?.points || 0
-
-      // Placement points by competition type
-      const gs2 = selected.group_size || 1
-      const catKey = gs2 === 1 ? 'individual' : gs2 === 2 ? 'group_2' : gs2 === 3 ? 'group_3' : 'group_45'
-      const pp = placements?.find(p => p.competition_category === catKey && p.position === r.position)
-      const placementPts = r.position <= 3 ? (pp?.points || 0) : 0
-
       return {
         competition_id: selected.id,
         participant_id: r.participant?.id || null,
         position: r.position,
         grade: r.grade,
         avg_points: r.avg_points,
-        placement_points: placementPts,
-        grade_points: gradePoints,
+        placement_points: r.placement_points,
+        grade_points: r.grade_points,
         published: true,
         published_at: new Date().toISOString(),
         published_by: announcerId,
@@ -141,73 +276,183 @@ export default function AnnouncerDashboard() {
     await fetchCompetitions()
   }
 
-  const pendingCount = competitions.filter(c => c.hasJudgeResults && !c.published).length
+  const pendingComps = competitions.filter(c => !c.published)
+  const completedComps = competitions.filter(c => c.published)
+  const displayedComps = anncTab === 'pending' ? pendingComps : completedComps
 
   return (
     <div className="ann-root">
       <header className="ann-topbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {selected && (
-            <button className="ann-back" onClick={() => { setSelected(null); setPublished(false) }}>←</button>
-          )}
-          <div>
-            <p style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Announcer</p>
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-              {selected ? selected.name : user?.name || user?.username}
-            </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 600, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {selected && (
+              <button className="ann-back" onClick={() => window.history.back()}><IcoBack /></button>
+            )}
+            <div>
+              <p style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                {selected ? 'Announcement' : 'Announcer'}
+              </p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {selected ? selected.name : user?.name || user?.username}
+              </p>
+            </div>
           </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {!selected && pendingCount > 0 && (
-            <span style={{ fontSize: 10, background: 'rgba(201,148,63,0.12)', color: 'var(--accent-light)', border: '1px solid rgba(201,148,63,0.25)', padding: '3px 8px', borderRadius: 3 }}>
-              {pendingCount} pending
-            </span>
-          )}
           <button className="ann-logout" onClick={logout}>Logout</button>
         </div>
       </header>
 
       <main className="ann-main">
+        {suspenseActive && !selected && (
+          <div className="ann-suspense-banner" style={{
+            background: 'rgba(79, 156, 249, 0.05)',
+            border: '1px solid rgba(79, 156, 249, 0.15)',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            marginBottom: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--accent-light)', letterSpacing: '0.3px' }}>Leaderboard Suspense Mode</p>
+                <p style={{ margin: '2px 0 0 0', fontSize: 10, color: 'var(--text-muted)' }}>Publish {revealThreshold} results to unlock team standings.</p>
+              </div>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--accent-light)' }}>
+                {competitions.filter(c => c.published).length} / {revealThreshold}
+              </span>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.05)', height: 6, borderRadius: 3, marginTop: 8, overflow: 'hidden' }}>
+              <div style={{
+                background: 'var(--accent-light)',
+                height: '100%',
+                width: `${Math.min((competitions.filter(c => c.published).length / revealThreshold) * 100, 100)}%`,
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+          </div>
+        )}
         {!selected ? (
-          <div className="ann-list">
-            <p className="ann-section-label">Competitions</p>
+          <div className="ann-list" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* PWA-style Navigation Tabs */}
+            <div className="ann-tab-bar" style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 3 }}>
+              {['pending', 'completed'].map(tab => {
+                const count = tab === 'pending' ? pendingComps.length : completedComps.length
+                return (
+                  <button
+                    key={tab}
+                    className={`ann-tab ${anncTab === tab ? 'active' : ''}`}
+                    onClick={() => setAnncTab(tab)}
+                    style={{
+                      flex: 1,
+                      background: anncTab === tab ? 'var(--accent-light)' : 'none',
+                      border: 'none',
+                      color: anncTab === tab ? '#0e0b07' : 'var(--text-muted)',
+                      fontFamily: 'inherit',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      padding: '7px 0',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <span>{tab === 'pending' ? 'Pending' : 'Completed'}</span>
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      background: anncTab === tab ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)',
+                      color: anncTab === tab ? '#0e0b07' : 'var(--text-muted)',
+                      fontWeight: 700
+                    }}>
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <p className="ann-section-label" style={{ margin: '6px 0 0 0' }}>
+              {anncTab === 'pending' ? 'Ready for Announcement' : 'Published Results'}
+            </p>
+
             {fetching ? (
               <div className="ann-center"><div className="spin" style={{ borderTopColor: 'var(--accent-light)', width: 22, height: 22 }} /></div>
-            ) : competitions.length === 0 ? (
-              <div className="ann-center"><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No competitions assigned.</p></div>
-            ) : competitions.map(c => {
-              const s = c.competition_schedule?.[0]
-              const isLocked = !c.hasJudgeResults
+            ) : displayedComps.length === 0 ? (
+              <div className="ann-center">
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No {anncTab} competitions.</p>
+              </div>
+            ) : (() => {
+              const firstUnpublishedIndex = competitions.findIndex(c => !c.published)
               return (
-                <div key={c.id}
-                  className={`ann-comp-card ${c.published ? 'done' : ''} ${isLocked ? 'locked' : ''}`}
-                  onClick={() => openCompetition(c)}
-                >
-                  <div style={{ flex: 1 }}>
-                    <p className="ann-comp-name">{c.name}</p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                      {c.categories?.name && <span className="ann-chip">{c.categories.name}</span>}
-                    </div>
-                    {s && (
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                        {s.scheduled_date && new Date(s.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                        {s.scheduled_time && ` · ${s.scheduled_time.slice(0, 5)}`}
-                      </p>
-                    )}
-                  </div>
-                  <span className={`ann-status-badge ${c.published ? 'done' : isLocked ? 'locked' : 'ready'}`}>
-                    {c.published ? '✓ Published' : isLocked ? '⏳ Awaiting Scores' : '📋 Ready to Publish'}
-                  </span>
+                <div className="ann-group-box">
+                  {displayedComps.map(c => {
+                    const s = Array.isArray(c.competition_schedule) ? c.competition_schedule[0] : c.competition_schedule
+                    const seqIdx = competitions.findIndex(comp => comp.id === c.id)
+                    const isSequenceLocked = suspenseActive && !c.published && seqIdx > firstUnpublishedIndex
+                    const isLocked = !c.hasJudgeResults || isSequenceLocked
+                    return (
+                      <div key={c.id}
+                        className={`ann-comp-card ${c.published ? 'done' : ''} ${isLocked ? 'locked' : ''}`}
+                        onClick={() => openCompetition(c)}
+                        style={{
+                          opacity: isLocked ? 0.45 : 1,
+                          cursor: isLocked ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        <div className={`ann-comp-icon ${c.published ? 'done-icon' : ''}`}>
+                          {c.published ? <IcoDone /> : (c.competition_type === 'stage' ? <IcoStage /> : <IcoOffStage />)}
+                        </div>
+                        <div className="ann-comp-body" style={{ flex: 1, minWidth: 0 }}>
+                          <p className="ann-comp-name">{c.name}</p>
+                          <div className="ann-comp-meta">
+                            {c.categories?.name && <span>{c.categories.name}</span>}
+                            <span style={{ color: c.competition_type === 'stage' ? 'var(--accent-light)' : '#7baede' }}>
+                              {c.competition_type === 'stage' ? 'Stage' : 'Off-Stage'}
+                            </span>
+                            {s?.scheduled_date && <span>{new Date(s.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                          <span className={`ann-status-badge ${c.published ? 'done' : isLocked ? 'locked' : 'ready'}`}>
+                            {c.published ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <IcoDone />
+                                <span>Published</span>
+                              </span>
+                            ) : isSequenceLocked ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <IcoLock />
+                                <span>Locked in Queue</span>
+                              </span>
+                            ) : !c.hasJudgeResults ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <IcoLock />
+                                <span>Awaiting Scores</span>
+                              </span>
+                            ) : (
+                              <span>Ready to Publish</span>
+                            )}
+                          </span>
+                          {!isLocked && <IcoChevron />}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )
-            })}
+            })()}
           </div>
         ) : (
-          <div className="ann-result-wrap">
-            <div className="ann-info-card">
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Results Preview</p>
-              <p style={{ fontWeight: 600, fontSize: 15, marginTop: 4 }}>{selected.name}</p>
-              {!published && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Review the results below, then publish.</p>}
+          <div className="ann-result-wrap" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="ann-info-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 600, margin: 0 }}>Results Announcement</p>
+                <p style={{ fontWeight: 700, fontSize: 15, marginTop: 4, margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selected.name}</p>
+                {!published && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, margin: '2px 0 0 0' }}>Review the final computed scores below before publishing.</p>}
+              </div>
             </div>
 
             {loadingDetail ? (
@@ -216,46 +461,125 @@ export default function AnnouncerDashboard() {
               <div className="ann-center"><p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No results available.</p></div>
             ) : (
               <>
-                <table className="ann-result-table">
-                  <thead>
-                    <tr>
-                      <th>Pos</th>
-                      <th>Participant</th>
-                      <th>Team</th>
-                      <th>Avg</th>
-                      <th>Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map(r => (
-                      <tr key={r.code_letter} className={r.position <= 3 ? 'top-row' : ''}>
-                        <td>
-                          <span className={`ann-pos-badge pos-${r.position <= 3 ? r.position : 'other'}`}>
-                            {r.position <= 3 ? ['🥇', '🥈', '🥉'][r.position - 1] : r.position}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {results.map(r => (
+                    <div
+                      key={r.code_letter}
+                      style={{
+                        background: r.position <= 3 ? 'rgba(79, 156, 249, 0.04)' : 'var(--bg-card)',
+                        border: `1px solid ${r.position <= 3 ? 'rgba(79, 156, 249, 0.2)' : 'var(--border-subtle)'}`,
+                        borderRadius: '12px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '8px',
+                            background: r.position === 1 ? 'rgba(247, 201, 72, 0.15)' : r.position === 2 ? 'rgba(178, 190, 195, 0.15)' : r.position === 3 ? 'rgba(205, 127, 50, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                            border: `1px solid ${r.position === 1 ? '#f7c948' : r.position === 2 ? '#b2bec3' : r.position === 3 ? '#cd7f32' : 'var(--border-subtle)'}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 800,
+                            fontSize: '14px',
+                            color: r.position === 1 ? '#f7c948' : r.position === 2 ? '#b2bec3' : r.position === 3 ? '#cd7f32' : 'var(--text-muted)',
+                            flexShrink: 0
+                          }}
+                        >
+                          #{r.position}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            {r.participant?.name || `Code ${r.code_letter}`}
                           </span>
-                        </td>
-                        <td className="ann-name">{r.participant?.name || `Code ${r.code_letter}`}</td>
-                        <td>
-                          {r.participant?.teams?.name
-                            ? <span className="ann-chip">{r.participant.teams.name}</span>
-                            : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                        </td>
-                        <td style={{ fontWeight: 600 }}>{r.avg_points}</td>
-                        <td><span className="ann-grade-badge">{r.grade}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                            {r.participant?.teams?.name && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', padding: '1px 6px', borderRadius: 4 }}>
+                                {r.participant.teams.name}
+                              </span>
+                            )}
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Code {r.code_letter}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--accent-light)', display: 'block' }}>
+                            {r.placement_points + r.grade_points} <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-muted)' }}>pts</span>
+                          </span>
+                          <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{r.avg_points} avg</span>
+                        </div>
+
+                        {r.grade && (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              padding: '3px 7px',
+                              borderRadius: '4px',
+                              background: 'rgba(46, 213, 115, 0.1)',
+                              border: '1px solid rgba(46, 213, 115, 0.25)',
+                              color: '#2ed573'
+                            }}
+                          >
+                            {r.grade}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 {published ? (
-                  <div className="ann-center" style={{ paddingTop: 20, paddingBottom: 0 }}>
-                    <p style={{ color: '#7bc47b', fontWeight: 600, fontSize: 13 }}>✓ Results Published</p>
-                    <button className="ann-logout" style={{ marginTop: 8 }} onClick={() => setSelected(null)}>← Back</button>
+                  <div className="ann-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: '28px 20px', marginTop: 14 }}>
+                    <IcoSuccess />
+                    <p style={{ color: '#2ed573', fontWeight: 700, fontSize: 16, margin: '8px 0 0 0' }}>Results Published Successfully</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>Results are now live on public leaderboard & team scores.</p>
+                    <button className="ann-publish-btn" style={{ marginTop: 16, width: '100%', maxWidth: 200, background: 'var(--accent-light)', color: '#0e0b07' }} onClick={() => window.history.back()}>
+                      <IcoBack />
+                      <span>Go Back</span>
+                    </button>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-                    <button className="ann-publish-btn" disabled={publishing} onClick={handlePublish}>
-                      {publishing ? <span className="spin" style={{ width: 14, height: 14 }} /> : '📢 Publish Results'}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                    <button
+                      className="ann-publish-btn"
+                      disabled={publishing}
+                      onClick={handlePublish}
+                      style={{
+                        width: '100%',
+                        height: 42,
+                        padding: 0,
+                        background: '#2ed573',
+                        color: '#0e0b07',
+                        border: 'none',
+                        borderRadius: 8,
+                        fontWeight: 700,
+                        fontSize: 13,
+                        cursor: publishing ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6
+                      }}
+                    >
+                      {publishing ? (
+                        <span className="spin" style={{ width: 14, height: 14 }} />
+                      ) : (
+                        <>
+                          <IcoSpeaker />
+                          <span>Publish Results</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 )}

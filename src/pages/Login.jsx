@@ -1,6 +1,7 @@
 // src/pages/Login.jsx
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import PublicSchedule from '../components/PublicSchedule'
 import './Login.css'
 
 const ROLES = ['Admin', 'Team Leader', 'Judge', 'Announcer', 'Invigilator', 'Participant']
@@ -51,11 +52,16 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPublicSchedule, setShowPublicSchedule] = useState(false)
+
+  if (showPublicSchedule) {
+    return <PublicSchedule onBack={() => setShowPublicSchedule(false)} />
+  }
 
   const devIp = typeof __DEV_IP__ !== 'undefined' ? __DEV_IP__ : ''
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   const networkUrl = isLocalhost && devIp ? `http://${devIp}:5173/` : window.location.origin + '/'
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=c9943f&bgcolor=0e0b07&data=${encodeURIComponent(networkUrl)}`
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=4f9cf9&bgcolor=12151c&data=${encodeURIComponent(networkUrl)}`
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -65,10 +71,9 @@ export default function Login() {
     }
     setLoading(true)
     setError('')
-    await new Promise(r => setTimeout(r, 700))
-    const result = login(username.trim(), password)
+    const result = await login(username.trim(), password)
     setLoading(false)
-    if (!result.success) setError(result.message)
+    if (!result?.success) setError(result?.message || 'Invalid username or password')
   }
 
   return (
@@ -77,18 +82,22 @@ export default function Login() {
       {/* ── Left Panel ── */}
       <div className="login-left">
         <div className="left-top">
-          <div className="brand-mark">
-            <IconFrame />
-            <span className="brand-name">Art Gallery</span>
+          <div className="brand-mark" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <div className="mobile-only-logo" style={{ alignItems: 'center', gap: 10 }}>
+              <img src="/inspico-logo.svg" alt="Inspico Logo" style={{ width: 26, height: 26, filter: 'brightness(0) invert(1)', flexShrink: 0 }} />
+              <img src="/inspico.svg" alt="Inspico" style={{ height: 18, maxWidth: 110 }} />
+            </div>
+            <span className="desktop-bdsa-tag" style={{ fontSize: 11, fontWeight: 600, letterSpacing: '2px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>BDSA · {new Date().getFullYear()}</span>
           </div>
         </div>
 
         <div className="left-center">
-          <p className="hero-eyebrow">BDSA · {new Date().getFullYear()}</p>
-          <h1 className="hero-title">
-            Arts<br />
-            <em>Festival</em>
-          </h1>
+          {/* Logo + Title aligned in a row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
+            <img src="/inspico-logo.svg" alt="Inspico Logo" style={{ width: 72, height: 72, filter: 'brightness(0) invert(1)', flexShrink: 0 }} />
+            <img src="/inspico.svg" alt="Inspico" style={{ height: 56, maxWidth: 320 }} />
+          </div>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 0, fontWeight: 400, letterSpacing: '1px', textTransform: 'uppercase' }}>Arts Gallery</p>
           <div className="hero-divider" />
           <p className="hero-tagline">
             A unified management platform for every role — from the stage to the scorecard.
@@ -196,6 +205,25 @@ export default function Login() {
               )}
             </span>
           </button>
+          
+          <div style={{ marginTop: 20, textAlign: 'center' }}>
+            <button 
+              type="button" 
+              className="pub-sched-btn" 
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--accent-light)',
+                fontSize: '13px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+              onClick={() => setShowPublicSchedule(true)}
+            >
+              View Live Festival Schedule
+            </button>
+          </div>
         </form>
         </div>
       </div>

@@ -41,6 +41,7 @@ export default function InvigilatorsSection({ navigateTo }) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [editing, setEditing] = useState(null)
+  const [panelOpen, setPanelOpen] = useState(false)
 
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
@@ -79,11 +80,13 @@ export default function InvigilatorsSection({ navigateTo }) {
     setSelected(null)
     setEditing(row); setName(row.name); setUsername(row.username); setPassword(row.password)
     setError(''); setSuccess('')
+    setPanelOpen(true)
   }
 
   function cancelEdit() {
     setEditing(null); setName(''); setUsername(''); setPassword('')
     setError(''); setSuccess('')
+    setPanelOpen(false)
   }
 
   async function handleSubmit(e) {
@@ -115,13 +118,17 @@ export default function InvigilatorsSection({ navigateTo }) {
   }
 
   return (
-    <div className="section-root">
+    <div className={`section-root${panelOpen ? ' panel-open' : ''}`}>
       <div className="section-list">
         {selected ? (
           <>
             <div className="list-header" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
-              <button className="td-link-plain" style={{ fontSize: 11, letterSpacing: 0.5 }} onClick={() => setSelected(null)}>
-                ← Back to Invigilators
+              <button className="td-link-plain" style={{ fontSize: 11, letterSpacing: 0.5, display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }} onClick={() => setSelected(null)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12, display: 'block', flexShrink: 0 }}>
+                  <line x1="19" y1="12" x2="5" y2="12" />
+                  <polyline points="12 19 5 12 12 5" />
+                </svg>
+                <span>Back to Invigilators</span>
               </button>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                 <span className="list-title">{selected.name}</span>
@@ -159,7 +166,16 @@ export default function InvigilatorsSection({ navigateTo }) {
           <>
             <div className="list-header">
               <span className="list-title">All Invigilators</span>
-              <span className="list-count">{rows.length} total</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="list-count">{rows.length} total</span>
+                <button
+                  className="btn-submit"
+                  style={{ padding: '6px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => { setEditing(null); setSelected(null); setPanelOpen(true) }}
+                >
+                  <IconPlus /> Add
+                </button>
+              </div>
             </div>
             {fetching ? (
               <div className="empty-state"><div className="spin" style={{ borderTopColor: 'var(--accent-light)' }} /></div>
@@ -192,12 +208,10 @@ export default function InvigilatorsSection({ navigateTo }) {
       </div>
 
       <div className="section-form-panel">
-        {editing && (
-          <div className="form-panel-header">
-            <p className="form-panel-title">Edit Invigilator</p>
-            <button className="btn-cancel-edit" onClick={cancelEdit}>✕ Cancel</button>
-          </div>
-        )}
+        <div className="form-panel-header">
+          <p className="form-panel-title">{editing ? 'Edit Invigilator' : 'Add Invigilator'}</p>
+          <button className="btn-cancel-edit" onClick={cancelEdit}>✕</button>
+        </div>
         <form onSubmit={handleSubmit} autoComplete="off">
           <div className="form-fields">
             <div className="field">

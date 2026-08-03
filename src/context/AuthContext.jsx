@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
       const userData = { id: 'admin', username: adminMatch.username, role: adminMatch.role }
       setUser(userData)
       sessionStorage.setItem('ag_user', JSON.stringify(userData))
+      sessionStorage.removeItem('pwa_prompt_dismissed')
       return { success: true, user: userData }
     }
 
@@ -94,6 +95,32 @@ export function AuthProvider({ children }) {
       }
     }
 
+    // 6. Check media uploaders list in app_settings table
+    const { data: mediaSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'media_uploaders')
+      .maybeSingle()
+
+    if (mediaSetting?.value) {
+      try {
+        const uploaders = JSON.parse(mediaSetting.value)
+        if (Array.isArray(uploaders)) {
+          const match = uploaders.find(
+            u => u.username?.toLowerCase() === username.toLowerCase() && u.password === password
+          )
+          if (match) {
+            const userData = { id: match.id, username: match.username, name: match.name, role: 'Media', uploaderId: match.id }
+            setUser(userData)
+            sessionStorage.setItem('ag_user', JSON.stringify(userData))
+            return { success: true, user: userData }
+          }
+        }
+      } catch (e) {
+        console.error("Error parsing media uploaders:", e)
+      }
+    }
+
     return { success: false, message: 'Invalid username or password' }
   }
 
@@ -101,6 +128,7 @@ export function AuthProvider({ children }) {
     setUser(null)
     sessionStorage.removeItem('ag_user')
     sessionStorage.removeItem('admin_section')
+    sessionStorage.removeItem('pwa_prompt_dismissed')
   }
 
   return (
