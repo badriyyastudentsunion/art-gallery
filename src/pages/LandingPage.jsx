@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import LogoLoader from '../components/LogoLoader'
 import { APP_VERSION } from '../version'
 import { QRCodeSVG } from 'qrcode.react'
+import LoginModal from '../components/LoginModal'
 import './LandingPage.css'
 
 /* ══════════ ICONS ══════════ */
@@ -182,66 +183,6 @@ const DecoStar = ({ className }) => (
   </div>
 )
 
-/* ══════════ LOGIN MODAL ══════════ */
-function LoginModal({ onClose }) {
-  const { login } = useAuth()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!username.trim() || !password.trim()) {
-      setError('Please enter your username and password.')
-      return
-    }
-    setLoading(true)
-    setError('')
-    const result = await login(username.trim(), password)
-    setLoading(false)
-    if (!result?.success) setError(result?.message || 'Invalid username or password')
-  }
-
-  return (
-    <div className="lp-modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="lp-modal-card">
-        <button className="lp-modal-close" onClick={onClose} aria-label="Close"><IconX /></button>
-        <div className="lp-modal-brand">
-          <img className="lp-modal-logo-icon" src="/inspico-logo.svg" alt="" />
-          <img className="lp-modal-logo-word" src="/inspico.svg" alt="Inspico" />
-        </div>
-        <h2 className="lp-modal-title">Sign In</h2>
-        <p className="lp-modal-sub">For event staff & participants</p>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="lp-field">
-            <label className="lp-label" htmlFor="lp-user">Username</label>
-            <input id="lp-user" className="lp-input" type="text" placeholder="your username"
-              value={username} onChange={e => { setUsername(e.target.value); setError('') }}
-              autoComplete="username" autoFocus spellCheck={false} />
-          </div>
-          <div className="lp-field">
-            <label className="lp-label" htmlFor="lp-pass">Password</label>
-            <div className="lp-input-wrap">
-              <input id="lp-pass" className="lp-input" type={showPass ? 'text' : 'password'}
-                placeholder="••••••••" value={password}
-                onChange={e => { setPassword(e.target.value); setError('') }}
-                autoComplete="current-password" />
-              <button type="button" className="lp-eye-btn" onClick={() => setShowPass(v => !v)}>
-                {showPass ? <IconEyeOff /> : <IconEye />}
-              </button>
-            </div>
-          </div>
-          {error && <div className="lp-error" role="alert"><IconAlert />{error}</div>}
-          <button id="lp-submit" type="submit" className="lp-submit-btn" disabled={loading}>
-            {loading ? <><span className="lp-spinner" />Authenticating</> : <>Sign In <IconArrow /></>}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
 
 /* ══════════ TYPEWRITER COMPONENT ══════════ */
 function TypewriterText({ text, speed = 70, delay = 200 }) {
@@ -359,6 +300,11 @@ function HomeTab({ onLoginClick }) {
 
       <div className="lp-hero-content">
         <p className="lp-eyebrow lp-scroll-reveal">BDSA Presence</p>
+
+        {/* Click to See More above title */}
+        <div className="lp-scroll-reveal" style={{ marginBottom: 10 }}>
+          <img src="/click-to-see-more.svg" alt="Click to see more" style={{ height: 28, opacity: 0.55, filter: 'invert(1)' }} />
+        </div>
 
         <div className="lp-logo-block lp-scroll-reveal">
           <InspicoTitleLogo className="lp-logo-word" />
