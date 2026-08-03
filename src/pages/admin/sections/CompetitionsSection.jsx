@@ -1743,7 +1743,7 @@ export default function CompetitionsSection({ navigateTo }) {
                 <div className="field">
                   <label className="field-lbl">Maximum Participants</label>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    {[1, 2, 3].map(num => (
+                    {[1, 2, 3, 4].map(num => (
                       <button
                         key={num}
                         type="button"
