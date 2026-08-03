@@ -17,6 +17,7 @@ import ResultsSection from './sections/ResultsSection'
 import AnnouncerFlowSection from './sections/AnnouncerFlowSection'
 import MediaSection from './sections/MediaSection'
 import AppSettingsSection from './sections/AppSettingsSection'
+import { APP_VERSION } from '../../version'
 
 // ── Icons ──
 const Icon = ({ d, d2, circle, rect, line, poly }) => (
@@ -129,6 +130,9 @@ export default function AdminPanel() {
               ))}
             </div>
           ))}
+          <div style={{ padding: '16px 20px 8px 20px', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace', opacity: 0.6 }}>
+            Inspico Platform {APP_VERSION}
+          </div>
         </nav>
       </aside>
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import LogoLoader from '../components/LogoLoader'
+import { APP_VERSION } from '../version'
 import { QRCodeSVG } from 'qrcode.react'
 import './LandingPage.css'
 
@@ -1591,6 +1592,7 @@ export default function LandingPage() {
         <div className="lp-topbar-brand">
           <img className="lp-topbar-logo" src="/inspico-logo.svg" alt="Inspico Logo" />
           <InspicoTitleLogo className="lp-topbar-word" />
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', marginLeft: 6, opacity: 0.8 }}>{APP_VERSION}</span>
         </div>
 
         {/* Desktop nav */}
