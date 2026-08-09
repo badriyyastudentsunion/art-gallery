@@ -956,7 +956,7 @@ export default function CompetitionsSection({ navigateTo }) {
     rankedCodes.forEach((item, index) => {
       if (index > 0) {
         const prev = rankedCodes[index - 1]
-        if (item.grade !== prev.grade) {
+        if (item.grade !== prev.grade || item.avg !== prev.avg) {
           currentPos += 1
         }
       }

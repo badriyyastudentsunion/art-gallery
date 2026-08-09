@@ -76,6 +76,7 @@ export default function PointSettingsSection() {
         points: parseInt(g.points),
       }).eq('id', g.id)
     }
+    await supabase.rpc('recalculate_all_points')
     setInitialGrades(JSON.parse(JSON.stringify(grades)))
     setSavingSection(null); setSaved(true); setTimeout(() => setSaved(false), 2000)
   }
@@ -85,6 +86,7 @@ export default function PointSettingsSection() {
     for (const p of placements) {
       await supabase.from('placement_points').update({ points: parseInt(p.points) }).eq('id', p.id)
     }
+    await supabase.rpc('recalculate_all_points')
     setInitialPlacements(JSON.parse(JSON.stringify(placements)))
     setSavingSection(null); setSaved(true); setTimeout(() => setSaved(false), 2000)
   }

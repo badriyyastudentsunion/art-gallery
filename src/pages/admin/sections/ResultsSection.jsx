@@ -129,7 +129,7 @@ export default function ResultsSection() {
     aggregated.forEach((r, i) => {
       if (i > 0) {
         const prev = aggregated[i - 1]
-        if (r.grade !== prev.grade) {
+        if (r.grade !== prev.grade || r.avg_points !== prev.avg_points) {
           currentPos += 1
         }
       }

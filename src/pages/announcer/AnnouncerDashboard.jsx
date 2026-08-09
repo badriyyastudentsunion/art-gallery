@@ -1,7 +1,7 @@
 // src/pages/announcer/AnnouncerDashboard.jsx
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../lib/supabase'
+import { supabase, safeRemoveChannel } from '../../lib/supabase'
 import './announcer.css'
 
 // ── SVG Icons ──
@@ -64,10 +64,22 @@ const IcoSpeaker = () => (
 
 export default function AnnouncerDashboard() {
   const { user, logout } = useAuth()
-  const [competitions, setCompetitions] = useState([])
+  const announcerId = user?.announcerId || user?.id
+
+  const [competitions, setCompetitions] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`cache_annc_comps_${announcerId}`)
+      return cached ? JSON.parse(cached) : []
+    } catch { return [] }
+  })
   const [selected, setSelected] = useState(null)
   const [results, setResults] = useState([]) // aggregated results
-  const [fetching, setFetching] = useState(true)
+  const [fetching, setFetching] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`cache_annc_comps_${announcerId}`)
+      return !cached
+    } catch { return true }
+  })
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
@@ -75,8 +87,7 @@ export default function AnnouncerDashboard() {
   const [suspenseActive, setSuspenseActive] = useState(false)
   const [revealThreshold, setRevealThreshold] = useState(10)
   const [sequenceIds, setSequenceIds] = useState([])
-
-  const announcerId = user?.announcerId || user?.id
+  const [revealedByAdmin, setRevealedByAdmin] = useState(false)
 
   const selectedRef = useRef(selected)
   useEffect(() => {
@@ -84,7 +95,7 @@ export default function AnnouncerDashboard() {
   }, [selected])
 
   useEffect(() => {
-    fetchCompetitions()
+    fetchCompetitions(competitions.length === 0)
 
     const channelId = `annc-rt-${announcerId || 'all'}-${Math.random().toString(36).substring(2, 7)}`
     const refreshAll = () => {
@@ -104,7 +115,7 @@ export default function AnnouncerDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, refreshAll)
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { safeRemoveChannel(channel) }
   }, [announcerId])
 
   // Handle hardware/browser back swipe to close detail view instead of exiting app
@@ -124,149 +135,79 @@ export default function AnnouncerDashboard() {
     };
   }, [selected]);
 
+  async function togglePublicReveal() {
+    const nextVal = !revealedByAdmin
+    try {
+      await supabase.from('app_settings').upsert({ key: 'leaderboard_revealed_by_admin', value: nextVal ? 'true' : 'false' })
+      setRevealedByAdmin(nextVal)
+      fetchCompetitions(false)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   async function fetchCompetitions(isInitial = false) {
     if (!announcerId) { setFetching(false); return }
-    if (isInitial) setFetching(true)
+    if (isInitial && competitions.length === 0) setFetching(true)
 
-    // Fetch App Settings
-    const { data: settings } = await supabase.from('app_settings').select('*')
-    const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
-    const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
-    const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
-
-    const active = activeSetting?.value === 'true'
-    const thresh = parseInt(threshSetting?.value || '10')
-    let seqIds = []
     try {
-      if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
-    } catch (e) {}
+      const { data } = await supabase.rpc('get_announcer_dashboard_data', { p_announcer_id: announcerId })
+      
+      if (data) {
+        const comps = data.competitions || []
+        const settingsMap = data.settings || {}
 
-    setSuspenseActive(active)
-    setRevealThreshold(thresh)
-    setSequenceIds(seqIds)
+        const active = settingsMap['leaderboard_suspense_active'] === 'true'
+        const thresh = parseInt(settingsMap['leaderboard_reveal_threshold'] || '10')
+        let seqIds = []
+        try {
+          if (settingsMap['announcer_sequence']) seqIds = JSON.parse(settingsMap['announcer_sequence'])
+        } catch (e) {}
 
-    const { data: comps } = await supabase
-      .from('competitions')
-      .select('*, categories(name), competition_schedule(scheduled_date, estimated_duration_mins)')
-      .eq('announcer_id', announcerId)
-      .order('created_at')
+        setSuspenseActive(active)
+        setRevealThreshold(thresh)
+        setSequenceIds(seqIds)
+        setRevealedByAdmin(settingsMap['leaderboard_revealed_by_admin'] === 'true')
 
-    // Check judge results per competition
-    const ids = (comps || []).map(c => c.id)
-    const { data: judgeResults } = ids.length
-      ? await supabase.from('judge_results').select('competition_id').in('competition_id', ids)
-      : { data: [] }
+        let mapped = comps.map(c => ({
+          ...c,
+          hasJudgeResults: !!c.hasJudgeResults,
+          published: !!c.published,
+          published_at: c.published_at || null,
+        }))
 
-    const { data: pubResults } = ids.length
-      ? await supabase.from('competition_results').select('competition_id, published').in('competition_id', ids)
-      : { data: [] }
+        const publishedSorted = mapped.filter(c => c.published && c.published_at)
+          .sort((a, b) => new Date(a.published_at) - new Date(b.published_at))
+        publishedSorted.forEach((c, i) => { c.announcementNumber = i + 1 })
 
-    const hasJudgeSet = new Set((judgeResults || []).map(r => r.competition_id))
-    const pubMap = {}
-    ;(pubResults || []).forEach(r => { pubMap[r.competition_id] = r.published })
+        if (active && seqIds.length > 0) {
+          const seqSet = new Set(seqIds)
+          mapped = mapped.filter(c => seqSet.has(c.id))
+          mapped.sort((a, b) => seqIds.indexOf(a.id) - seqIds.indexOf(b.id))
+        }
 
-    let mapped = (comps || []).map(c => ({
-      ...c,
-      hasJudgeResults: hasJudgeSet.has(c.id),
-      published: pubMap[c.id] || false,
-    }))
-
-    if (active && seqIds.length > 0) {
-      const seqSet = new Set(seqIds)
-      // Only show sequenced judged competitions
-      mapped = mapped.filter(c => seqSet.has(c.id))
-      // Sort by the sequence order
-      mapped.sort((a, b) => seqIds.indexOf(a.id) - seqIds.indexOf(b.id))
+        setCompetitions(mapped)
+        try {
+          localStorage.setItem(`cache_annc_comps_${announcerId}`, JSON.stringify(mapped))
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.error("Error fetching announcer comps:", err)
+    } finally {
+      setFetching(false)
     }
-
-    setCompetitions(mapped)
-    setFetching(false)
   }
 
   async function openCompetition(comp, isInitial = true) {
     if (!comp.hasJudgeResults) return
-    
-    // If suspense mode is active, enforce sequence order
-    if (suspenseActive) {
-      const idx = competitions.findIndex(c => c.id === comp.id)
-      const firstUnpub = competitions.findIndex(c => !c.published)
-      if (!comp.published && idx > firstUnpub) {
-        return
-      }
-    }
 
     setSelected(comp)
     setPublished(comp.published)
     if (isInitial) setLoadingDetail(true)
 
     try {
-      // Aggregate judge results (average if multiple judges)
-      const { data: jResults } = await supabase
-        .from('judge_results')
-        .select('code_letter, points_raw, grade, judge_id')
-        .eq('competition_id', comp.id)
-        .order('code_letter')
-
-      // Group by code_letter, average points
-      const codeMap = {}
-      ;(jResults || []).forEach(r => {
-        if (!codeMap[r.code_letter]) codeMap[r.code_letter] = { points: [], grades: [] }
-        codeMap[r.code_letter].points.push(r.points_raw)
-        codeMap[r.code_letter].grades.push(r.grade)
-      })
-
-      // Look up participants from reports
-      const { data: reports } = await supabase
-        .from('competition_reports')
-        .select('code_letter, participant_id, participants(id, name, teams(name))')
-        .eq('competition_id', comp.id)
-
-      const partMap = {}
-      ;(reports || []).forEach(r => { partMap[r.code_letter] = r.participants })
-
-      const aggregated = Object.entries(codeMap).map(([code, data]) => {
-        const total_points = data.points.reduce((a, b) => a + b, 0)
-        const avg = total_points / data.points.length
-        const grade = data.grades[0]
-        return {
-          code_letter: code,
-          avg_points: Math.round(avg * 10) / 10,
-          total_points,
-          grade,
-          participant: partMap[code],
-        }
-      })
-      // Sort by Avg Points (DESC)
-      .sort((a, b) => b.avg_points - a.avg_points)
-
-      // Load point settings for preview
-      const [{ data: placements }, { data: gradeSettings }] = await Promise.all([
-        supabase.from('placement_points').select('*'),
-        supabase.from('point_settings').select('*')
-      ])
-
-      const gs2 = comp.group_size || 1
-      const catKey = gs2 === 1 ? 'individual' : gs2 === 2 ? 'group_2' : gs2 === 3 ? 'group_3' : 'group_45'
-
-      // Position increments only when grade changes
-      let currentPos = 1
-      aggregated.forEach((r, i) => {
-        if (i > 0) {
-          const prev = aggregated[i - 1]
-          if (r.grade !== prev.grade) {
-            currentPos += 1
-          }
-        }
-        r.position = currentPos
-
-        const gs = gradeSettings?.find(g => g.grade === r.grade)
-        r.grade_points = gs?.points || 0
-
-        const pp = placements?.find(p => p.competition_category === catKey && p.position === r.position)
-        r.placement_points = r.position <= 3 ? (pp?.points || 0) : 0
-      })
-
-      setResults(aggregated)
+      const { data } = await supabase.rpc('get_announcer_competition_detail', { p_comp_id: comp.id })
+      setResults(data || [])
     } catch (err) {
       console.error("Error loading announcer detail:", err)
     } finally {
@@ -371,6 +312,49 @@ export default function AnnouncerDashboard() {
               })}
             </div>
 
+            {suspenseActive && (
+              <div style={{
+                background: revealedByAdmin ? 'rgba(46, 213, 115, 0.08)' : (completedComps.length >= revealThreshold ? 'rgba(247, 201, 72, 0.1)' : 'rgba(255, 255, 255, 0.03)'),
+                border: `1px solid ${revealedByAdmin ? 'rgba(46, 213, 115, 0.25)' : (completedComps.length >= revealThreshold ? 'rgba(247, 201, 72, 0.35)' : 'rgba(255, 255, 255, 0.08)')}`,
+                borderRadius: 8,
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                margin: '8px 0 4px 0'
+              }}>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: revealedByAdmin ? '#2ed573' : (completedComps.length >= revealThreshold ? '#f7c948' : 'var(--text-muted)'),
+                  whiteSpace: 'nowrap'
+                }}>
+                  {revealedByAdmin ? '✓ Public Live' : (completedComps.length >= revealThreshold ? `⚡ ${completedComps.length}/${revealThreshold} Published` : `Suspense: ${completedComps.length}/${revealThreshold}`)}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={togglePublicReveal}
+                  disabled={!revealedByAdmin && completedComps.length < revealThreshold}
+                  style={{
+                    background: revealedByAdmin ? 'rgba(239, 68, 68, 0.15)' : (completedComps.length >= revealThreshold ? '#f7c948' : 'rgba(255,255,255,0.05)'),
+                    color: revealedByAdmin ? '#f87171' : (completedComps.length >= revealThreshold ? '#000' : 'rgba(255,255,255,0.3)'),
+                    border: revealedByAdmin ? '1px solid rgba(239, 68, 68, 0.3)' : 'none',
+                    padding: '5px 12px',
+                    borderRadius: 6,
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: (!revealedByAdmin && completedComps.length < revealThreshold) ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  {revealedByAdmin ? '🔒 Hide' : (completedComps.length >= revealThreshold ? '🚀 Publish Leaderboard' : `${completedComps.length}/${revealThreshold}`)}
+                </button>
+              </div>
+            )}
+
             <p className="ann-section-label" style={{ margin: '6px 0 0 0' }}>
               {anncTab === 'pending' ? 'Ready for Announcement' : 'Published Results'}
             </p>
@@ -382,14 +366,12 @@ export default function AnnouncerDashboard() {
                 <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No {anncTab} competitions.</p>
               </div>
             ) : (() => {
-              const firstUnpublishedIndex = competitions.findIndex(c => !c.published)
               return (
                 <div className="ann-group-box">
                   {displayedComps.map(c => {
                     const s = Array.isArray(c.competition_schedule) ? c.competition_schedule[0] : c.competition_schedule
-                    const seqIdx = competitions.findIndex(comp => comp.id === c.id)
-                    const isSequenceLocked = suspenseActive && !c.published && seqIdx > firstUnpublishedIndex
-                    const isLocked = !c.hasJudgeResults || isSequenceLocked
+                    const isLocked = !c.hasJudgeResults
+                    const isSequenceLocked = suspenseActive && sequenceIds.length > 0 && sequenceIds.includes(c.id) && sequenceIds[0] !== c.id && !c.published
                     return (
                       <div key={c.id}
                         className={`ann-comp-card ${c.published ? 'done' : ''} ${isLocked ? 'locked' : ''}`}
@@ -403,7 +385,16 @@ export default function AnnouncerDashboard() {
                           {c.published ? <IcoDone /> : (c.competition_type === 'stage' ? <IcoStage /> : <IcoOffStage />)}
                         </div>
                         <div className="ann-comp-body" style={{ flex: 1, minWidth: 0 }}>
-                          <p className="ann-comp-name">{c.name}</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <p className="ann-comp-name" style={{ margin: 0 }}>{c.name}</p>
+                            {c.announcementNumber && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 800, color: '#f7c948',
+                                background: 'rgba(247,201,72,0.12)', border: '1px solid rgba(247,201,72,0.35)',
+                                padding: '1px 7px', borderRadius: 20, flexShrink: 0
+                              }}>#{c.announcementNumber}</span>
+                            )}
+                          </div>
                           <div className="ann-comp-meta">
                             {c.categories?.name && <span>{c.categories.name}</span>}
                             <span style={{ color: c.competition_type === 'stage' ? 'var(--accent-light)' : '#7baede' }}>

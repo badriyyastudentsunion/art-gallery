@@ -37,16 +37,47 @@ const IconSparkles = () => (
 )
 
 export default function AnnouncerFlowSection() {
-  const [teams, setTeams] = useState([])
-  const [allComps, setAllComps] = useState([])
-  const [readyComps, setReadyComps] = useState([]) // judged, but not published yet
-  const [sequence, setSequence] = useState([]) // arranged queue of comp objects
-  const [baselinePoints, setBaselinePoints] = useState({}) // teamId -> points (pre-sequence)
+  const [teams, setTeams] = useState(() => {
+    try {
+      const c = localStorage.getItem('cache_ann_teams')
+      return c ? JSON.parse(c) : []
+    } catch { return [] }
+  })
+  const [allComps, setAllComps] = useState(() => {
+    try {
+      const c = localStorage.getItem('cache_ann_allComps')
+      return c ? JSON.parse(c) : []
+    } catch { return [] }
+  })
+  const [readyComps, setReadyComps] = useState(() => {
+    try {
+      const c = localStorage.getItem('cache_ann_readyComps')
+      return c ? JSON.parse(c) : []
+    } catch { return [] }
+  })
+  const [sequence, setSequence] = useState(() => {
+    try {
+      const c = localStorage.getItem('cache_ann_sequence')
+      return c ? JSON.parse(c) : []
+    } catch { return [] }
+  })
+  const [baselinePoints, setBaselinePoints] = useState(() => {
+    try {
+      const c = localStorage.getItem('cache_ann_basePoints')
+      return c ? JSON.parse(c) : {}
+    } catch { return {} }
+  })
   
+  const [revealedByAdmin, setRevealedByAdmin] = useState(false)
   const [suspenseActive, setSuspenseActive] = useState(false)
   const [threshold, setThreshold] = useState(10)
   
-  const [fetching, setFetching] = useState(true)
+  const [fetching, setFetching] = useState(() => {
+    try {
+      const c = localStorage.getItem('cache_ann_sequence')
+      return !c
+    } catch { return true }
+  })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
   const [simSteps, setSimSteps] = useState([])
@@ -62,7 +93,6 @@ export default function AnnouncerFlowSection() {
   }, [sequence, baselinePoints, teams])
 
   async function fetchInitialData() {
-    setFetching(true)
     try {
       // 1. Fetch Teams
       const { data: teamsData } = await supabase.from('teams').select('id, name')
@@ -73,8 +103,10 @@ export default function AnnouncerFlowSection() {
       const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
       const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
       const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
+      const revealSetting = settings?.find(s => s.key === 'leaderboard_revealed_by_admin')
 
       setSuspenseActive(activeSetting?.value === 'true')
+      setRevealedByAdmin(revealSetting?.value === 'true')
       setThreshold(parseInt(threshSetting?.value || '10'))
 
       // 3. Fetch Competitions and associated data
@@ -100,13 +132,34 @@ export default function AnnouncerFlowSection() {
         if (r.published) publishedMap[r.competition_id] = true
       })
 
+      // Fast Indexing using Hash Maps (O(1) lookups)
+      const judgeResByComp = {}
+      ;(judgeRes || []).forEach(r => {
+        if (!judgeResByComp[r.competition_id]) judgeResByComp[r.competition_id] = []
+        judgeResByComp[r.competition_id].push(r)
+      })
+
+      const reportsByComp = {}
+      ;(reports || []).forEach(r => {
+        if (!reportsByComp[r.competition_id]) reportsByComp[r.competition_id] = []
+        reportsByComp[r.competition_id].push(r)
+      })
+
+      const gradePtsMap = {}
+      ;(grades || []).forEach(g => { gradePtsMap[g.grade] = g.points || 0 })
+
+      const placePtsMap = {}
+      ;(placements || []).forEach(p => {
+        placePtsMap[`${p.competition_category}_${p.position}`] = p.points || 0
+      })
+
       // Group judge results for points calculation
       const compPointsMap = {}
       const allJudgedComps = (comps || []).filter(c => judgedSet.has(c.id))
 
       allJudgedComps.forEach(comp => {
-        const cJudges = (judgeRes || []).filter(r => r.competition_id === comp.id)
-        const cReports = (reports || []).filter(r => r.competition_id === comp.id)
+        const cJudges = judgeResByComp[comp.id] || []
+        const cReports = reportsByComp[comp.id] || []
 
         // Average raw scores
         const codeMap = {}
@@ -138,17 +191,13 @@ export default function AnnouncerFlowSection() {
         list.forEach((r, idx) => {
           if (idx > 0) {
             const prev = list[idx - 1]
-            if (r.grade !== prev.grade) {
+            if (r.grade !== prev.grade || r.avg_points !== prev.avg_points) {
               currentPos += 1
             }
           }
           r.position = currentPos
-
-          const gsObj = grades?.find(g => g.grade === r.grade)
-          r.grade_points = gsObj?.points || 0
-
-          const ppObj = placements?.find(p => p.competition_category === catKey && p.position === r.position)
-          r.placement_points = r.position <= 3 ? (ppObj?.points || 0) : 0
+          r.grade_points = gradePtsMap[r.grade] || 0
+          r.placement_points = r.position <= 3 ? (placePtsMap[`${catKey}_${r.position}`] || 0) : 0
         })
 
         // Map team points accumulated for this competition
@@ -208,6 +257,15 @@ export default function AnnouncerFlowSection() {
       })
       setBaselinePoints(basePoints)
 
+      // Store in LocalStorage cache for instant load next time
+      try {
+        localStorage.setItem('cache_ann_teams', JSON.stringify(teamsData || []))
+        localStorage.setItem('cache_ann_allComps', JSON.stringify(enhancedComps))
+        localStorage.setItem('cache_ann_readyComps', JSON.stringify(currentReady))
+        localStorage.setItem('cache_ann_sequence', JSON.stringify(currentSequence))
+        localStorage.setItem('cache_ann_basePoints', JSON.stringify(basePoints))
+      } catch (e) {}
+
     } catch (err) {
       console.error("Error fetching initial data:", err)
     } finally {
@@ -219,13 +277,13 @@ export default function AnnouncerFlowSection() {
     const steps = []
     const runningPoints = { ...baselinePoints }
 
+    const teamMap = {}
+    teams.forEach(t => { teamMap[t.id] = t.name })
+
     // Initial State (Step 0)
     const getStandings = (pointsObj) => {
       return Object.entries(pointsObj)
-        .map(([id, pts]) => {
-          const t = teams.find(x => x.id === id)
-          return { id, name: t?.name || '—', points: pts }
-        })
+        .map(([id, pts]) => ({ id, name: teamMap[id] || '—', points: pts }))
         .sort((a, b) => b.points - a.points)
     }
 
@@ -348,6 +406,21 @@ export default function AnnouncerFlowSection() {
     setSequence(bestOrder)
   }
 
+  async function togglePublicReveal() {
+    const nextVal = !revealedByAdmin
+    setLoading(true)
+    try {
+      await supabase.from('app_settings').upsert({ key: 'leaderboard_revealed_by_admin', value: nextVal ? 'true' : 'false' })
+      setRevealedByAdmin(nextVal)
+      setSuccess(nextVal ? 'Leaderboard successfully PUBLISHED & REVEALED to Public!' : 'Leaderboard is now HIDDEN.')
+      setTimeout(() => setSuccess(''), 3500)
+    } catch (err) {
+      console.error("Error updating reveal status:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleSave() {
     setLoading(true)
     setSuccess('')
@@ -357,7 +430,8 @@ export default function AnnouncerFlowSection() {
       await Promise.all([
         supabase.from('app_settings').upsert({ key: 'leaderboard_suspense_active', value: suspenseActive ? 'true' : 'false' }),
         supabase.from('app_settings').upsert({ key: 'leaderboard_reveal_threshold', value: threshold.toString() }),
-        supabase.from('app_settings').upsert({ key: 'announcer_sequence', value: JSON.stringify(seqIds) })
+        supabase.from('app_settings').upsert({ key: 'announcer_sequence', value: JSON.stringify(seqIds) }),
+        supabase.from('app_settings').upsert({ key: 'leaderboard_revealed_by_admin', value: revealedByAdmin ? 'true' : 'false' })
       ])
 
       // Recompute baseline points based on new sequence
@@ -396,6 +470,8 @@ export default function AnnouncerFlowSection() {
       </div>
     )
   }
+
+  const publishedSeqCount = sequence.filter(c => c.published).length
 
   return (
     <div style={{ padding: '36px 40px', overflowY: 'auto', height: '100%' }}>
@@ -452,7 +528,56 @@ export default function AnnouncerFlowSection() {
                   value={threshold} onChange={e => setThreshold(parseInt(e.target.value))}
                   style={{ width: '100%', accentColor: 'var(--accent-light)', marginTop: 8 }}
                 />
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>The leaderboard will reveal only after the Announcer publishes at least {threshold} results.</p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>The leaderboard will reveal only after the Announcer publishes at least {threshold} results AND admin publishes to public.</p>
+
+                {/* Admin Explicit Public Reveal Action Box */}
+                <div style={{
+                  marginTop: 16,
+                  padding: 14,
+                  borderRadius: 8,
+                  background: revealedByAdmin ? 'rgba(46, 213, 115, 0.1)' : (publishedSeqCount >= threshold ? 'rgba(247, 201, 72, 0.12)' : 'rgba(255, 255, 255, 0.03)'),
+                  border: `1px solid ${revealedByAdmin ? 'rgba(46, 213, 115, 0.3)' : (publishedSeqCount >= threshold ? 'rgba(247, 201, 72, 0.4)' : 'rgba(255, 255, 255, 0.08)')}`
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                    <div>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        color: revealedByAdmin ? '#2ed573' : (publishedSeqCount >= threshold ? '#f7c948' : 'var(--text-muted)'),
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.8
+                      }}>
+                        {revealedByAdmin ? '✓ REVEALED TO PUBLIC' : (publishedSeqCount >= threshold ? `⚡ THRESHOLD REACHED (${publishedSeqCount}/${threshold})` : `PROGRESS: ${publishedSeqCount}/${threshold} PUBLISHED`)}
+                      </span>
+                      <p style={{ margin: '3px 0 0 0', fontSize: 12, color: '#fff', fontWeight: 600 }}>
+                        {revealedByAdmin
+                          ? 'The live leaderboard is currently unlocked & visible on public site.'
+                          : publishedSeqCount >= threshold
+                          ? `Target of ${threshold} published results reached! Click button to reveal to public.`
+                          : `Suspense active. ${publishedSeqCount} of ${threshold} sequence items published.`}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={togglePublicReveal}
+                      disabled={loading || (!revealedByAdmin && publishedSeqCount < threshold)}
+                      style={{
+                        background: revealedByAdmin ? 'rgba(239, 68, 68, 0.15)' : (publishedSeqCount >= threshold ? '#f7c948' : 'rgba(255,255,255,0.05)'),
+                        color: revealedByAdmin ? '#f87171' : (publishedSeqCount >= threshold ? '#000' : 'rgba(255,255,255,0.3)'),
+                        border: revealedByAdmin ? '1px solid rgba(239, 68, 68, 0.3)' : 'none',
+                        padding: '9px 16px',
+                        borderRadius: 6,
+                        fontWeight: 800,
+                        fontSize: 12,
+                        cursor: (loading || (!revealedByAdmin && publishedSeqCount < threshold)) ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {revealedByAdmin ? '🔒 Re-Hide Leaderboard' : (publishedSeqCount >= threshold ? '🚀 Publish Leaderboard to Public' : `Requires ${threshold} Published`)}
+                    </button>
+                  </div>
+                </div>
+
               </div>
             )}
           </div>

@@ -2,7 +2,7 @@
 // ─── UI Design: Claude Sonnet 4.6 | Logic: Gemini ───
 import { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import { supabase } from './lib/supabase'
+import { supabase, safeRemoveChannel } from './lib/supabase'
 import LandingPage from './pages/LandingPage'
 import AdminPanel from './pages/admin/AdminPanel'
 import TeamDashboard from './pages/team/TeamDashboard'
@@ -44,13 +44,8 @@ function AppRoutes() {
       })
       .subscribe()
 
-    const timer = setInterval(() => {
-      fetchMaintenance()
-    }, 2000)
-
     return () => {
-      supabase.removeChannel(ch)
-      clearInterval(timer)
+      safeRemoveChannel(ch)
     }
   }, [])
 

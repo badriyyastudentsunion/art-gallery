@@ -209,8 +209,8 @@ export default function MediaDashboard() {
               sourceHeight = img.width / targetRatio
               sourceY = (img.height - sourceHeight) / 2
             }
-            targetWidth = 1600
-            targetHeight = 1200
+            targetWidth = 1080
+            targetHeight = 810
           } else if (ratio === '3:4') {
             const targetRatio = 3 / 4
             const imgRatio = img.width / img.height
@@ -221,10 +221,10 @@ export default function MediaDashboard() {
               sourceHeight = img.width / targetRatio
               sourceY = (img.height - sourceHeight) / 2
             }
-            targetWidth = 1200
-            targetHeight = 1600
+            targetWidth = 810
+            targetHeight = 1080
           } else {
-            const maxDim = 1600
+            const maxDim = 1080
             let w = img.width
             let h = img.height
             if (w > h) {
@@ -249,7 +249,7 @@ export default function MediaDashboard() {
 
           // Check if PNG Overlay should be applied
           let overlaySrc = null
-          if (applyOverlay) {
+          if (applyOverlay && mediaType === 'photo') {
             if (ratio === '4:3' || targetWidth > targetHeight) {
               overlaySrc = overlays.overlay43 || overlays.overlay34
             } else {
@@ -257,23 +257,37 @@ export default function MediaDashboard() {
             }
           }
 
+          const createResult = (cvs) => {
+            const fullUrl = cvs.toDataURL('image/jpeg', 0.78)
+            const tCvs = document.createElement('canvas')
+            const maxT = 400
+            let tw = cvs.width, th = cvs.height
+            if (tw > th) {
+              if (tw > maxT) { th = Math.round((th * maxT) / tw); tw = maxT }
+            } else {
+              if (th > maxT) { tw = Math.round((tw * maxT) / th); th = maxT }
+            }
+            tCvs.width = tw
+            tCvs.height = th
+            const tctx = tCvs.getContext('2d')
+            tctx.drawImage(cvs, 0, 0, tw, th)
+            const thumbUrl = tCvs.toDataURL('image/jpeg', 0.50)
+            return { fullUrl, thumbUrl }
+          }
+
           if (overlaySrc) {
             const ovImg = new Image()
             ovImg.crossOrigin = 'anonymous'
             ovImg.onload = () => {
               ctx.drawImage(ovImg, 0, 0, targetWidth, targetHeight)
-              const base64 = canvas.toDataURL('image/jpeg', 0.85)
-              resolve(base64)
+              resolve(createResult(canvas))
             }
             ovImg.onerror = () => {
-              // Fallback if overlay fails to draw
-              const base64 = canvas.toDataURL('image/jpeg', 0.85)
-              resolve(base64)
+              resolve(createResult(canvas))
             }
             ovImg.src = overlaySrc
           } else {
-            const base64 = canvas.toDataURL('image/jpeg', 0.85)
-            resolve(base64)
+            resolve(createResult(canvas))
           }
         }
         img.src = event.target.result
@@ -288,7 +302,7 @@ export default function MediaDashboard() {
     const files = Array.from(e.target.files || [])
     const validFiles = files.filter(file => {
       if (!file.type.startsWith('image/')) {
-        showToast(`Skipped non-image file: ${file.name}`, 'error')
+        showToast(`"${file.name}" is not an image file.`, 'error')
         return false
       }
       return true
@@ -311,9 +325,9 @@ export default function MediaDashboard() {
         const file = selectedFiles[i]
         try {
           const ratioToUse = mediaType === 'photo' ? aspectRatio : 'original'
-          const base64 = await processSingleFile(file, ratioToUse)
+          const resObj = await processSingleFile(file, ratioToUse)
           if (isCurrent) {
-            processedList.push(base64)
+            processedList.push(resObj)
           }
         } catch (err) {
           console.error(err)
@@ -365,11 +379,12 @@ export default function MediaDashboard() {
       let newItems = []
       
       if (isImageUpload) {
-        newItems = imagePreviews.map((imgBase64, idx) => ({
+        newItems = imagePreviews.map((imgObj, idx) => ({
           id: Math.random().toString(36).substring(2, 9) + '-' + Date.now() + '-' + idx,
           type: mediaType,
           caption: caption.trim(),
-          url: imgBase64,
+          url: imgObj.fullUrl || imgObj,
+          thumbUrl: imgObj.thumbUrl || imgObj.fullUrl || imgObj,
           competition_id: compTag || null,
           uploader_name: user?.name || user?.username || 'Media Team',
           created_at: new Date().toISOString()
@@ -765,9 +780,9 @@ export default function MediaDashboard() {
                   <div className="med-field">
                     <label className="med-label">Selected Files ({imagePreviews.length})</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px', maxHeight: '180px', overflowY: 'auto', padding: '4px' }}>
-                      {imagePreviews.map((imgBase64, idx) => (
+                      {imagePreviews.map((imgObj, idx) => (
                         <div key={idx} style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                          <img src={imgBase64} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img src={imgObj.thumbUrl || imgObj.fullUrl || imgObj} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           <button
                             type="button"
                             onClick={() => removeSelectedFile(idx)}

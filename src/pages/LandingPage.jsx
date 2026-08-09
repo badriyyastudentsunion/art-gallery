@@ -2,7 +2,7 @@
 // ─── UI Design: Claude Sonnet 4.6 | Logic: Gemini ───
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { supabase, safeRemoveChannel } from '../lib/supabase'
 import LogoLoader from '../components/LogoLoader'
 import { APP_VERSION } from '../version'
 import { QRCodeSVG } from 'qrcode.react'
@@ -254,8 +254,26 @@ function MinimalCountdown() {
 
 /* ══════════ HOME TAB ══════════ */
 function HomeTab({ onLoginClick, setTab, liveStream }) {
-  const [photos, setPhotos] = useState([])
-  const [posters, setPosters] = useState([])
+  const [photos, setPhotos] = useState(() => {
+    try {
+      const cached = localStorage.getItem('inspico_gallery_cache')
+      if (cached) {
+        const feed = JSON.parse(cached)
+        return feed.filter(item => item.type === 'photo')
+      }
+    } catch {}
+    return []
+  })
+  const [posters, setPosters] = useState(() => {
+    try {
+      const cached = localStorage.getItem('inspico_gallery_cache')
+      if (cached) {
+        const feed = JSON.parse(cached)
+        return feed.filter(item => item.type === 'poster')
+      }
+    } catch {}
+    return []
+  })
   const [currentIndex, setCurrentIndex] = useState(0)
 
   useEffect(() => {
@@ -268,6 +286,7 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
           const posterItems = feed.filter(item => item.type === 'poster')
           setPhotos(imgItems)
           setPosters(posterItems)
+          try { localStorage.setItem('inspico_gallery_cache', data.value) } catch {}
         } catch {}
       }
     }
@@ -278,11 +297,8 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, loadPhotos)
       .subscribe()
 
-    const pollTimer = setInterval(loadPhotos, 4000)
-
     return () => {
-      supabase.removeChannel(ch)
-      clearInterval(pollTimer)
+      safeRemoveChannel(ch)
     }
   }, [])
 
@@ -400,7 +416,7 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
             <div className="lp-posters-grid">
               {posters.map(poster => (
                 <div key={poster.id} className="lp-poster-card" onClick={() => setTab('gallery')}>
-                  <img src={poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" />
+                  <img src={poster.thumbUrl || poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" loading="lazy" decoding="async" />
                   <button
                     className="lp-poster-download-btn"
                     onClick={(e) => {
@@ -520,7 +536,7 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
                           className="lp-marquee-card"
                           onClick={() => setTab('gallery')}
                         >
-                          <img src={item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" />
+                          <img src={item.thumbUrl || item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" loading="lazy" decoding="async" />
                           {item.caption && (
                             <div className="lp-marquee-caption-overlay">
                               <p className="lp-marquee-caption">{item.caption}</p>
@@ -538,7 +554,7 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
                           className="lp-marquee-card"
                           onClick={() => setTab('gallery')}
                         >
-                          <img src={item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" />
+                          <img src={item.thumbUrl || item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" loading="lazy" decoding="async" />
                           {item.caption && (
                             <div className="lp-marquee-caption-overlay">
                               <p className="lp-marquee-caption">{item.caption}</p>
@@ -668,19 +684,19 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
     setLoading(true)
     const [
       { data: teamsData },
-      { data: settings },
-      { data: results }
+      { data: settings }
     ] = await Promise.all([
       supabase.from('teams').select('id, name').order('name'),
-      supabase.from('app_settings').select('*'),
-      supabase.from('competition_results').select('competition_id, participant_id, placement_points, grade_points, published, participants(team_id)').eq('published', true)
+      supabase.from('app_settings').select('*')
     ])
 
     const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
     const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
     const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
+    const revealSetting = settings?.find(s => s.key === 'leaderboard_revealed_by_admin')
 
     const suspenseActive = activeSetting?.value === 'true'
+    const revealedByAdmin = revealSetting?.value === 'true'
     const revealThreshold = parseInt(threshSetting?.value || '10')
     
     let seqIds = []
@@ -688,14 +704,20 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
       if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
     } catch (e) {}
 
-    const seqSet = new Set(seqIds)
-    const publishedMap = {}
-    ;(results || []).forEach(r => {
-      publishedMap[r.competition_id] = true
-    })
+    // Check how many items in sequence are published
+    let publishedSeqCount = 0
+    if (seqIds.length > 0) {
+      const { data: publishedInSeq } = await supabase
+        .from('competition_results')
+        .select('competition_id')
+        .in('competition_id', seqIds)
+        .eq('published', true)
+      
+      const uniquePublished = new Set((publishedInSeq || []).map(r => r.competition_id))
+      publishedSeqCount = uniquePublished.size
+    }
 
-    const publishedSeqCount = seqIds.filter(id => publishedMap[id]).length
-    const isSuspense = suspenseActive && (publishedSeqCount < revealThreshold) && (seqIds.length > 0)
+    const isSuspense = suspenseActive && !revealedByAdmin && (seqIds.length > 0)
 
     setSuspenseInfo({
       active: isSuspense,
@@ -703,11 +725,12 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
       threshold: revealThreshold
     })
 
-    // Filter results if suspense mode is active
-    let filteredResults = results || []
-    if (isSuspense) {
-      filteredResults = filteredResults.filter(r => !seqSet.has(r.competition_id))
-    }
+    const excludeComps = isSuspense ? seqIds : []
+
+    // Fetch aggregated standings from RPC
+    const { data: standingsData } = await supabase.rpc('get_team_standings', { 
+      exclude_comps: excludeComps
+    })
 
     const colorSetting = settings?.find(s => s.key === 'team_colors')
     let colorMap = {}
@@ -716,13 +739,13 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
     }
 
     const teamMap = {}
-    ;(teamsData || []).forEach(t => { teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0, count: 0 } })
+    ;(teamsData || []).forEach(t => { 
+      teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0 } 
+    })
     
-    filteredResults.forEach(r => {
-      const tid = r.participants?.team_id
-      if (tid && teamMap[tid]) {
-        teamMap[tid].points += ((r.placement_points || 0) + (r.grade_points || 0))
-        teamMap[tid].count++
+    ;(standingsData || []).forEach(r => {
+      if (teamMap[r.team_id]) {
+        teamMap[r.team_id].points = Number(r.points) || 0
       }
     })
 
@@ -898,23 +921,33 @@ function ResultsTab() {
 
   async function fetchCompetitions() {
     setLoading(true)
+    // Select min published_at per competition so we know when it was first announced
     const { data } = await supabase
       .from('competition_results')
-      .select('competitions(id, name, categories(id, name), is_stage, is_group, max_participants)')
+      .select('competitions(id, name, categories(id, name), is_stage, is_group, max_participants), published_at')
       .eq('published', true)
       
-    const comps = []
-    const seen = new Set()
+    // Collect unique competitions + earliest published_at for each
+    const compMap = {}
     if (data) {
       data.forEach(r => {
         const c = r.competitions
-        if (c && !seen.has(c.id)) {
-          seen.add(c.id)
-          comps.push(c)
+        if (!c) return
+        if (!compMap[c.id]) {
+          compMap[c.id] = { ...c, published_at: r.published_at }
+        } else if (r.published_at && r.published_at < compMap[c.id].published_at) {
+          compMap[c.id].published_at = r.published_at
         }
       })
     }
-    comps.sort((a, b) => a.name.localeCompare(b.name))
+    // Sort by published_at ascending = announcement order
+    const comps = Object.values(compMap).sort((a, b) => {
+      if (!a.published_at) return 1
+      if (!b.published_at) return -1
+      return new Date(a.published_at) - new Date(b.published_at)
+    })
+    // Assign announcement number
+    comps.forEach((c, i) => { c.announcementNumber = i + 1 })
     
     setCompetitions(comps)
     const cats = [...new Map(comps.filter(c => c.categories).map(c => [c.categories.id, c.categories])).values()]
@@ -934,19 +967,14 @@ function ResultsTab() {
       .eq('competition_id', comp.id)
       .eq('published', true)
       
-    // Sort by avg_points (or placement) and compute Grade-based tie positions dynamically
+    // Use the published position from DB directly — no recalculation needed
+    // Sort by published position, then by avg_points for same position
     const list = (data || []).map(r => ({ ...r }))
-    list.sort((a, b) => (b.avg_points || 0) - (a.avg_points || 0))
-
-    let currentPos = 1
-    list.forEach((r, idx) => {
-      if (idx > 0) {
-        const prev = list[idx - 1]
-        if (r.grade && prev.grade && r.grade !== prev.grade) {
-          currentPos += 1
-        }
-      }
-      r.displayPosition = (r.grade && r.grade !== '—') ? currentPos : (r.position || (idx + 1))
+    list.sort((a, b) => {
+      const posA = a.position || 999
+      const posB = b.position || 999
+      if (posA !== posB) return posA - posB
+      return (b.avg_points || 0) - (a.avg_points || 0)
     })
 
     setResults(list)
@@ -985,8 +1013,8 @@ function ResultsTab() {
         ) : (
           <div className="lp-results-list">
             {results.map((r, i) => {
-              const pos = r.displayPosition || r.position || (i + 1)
-              const isTied = results.filter(x => (x.displayPosition || x.position) === pos).length > 1
+              const pos = r.position || (i + 1)
+              const isTied = results.filter(x => x.position === pos).length > 1
               return (
                 <div key={r.id} className={`lp-result-row ${pos === 1 ? 'lp-result-first' : pos === 2 ? 'lp-result-second' : pos === 3 ? 'lp-result-third' : ''}`}>
                   <div className="lp-result-rank-medal">
@@ -1074,8 +1102,17 @@ function ResultsTab() {
             <button key={c.id} className="lp-comp-card" onClick={() => openResults(c)}>
               <div className="lp-comp-card-top">
                 <span className="lp-comp-cat">{c.categories?.name || 'General'}</span>
-                {c.is_stage && <span className="lp-comp-badge">Stage</span>}
-                {c.is_group && <span className="lp-comp-badge lp-comp-badge-group">Group</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+                  {c.is_stage && <span className="lp-comp-badge">Stage</span>}
+                  {c.is_group && <span className="lp-comp-badge lp-comp-badge-group">Group</span>}
+                  {c.announcementNumber && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, color: '#f7c948',
+                      background: 'rgba(247,201,72,0.1)', border: '1px solid rgba(247,201,72,0.3)',
+                      padding: '2px 7px', borderRadius: 20, letterSpacing: 0.5
+                    }}>#{c.announcementNumber}</span>
+                  )}
+                </div>
               </div>
               <p className="lp-comp-name">{c.name}</p>
               <div className="lp-comp-footer">
@@ -1469,8 +1506,22 @@ function ScheduleTab() {
 
 /* ══════════ GALLERY TAB ══════════ */
 function GalleryTab() {
-  const [media, setMedia] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [media, setMedia] = useState(() => {
+    try {
+      const cached = localStorage.getItem('inspico_gallery_cache')
+      return cached ? JSON.parse(cached) : []
+    } catch {
+      return []
+    }
+  })
+  const [loading, setLoading] = useState(() => {
+    try {
+      const cached = localStorage.getItem('inspico_gallery_cache')
+      return !cached
+    } catch {
+      return true
+    }
+  })
   const [filter, setFilter] = useState('all') // 'all' | 'photo' | 'video' | 'live'
   const [lightboxItem, setLightboxItem] = useState(null)
   const [activeVideo, setActiveVideo] = useState(null)
@@ -1491,37 +1542,42 @@ function GalleryTab() {
   }, [lightboxItem, activeVideo])
 
   const fetchMedia = async (isInitial = false) => {
-    if (isInitial) setLoading(true)
+    if (isInitial && media.length === 0) setLoading(true)
     try {
       const { data } = await supabase
         .from('app_settings')
         .select('value')
         .eq('key', 'event_media')
         .maybeSingle()
+
       if (data?.value) {
-        setMedia(JSON.parse(data.value))
+        const parsed = JSON.parse(data.value)
+        setMedia(parsed)
+        try {
+          localStorage.setItem('inspico_gallery_cache', data.value)
+        } catch (e) {
+          console.warn('LocalStorage quota:', e)
+        }
       } else {
         setMedia([])
+        try { localStorage.removeItem('inspico_gallery_cache') } catch {}
       }
     } catch (e) {
       console.error(e)
     } finally {
-      if (isInitial) setLoading(false)
+      setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchMedia(true)
+    fetchMedia(media.length === 0)
     const rand = Math.random().toString(36).substring(2, 7)
     const ch = supabase.channel(`lp-gallery-${rand}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, () => fetchMedia(false))
       .subscribe()
 
-    const pollTimer = setInterval(() => fetchMedia(false), 4000)
-
     return () => {
-      supabase.removeChannel(ch)
-      clearInterval(pollTimer)
+      safeRemoveChannel(ch)
     }
   }, [])
 
@@ -1651,8 +1707,10 @@ function GalleryTab() {
                 {isPhoto ? (
                   <div style={{ position: 'relative', width: '100%', display: 'block', overflow: 'hidden' }}>
                     <img
-                      src={item.url}
+                      src={item.thumbUrl || item.url}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       style={{
                         width: '100%',
                         height: 'auto',
@@ -1923,11 +1981,8 @@ export default function LandingPage() {
       })
       .subscribe()
 
-    const liveTimer = setInterval(checkLive, 3000)
-
     return () => {
-      supabase.removeChannel(ch)
-      clearInterval(liveTimer)
+      safeRemoveChannel(ch)
     }
   }, [])
 
