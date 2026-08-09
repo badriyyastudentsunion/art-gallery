@@ -87,7 +87,7 @@ export default function AnnouncerFlowSection() {
         { data: pubResults }
       ] = await Promise.all([
         supabase.from('competitions').select('*, categories(name)').order('name'),
-        supabase.from('judge_results').select('competition_id, code_letter, points_raw, grade'),
+        supabase.from('judge_results').select('competition_id, judge_id, code_letter, points_raw, grade'),
         supabase.from('competition_reports').select('competition_id, code_letter, participant_id, participants(id, name, team_id)'),
         supabase.from('placement_points').select('*'),
         supabase.from('point_settings').select('*'),
@@ -130,14 +130,17 @@ export default function AnnouncerFlowSection() {
           }
         }).sort((a, b) => b.avg_points - a.avg_points)
 
-        // Dense Rank Positions
+        // Position increments only when grade changes
         let currentPos = 1
         const gs2 = comp.group_size || 1
         const catKey = gs2 === 1 ? 'individual' : gs2 === 2 ? 'group_2' : gs2 === 3 ? 'group_3' : 'group_45'
 
         list.forEach((r, idx) => {
-          if (idx > 0 && r.avg_points < list[idx - 1].avg_points) {
-            currentPos += 1
+          if (idx > 0) {
+            const prev = list[idx - 1]
+            if (r.grade !== prev.grade) {
+              currentPos += 1
+            }
           }
           r.position = currentPos
 

@@ -209,15 +209,19 @@ export default function AnnouncerDashboard() {
       ;(reports || []).forEach(r => { partMap[r.code_letter] = r.participants })
 
       const aggregated = Object.entries(codeMap).map(([code, data]) => {
-        const avg = data.points.reduce((a, b) => a + b, 0) / data.points.length
+        const total_points = data.points.reduce((a, b) => a + b, 0)
+        const avg = total_points / data.points.length
         const grade = data.grades[0]
         return {
           code_letter: code,
           avg_points: Math.round(avg * 10) / 10,
+          total_points,
           grade,
           participant: partMap[code],
         }
-      }).sort((a, b) => b.avg_points - a.avg_points)
+      })
+      // Sort by Avg Points (DESC)
+      .sort((a, b) => b.avg_points - a.avg_points)
 
       // Load point settings for preview
       const [{ data: placements }, { data: gradeSettings }] = await Promise.all([
@@ -228,10 +232,14 @@ export default function AnnouncerDashboard() {
       const gs2 = comp.group_size || 1
       const catKey = gs2 === 1 ? 'individual' : gs2 === 2 ? 'group_2' : gs2 === 3 ? 'group_3' : 'group_45'
 
+      // Position increments only when grade changes
       let currentPos = 1
       aggregated.forEach((r, i) => {
-        if (i > 0 && r.avg_points < aggregated[i - 1].avg_points) {
-          currentPos += 1
+        if (i > 0) {
+          const prev = aggregated[i - 1]
+          if (r.grade !== prev.grade) {
+            currentPos += 1
+          }
         }
         r.position = currentPos
 
@@ -516,7 +524,6 @@ export default function AnnouncerDashboard() {
                           <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--accent-light)', display: 'block' }}>
                             {r.placement_points + r.grade_points} <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-muted)' }}>pts</span>
                           </span>
-                          <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{r.avg_points} avg</span>
                         </div>
 
                         {r.grade && (

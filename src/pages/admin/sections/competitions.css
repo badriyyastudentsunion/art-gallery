@@ -214,3 +214,6 @@
   font-weight: 600;
 }
 
+
+.ci-dropdown-item--focused, .form-dropdown-item--focused { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.ci-dropdown-item:hover, .form-dropdown-item:hover { background: rgba(255, 255, 255, 0.05); }

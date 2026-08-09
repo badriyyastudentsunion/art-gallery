@@ -63,15 +63,29 @@ function Checkbox({ checked, onChange, label }) {
 // ── Inline multi-select dropdown ──
 function MultiSelectDropdown({ label, allItems, selectedIds, onToggle, onClear, disabled, hasData, dataColor = '#2ed573' }) {
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [focusedIndex, setFocusedIndex] = useState(-1)
   const ref = useRef(null)
+  const inputRef = useRef(null)
+  const menuRef = useRef(null)
 
   useEffect(() => {
     function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false)
+        setSearch('')
+        setFocusedIndex(-1)
+      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [open])
 
   const selectedCount = selectedIds.length
   const selectedNames = allItems
@@ -79,20 +93,61 @@ function MultiSelectDropdown({ label, allItems, selectedIds, onToggle, onClear, 
     .map(item => item.name)
     .join(', ')
 
+  const filteredItems = allItems.filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
+  const showClear = onClear !== undefined
+
+  const navList = []
+  if (showClear) navList.push({ id: 'clear', name: '— None —', isClear: true })
+  navList.push(...filteredItems)
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setFocusedIndex(prev => Math.min(prev + 1, navList.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setFocusedIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (focusedIndex >= 0 && focusedIndex < navList.length) {
+        const sel = navList[focusedIndex]
+        if (sel.isClear) {
+          onClear()
+        } else {
+          onToggle(sel.id, selectedIds.includes(sel.id))
+        }
+        setOpen(false)
+        setSearch('')
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setSearch('')
+    }
+  }
+
+  useEffect(() => {
+    if (focusedIndex >= 0 && menuRef.current) {
+      const el = menuRef.current.children[focusedIndex + 1]
+      if (el) el.scrollIntoView({ block: 'nearest' })
+    }
+  }, [focusedIndex])
+
   return (
     <div className="ci-dropdown" ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'stretch', width: '100%' }}>
       <button
         type="button"
         className={`ci-dropdown-btn ${selectedCount > 0 ? 'ci-dropdown-btn--filled' : ''}`}
         style={{
-          flex: 1,
-          minWidth: 0,
+          flex: 1, minWidth: 0,
           borderTopRightRadius: hasData ? 0 : 6,
           borderBottomRightRadius: hasData ? 0 : 6,
-          paddingRight: 6,
-          zIndex: 2
+          paddingRight: 6, zIndex: 2
         }}
-        onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+        onClick={e => { 
+          e.stopPropagation()
+          if (!open) { setSearch(''); setFocusedIndex(-1) }
+          setOpen(v => !v)
+        }}
         disabled={disabled}
       >
         <span key={selectedCount > 0 ? selectedNames : 'none'} className="text-slide-up" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -104,17 +159,10 @@ function MultiSelectDropdown({ label, allItems, selectedIds, onToggle, onClear, 
         <div
           title="Data entered"
           style={{
-            background: dataColor,
-            color: '#ffffff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '0 6px',
-            borderTopRightRadius: 6,
-            borderBottomRightRadius: 6,
-            marginLeft: '-1px',
-            flexShrink: 0,
-            zIndex: 1
+            background: dataColor, color: '#ffffff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 6px', borderTopRightRadius: 6, borderBottomRightRadius: 6,
+            marginLeft: '-1px', flexShrink: 0, zIndex: 1
           }}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
@@ -123,30 +171,48 @@ function MultiSelectDropdown({ label, allItems, selectedIds, onToggle, onClear, 
         </div>
       )}
       {open && (
-        <div className="ci-dropdown-menu" onClick={e => e.stopPropagation()}>
-          {onClear && (
+        <div className="ci-dropdown-menu" ref={menuRef} onClick={e => e.stopPropagation()}>
+          <div style={{ position: 'sticky', top: -6, background: 'rgba(18, 21, 28, 0.95)', zIndex: 10, margin: '-6px -6px 4px -6px', padding: '6px 6px 4px 6px' }}>
+            <input 
+              ref={inputRef}
+              type="text" 
+              placeholder="Search..." 
+              value={search}
+              onChange={e => { setSearch(e.target.value); setFocusedIndex(showClear ? 1 : 0) }}
+              onKeyDown={handleKeyDown}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.05)', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', padding: '8px 12px', fontSize: '12px', outline: 'none'
+              }}
+            />
+          </div>
+          {showClear && (
             <button
               type="button"
-              className="ci-dropdown-item"
-              onClick={() => { onClear(); setOpen(false) }}
+              className={`ci-dropdown-item ${focusedIndex === 0 ? 'ci-dropdown-item--focused' : ''}`}
+              onClick={() => { onClear(); setOpen(false); setSearch('') }}
               disabled={disabled || selectedCount === 0}
+              onMouseEnter={() => setFocusedIndex(0)}
             >
               <span className="ci-dropdown-check">{selectedCount === 0 ? '✓' : ''}</span>
               <span style={{ color: 'var(--text-muted)' }}>— None —</span>
             </button>
           )}
-          {allItems.length === 0 ? (
-            <p className="ci-dropdown-empty">No {label.toLowerCase()}s yet</p>
+          {filteredItems.length === 0 ? (
+            <p className="ci-dropdown-empty">No results found</p>
           ) : (
-            allItems.map(item => {
+            filteredItems.map((item, idx) => {
               const isSelected = selectedIds.includes(item.id)
+              const realIdx = showClear ? idx + 1 : idx
               return (
                 <button
                   key={item.id}
                   type="button"
-                  className={`ci-dropdown-item ${isSelected ? 'ci-dropdown-item--selected' : ''}`}
-                  onClick={() => { onToggle(item.id, isSelected); setOpen(false) }}
+                  className={`ci-dropdown-item ${isSelected ? 'ci-dropdown-item--selected' : ''} ${focusedIndex === realIdx ? 'ci-dropdown-item--focused' : ''}`}
+                  onClick={() => { onToggle(item.id, isSelected) }}
                   disabled={disabled}
+                  onMouseEnter={() => setFocusedIndex(realIdx)}
                 >
                   <span className="ci-dropdown-check">{isSelected ? '✓' : ''}</span>
                   <span>{item.name}</span>
@@ -163,17 +229,69 @@ function MultiSelectDropdown({ label, allItems, selectedIds, onToggle, onClear, 
 // ── Inline single-select dropdown ──
 function SingleSelectDropdown({ label, allItems, selectedId, onSelect, disabled }) {
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [focusedIndex, setFocusedIndex] = useState(-1)
   const ref = useRef(null)
+  const inputRef = useRef(null)
+  const menuRef = useRef(null)
 
   useEffect(() => {
     function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false)
+        setSearch('')
+        setFocusedIndex(-1)
+      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [open])
+
   const selected = allItems.find(i => i.id === selectedId)
+  const filteredItems = allItems.filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
+  const showClear = true
+
+  const navList = []
+  if (showClear) navList.push({ id: 'clear', name: '— None —', isClear: true })
+  navList.push(...filteredItems)
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setFocusedIndex(prev => Math.min(prev + 1, navList.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setFocusedIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (focusedIndex >= 0 && focusedIndex < navList.length) {
+        const sel = navList[focusedIndex]
+        if (sel.isClear) {
+          onSelect(null)
+        } else {
+          onSelect(sel.id)
+        }
+        setOpen(false)
+        setSearch('')
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setSearch('')
+    }
+  }
+
+  useEffect(() => {
+    if (focusedIndex >= 0 && menuRef.current) {
+      const el = menuRef.current.children[focusedIndex + 1]
+      if (el) el.scrollIntoView({ block: 'nearest' })
+    }
+  }, [focusedIndex])
 
   return (
     <div className="ci-dropdown" ref={ref} style={{ width: '100%' }}>
@@ -181,37 +299,67 @@ function SingleSelectDropdown({ label, allItems, selectedId, onSelect, disabled 
         type="button"
         className={`ci-dropdown-btn ${selected ? 'ci-dropdown-btn--filled' : ''}`}
         style={{ width: '100%', minWidth: 0 }}
-        onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+        onClick={e => { 
+          e.stopPropagation()
+          if (!open) { setSearch(''); setFocusedIndex(-1) }
+          setOpen(v => !v)
+        }}
         disabled={disabled}
       >
-        <span key={selected ? selected.id : 'none'} className="text-slide-up">
+        <span key={selected ? selected.id : 'none'} className="text-slide-up" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {selected ? selected.name : label}
         </span>
         <IconChevron />
       </button>
       {open && (
-        <div className="ci-dropdown-menu" onClick={e => e.stopPropagation()}>
-          <button
-            type="button"
-            className="ci-dropdown-item"
-            onClick={() => { onSelect(null); setOpen(false) }}
-            disabled={disabled}
-          >
-            <span className="ci-dropdown-check">{!selectedId ? '✓' : ''}</span>
-            <span style={{ color: 'var(--text-muted)' }}>— None —</span>
-          </button>
-          {allItems.map(item => (
+        <div className="ci-dropdown-menu" ref={menuRef} onClick={e => e.stopPropagation()}>
+          <div style={{ position: 'sticky', top: -6, background: 'rgba(18, 21, 28, 0.95)', zIndex: 10, margin: '-6px -6px 4px -6px', padding: '6px 6px 4px 6px' }}>
+            <input 
+              ref={inputRef}
+              type="text" 
+              placeholder="Search..." 
+              value={search}
+              onChange={e => { setSearch(e.target.value); setFocusedIndex(1) }}
+              onKeyDown={handleKeyDown}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.05)', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', padding: '8px 12px', fontSize: '12px', outline: 'none'
+              }}
+            />
+          </div>
+          {showClear && (
             <button
-              key={item.id}
               type="button"
-              className={`ci-dropdown-item ${selectedId === item.id ? 'ci-dropdown-item--selected' : ''}`}
-              onClick={() => { onSelect(item.id); setOpen(false) }}
+              className={`ci-dropdown-item ${focusedIndex === 0 ? 'ci-dropdown-item--focused' : ''}`}
+              onClick={() => { onSelect(null); setOpen(false); setSearch('') }}
               disabled={disabled}
+              onMouseEnter={() => setFocusedIndex(0)}
             >
-              <span className="ci-dropdown-check">{selectedId === item.id ? '✓' : ''}</span>
-              <span>{item.name}</span>
+              <span className="ci-dropdown-check">{!selectedId ? '✓' : ''}</span>
+              <span style={{ color: 'var(--text-muted)' }}>— None —</span>
             </button>
-          ))}
+          )}
+          {filteredItems.length === 0 ? (
+            <p className="ci-dropdown-empty">No results found</p>
+          ) : (
+            filteredItems.map((item, idx) => {
+              const realIdx = idx + 1
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`ci-dropdown-item ${selectedId === item.id ? 'ci-dropdown-item--selected' : ''} ${focusedIndex === realIdx ? 'ci-dropdown-item--focused' : ''}`}
+                  onClick={() => { onSelect(item.id); setOpen(false); setSearch('') }}
+                  disabled={disabled}
+                  onMouseEnter={() => setFocusedIndex(realIdx)}
+                >
+                  <span className="ci-dropdown-check">{selectedId === item.id ? '✓' : ''}</span>
+                  <span>{item.name}</span>
+                </button>
+              )
+            })
+          )}
         </div>
       )}
     </div>
@@ -749,7 +897,7 @@ export default function CompetitionsSection({ navigateTo }) {
     scrollPosRef.current = listRef.current?.scrollTop || 0
     setSelected(comp); setEditing(null); setLoadingDetail(true)
     
-    const [partRes, reportRes, judgeRes, gradeRes, placeRes] = await Promise.all([
+    const [partRes, reportRes, judgeRes, gradeRes, placeRes, compResultRes] = await Promise.all([
       supabase
         .from('competition_participants')
         .select('participant_id, participants(id, name, chess_number, team_id, teams(id, name))')
@@ -763,7 +911,8 @@ export default function CompetitionsSection({ navigateTo }) {
         .select('code_letter, points_raw, grade')
         .eq('competition_id', comp.id),
       supabase.from('point_settings').select('*'),
-      supabase.from('placement_points').select('*')
+      supabase.from('placement_points').select('*'),
+      supabase.from('competition_results').select('*').eq('competition_id', comp.id)
     ])
 
     const parts = (partRes.data || []).map(r => r.participants).filter(Boolean)
@@ -771,10 +920,16 @@ export default function CompetitionsSection({ navigateTo }) {
     const scores = judgeRes.data || []
     const gradeSettings = gradeRes.data || []
     const placementPoints = placeRes.data || []
+    const compResults = compResultRes.data || []
 
     const reportMap = {}
     reports.forEach(r => {
       if (r.participant_id) reportMap[r.participant_id] = r
+    })
+
+    const compResultMap = {}
+    compResults.forEach(r => {
+      if (r.participant_id) compResultMap[r.participant_id] = r
     })
 
     const codeScoreMap = {}
@@ -794,12 +949,25 @@ export default function CompetitionsSection({ navigateTo }) {
 
     const rankMap = {}
     let totalTeamPtsSum = 0
-    const catType = comp.is_group ? 'group' : 'single'
+    const gs = comp.group_size || 1
+    const catKey = gs === 1 ? 'individual' : gs === 2 ? 'group_2' : gs === 3 ? 'group_3' : 'group_45'
 
+    let currentPos = 1
     rankedCodes.forEach((item, index) => {
-      const rank = index + 1
-      const matchedPlacement = placementPoints.find(p => p.position === rank && (p.competition_category === catType || !p.competition_category))
-      const placePts = matchedPlacement ? (matchedPlacement.points || 0) : 0
+      if (index > 0) {
+        const prev = rankedCodes[index - 1]
+        if (item.grade !== prev.grade) {
+          currentPos += 1
+        }
+      }
+      const rank = currentPos
+      const matchedPlacement = placementPoints.find(p => p.position === rank && (
+        p.competition_category === catKey || 
+        p.competition_category === (comp.is_group ? 'group' : 'individual') ||
+        p.competition_category === (comp.is_group ? 'group' : 'single') ||
+        !p.competition_category
+      ))
+      const placePts = (rank <= 3 && matchedPlacement) ? (matchedPlacement.points || 0) : 0
       const teamPts = item.gradePts + placePts
       totalTeamPtsSum += teamPts
 
@@ -812,6 +980,15 @@ export default function CompetitionsSection({ navigateTo }) {
         teamPts
       }
     })
+
+    // If competition results are already published, use saved points sum if greater
+    if (compResults.length > 0) {
+      let savedSum = 0
+      compResults.forEach(r => {
+        savedSum += ((r.placement_points || 0) + (r.grade_points || 0))
+      })
+      if (savedSum > 0) totalTeamPtsSum = savedSum
+    }
 
     // Sort participants by score (highest rank/score first)
     const sortedParts = [...parts].sort((a, b) => {
@@ -830,6 +1007,7 @@ export default function CompetitionsSection({ navigateTo }) {
     setDetailData({
       reportMap,
       rankMap,
+      compResultMap,
       reportsCount: reports.length,
       scoresCount: scores.length,
       totalTeamPoints: totalTeamPtsSum

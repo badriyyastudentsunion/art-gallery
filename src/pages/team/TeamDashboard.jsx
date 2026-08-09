@@ -1,5 +1,5 @@
 // src/pages/team/TeamDashboard.jsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { jsPDF } from 'jspdf'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
@@ -47,8 +47,9 @@ export default function TeamDashboard() {
   const [participants, setParticipants] = useState([])
   const [competitions, setCompetitions] = useState([])
   const [assignments, setAssignments] = useState([])
+  const [attendance, setAttendance] = useState([])
   const inFlightUpdatesRef = useRef({})
-  const [drawerItems, setDrawerItems] = useState([])
+
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [drawerSearch, setDrawerSearch] = useState('')
@@ -78,54 +79,45 @@ export default function TeamDashboard() {
   const [showSignoutConfirm, setShowSignoutConfirm] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
 
-  // Snapshot initial sorting order when activeParticipant is set
-  useEffect(() => {
-    if (!activeParticipant) {
-      setDrawerItems([]);
-      return;
+  const drawerItems = useMemo(() => {
+    if (activeParticipant) {
+      const filtered = (competitions || []).filter(c => 
+        String(c.category_id) === String(activeParticipant.category_id) || 
+        c.categories?.is_general === true || 
+        c.categories?.is_general === 'true'
+      );
+      return [...filtered].sort((a, b) => {
+        const aActive = assignments.some(x => x.participant_id === activeParticipant.id && x.competition_id === a.id);
+        const bActive = assignments.some(x => x.participant_id === activeParticipant.id && x.competition_id === b.id);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+
+        const catA = a.categories?.name || 'Z-General';
+        const catB = b.categories?.name || 'Z-General';
+        if (catA !== catB) return catA.localeCompare(catB);
+
+        const aIsStage = a.is_stage ? 1 : 0;
+        const bIsStage = b.is_stage ? 1 : 0;
+        if (aIsStage !== bIsStage) return aIsStage - bIsStage;
+
+        return (a.name || '').localeCompare(b.name || '');
+      });
     }
-    const filtered = competitions.filter(c => 
-      c.category_id === activeParticipant.category_id || 
-      c.categories?.is_general === true || 
-      c.categories?.is_general === 'true'
-    );
-    const sorted = [...filtered].sort((a, b) => {
-      const aActive = assignments.some(x => x.participant_id === activeParticipant.id && x.competition_id === a.id);
-      const bActive = assignments.some(x => x.participant_id === activeParticipant.id && x.competition_id === b.id);
-      if (aActive && !bActive) return -1;
-      if (!aActive && bActive) return 1;
 
-      const catA = a.categories?.name || 'Z-General';
-      const catB = b.categories?.name || 'Z-General';
-      if (catA !== catB) return catA.localeCompare(catB);
-
-      const aIsStage = a.is_stage ? 1 : 0;
-      const bIsStage = b.is_stage ? 1 : 0;
-      if (aIsStage !== bIsStage) return aIsStage - bIsStage;
-
-      return a.name.localeCompare(b.name);
-    });
-    setDrawerItems(sorted);
-  }, [activeParticipant, competitions]);
-
-  // Snapshot initial sorting order when activeCompetition is set
-  useEffect(() => {
-    if (!activeCompetition) {
-      setDrawerItems([]);
-      return;
+    if (activeCompetition) {
+      const isCompGeneral = activeCompetition.categories?.is_general === true || activeCompetition.categories?.is_general === 'true';
+      const filtered = (participants || []).filter(p => isCompGeneral || String(p.category_id) === String(activeCompetition.category_id));
+      return [...filtered].sort((a, b) => {
+        const aActive = assignments.some(x => x.participant_id === a.id && x.competition_id === activeCompetition.id);
+        const bActive = assignments.some(x => x.participant_id === b.id && x.competition_id === activeCompetition.id);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+      });
     }
-    const isCompGeneral = activeCompetition.categories?.is_general === true || activeCompetition.categories?.is_general === 'true';
-    const filtered = participants.filter(p => isCompGeneral || p.category_id === activeCompetition.category_id);
-    const sorted = [...filtered].sort((a, b) => {
-      const aActive = assignments.some(x => x.participant_id === a.id && x.competition_id === activeCompetition.id);
-      const bActive = assignments.some(x => x.participant_id === b.id && x.competition_id === activeCompetition.id);
-      if (aActive && !bActive) return -1;
-      if (!aActive && bActive) return 1;
-      return a.name.localeCompare(b.name);
-    });
-    setDrawerItems(sorted);
-  }, [activeCompetition, participants]);
 
+    return [];
+  }, [activeParticipant, activeCompetition, competitions, participants, assignments]);
   // Handle hardware/browser back swipe to close drawers instead of exiting app
   useEffect(() => {
     const handlePopState = (e) => {
@@ -330,10 +322,14 @@ export default function TeamDashboard() {
     const pList = sortedParts
     const pIds = pList.map(p => p.id)
 
-    const { data: comps } = await supabase
+    const { data: comps, error: compsError } = await supabase
       .from('competitions')
       .select('id, name, category_id, max_participants, is_stage, is_group, group_size, categories(name, is_general), rules_description, rules_duration, mark_criteria')
       .order('name')
+      
+    if (compsError) {
+      console.error('Error fetching competitions:', compsError)
+    }
 
     // 4. Fetch assignments for this team's participants
     let assigns = []
@@ -346,10 +342,10 @@ export default function TeamDashboard() {
     }
 
     // Filter competitions list to categories matching registered participants, plus all General categories
-  const teamCategoryIds = new Set(pList.map(p => p.category_id).filter(Boolean))
+  const teamCategoryIds = new Set(pList.map(p => String(p.category_id)).filter(Boolean))
   const filteredComps = (comps || [])
     .filter(c => 
-      teamCategoryIds.has(c.category_id) || 
+      teamCategoryIds.has(String(c.category_id)) || 
       c.categories?.is_general === true || 
       c.categories?.is_general === 'true'
     )
@@ -365,8 +361,36 @@ export default function TeamDashboard() {
       return (a.name || '').localeCompare(b.name || '')
     })
 
+    // 5. Fetch competition statuses
+    const { data: resRows } = await supabase.from('results').select('competition_id, published')
+    const { data: schedRows } = await supabase.from('schedules').select('competition_id, status')
+    const { data: judgeRows } = await supabase.from('judging_results').select('competition_id')
+    const { data: repRows } = await supabase.from('competition_reports').select('competition_id, participant_id')
+
+    filteredComps.forEach(c => {
+      const res = (resRows || []).find(r => r.competition_id === c.id)
+      const hasJudge = (judgeRows || []).some(r => r.competition_id === c.id)
+      const hasRep = (repRows || []).some(r => r.competition_id === c.id)
+      const sched = (schedRows || []).find(s => s.competition_id === c.id)
+
+      if (res) {
+        c.status = res.published ? 'Published' : 'Completed'
+      } else if (hasJudge) {
+        c.status = 'Completed'
+      } else if (sched && sched.status === 'completed') {
+        c.status = 'Ended'
+      } else if (hasRep) {
+        c.status = 'Ongoing'
+      } else if (sched) {
+        c.status = 'Scheduled'
+      } else {
+        c.status = 'Pending'
+      }
+    })
+
   setParticipants(pList)
   setCompetitions(filteredComps)
+  setAttendance(repRows || [])
   const inFlight = inFlightUpdatesRef.current
   let merged = assigns.filter(a => {
     const key = `${a.participant_id}_${a.competition_id}`
@@ -528,24 +552,6 @@ export default function TeamDashboard() {
     )
   }
 
-  function isCategoryAllowed(categoryId) {
-    if (!categoryId) return true
-
-    // 1. Check team-specific override first
-    const teamPerms = teamCategoryPerms[user?.teamId]
-    if (teamPerms && teamPerms[categoryId]) {
-      if (teamPerms[categoryId] === 'unlocked') return true
-      if (teamPerms[categoryId] === 'locked') return false
-    }
-
-    // 2. Check global category locks
-    if (globalLockedCats.includes(categoryId)) {
-      return false
-    }
-
-    return true
-  }
-
   function isTimeWindowAllowed() {
     const now = new Date()
     if (regStartTime) {
@@ -560,24 +566,57 @@ export default function TeamDashboard() {
   }
 
   function getEffectiveCanAssign(categoryId) {
+    if (!categoryId) {
+      return canAssign && isTimeWindowAllowed()
+    }
+    // 1. Check team-specific override first
+    const teamPerms = teamCategoryPerms[user?.teamId]
+    if (teamPerms && teamPerms[categoryId]) {
+      if (teamPerms[categoryId] === 'unlocked') return true
+      if (teamPerms[categoryId] === 'locked') return false
+    }
+
+    // 2. No override, check global
     if (!canAssign) return false
     if (!isTimeWindowAllowed()) return false
-    return isCategoryAllowed(categoryId)
+    if (globalLockedCats.includes(categoryId)) return false
+
+    return true
   }
 
   function isAssignmentAllowed(participant, competition) {
-    if (!canAssign) return false
-    if (!isTimeWindowAllowed()) return false
     if (!participant || !competition) return false
 
     const isGeneral = competition.categories?.is_general === true || competition.categories?.is_general === 'true'
 
     if (isGeneral) {
-      return isCategoryAllowed(competition.category_id) || isCategoryAllowed(participant.category_id)
+      return getEffectiveCanAssign(competition.category_id) || getEffectiveCanAssign(participant.category_id)
     } else {
-      return isCategoryAllowed(competition.category_id) && isCategoryAllowed(participant.category_id)
+      return getEffectiveCanAssign(competition.category_id) && getEffectiveCanAssign(participant.category_id)
     }
   }
+
+  const renderStatusBadge = (rawSt) => {
+    let st = rawSt || 'Pending'
+    if (st === 'Published' || st === 'Judged') st = 'Completed' // Hide "Judged" as requested
+
+    const styleMap = {
+      Completed: { color: '#2ed573', bg: 'rgba(46, 213, 115, 0.15)' },
+      Ended: { color: '#ff5252', bg: 'rgba(255, 82, 82, 0.15)' },
+      Ongoing: { color: '#f59f00', bg: 'rgba(245, 159, 0, 0.15)' },
+      Scheduled: { color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)' },
+      Pending: { color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.05)' }
+    }
+
+    const { color, bg } = styleMap[st] || styleMap.Pending
+
+    return (
+      <span style={{ display: 'inline-flex', fontSize: 10, padding: '3px 8px', borderRadius: 4, background: bg, color: color, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        {st}
+      </span>
+    )
+  }
+
   const formatDateTime = (str) => {
     if (!str) return ''
     return new Date(str).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -1120,7 +1159,7 @@ export default function TeamDashboard() {
                   )
                   .map(comp => {
                     const assignedTeamParts = participants.filter(p => isAssigned(p.id, comp.id))
-                    const isLocked = !canAssign || !isTimeWindowAllowed() || !isCategoryAllowed(comp.category_id)
+                    const isLocked = !getEffectiveCanAssign(comp.category_id)
                     return (
                       <div key={comp.id} className="comp-card" onClick={() => setActiveCompetition(comp)}>
                         <div className="comp-card-name" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -1158,6 +1197,7 @@ export default function TeamDashboard() {
                               🔒 Locked
                             </span>
                           )}
+                          {renderStatusBadge(comp.status)}
                           <span className="team-card-badge dim" style={{ marginLeft: 'auto' }}>
                             {comp.is_group ? `Group Size: ${comp.group_size}` : `Max: ${comp.max_participants}`}
                           </span>
@@ -1223,6 +1263,13 @@ export default function TeamDashboard() {
                 {canAssign ? 'Assign Competitions' : 'Assigned Competitions'}
               </p>
               
+              {!getEffectiveCanAssign(activeParticipant.category_id) && (
+                <div style={{ margin: '0 0 16px 0', padding: '10px 12px', background: 'rgba(255, 71, 87, 0.08)', border: '1px solid rgba(255, 71, 87, 0.2)', color: '#ff4757', borderRadius: 8, fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 14, lineHeight: 1 }}>🔒</span>
+                  <span style={{ lineHeight: 1.4 }}>Modifications are locked for this category. You can only view existing assignments.</span>
+                </div>
+              )}
+              
               {/* Drawer Search Input */}
               <div className="drawer-search-sticky-container">
                 <div className="team-search-wrap" style={{ margin: 0 }}>
@@ -1264,6 +1311,12 @@ export default function TeamDashboard() {
                     c.name.toLowerCase().includes(drawerSearch.toLowerCase()) ||
                     (c.categories?.name && c.categories.name.toLowerCase().includes(drawerSearch.toLowerCase()))
                   )
+                  .filter(comp => {
+                    const active = isAssigned(activeParticipant.id, comp.id)
+                    const canAssignThisComp = isAssignmentAllowed(activeParticipant, comp)
+                    if (!canAssignThisComp && !active) return false
+                    return true
+                  })
                   .map(comp => {
                     const active = isAssigned(activeParticipant.id, comp.id)
                     const canAssignThisComp = isAssignmentAllowed(activeParticipant, comp)
@@ -1291,16 +1344,23 @@ export default function TeamDashboard() {
                           )}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                          <button
-                            className={`btn-toggle-assign ${active ? 'active' : ''}`}
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => toggleAssignment(activeParticipant.id, comp.id)}
-                            disabled={!canAssignThisComp}
-                          >
-                            {active ? 'Assigned' : 'Assign'}
-                          </button>
-                          {!canAssignThisComp && (
-                            <span style={{ fontSize: 9, color: '#ff4757', fontWeight: 600 }}>🔒 Locked</span>
+                          {!canAssignThisComp ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {comp.status !== 'Pending' && comp.status !== 'Scheduled' && (
+                                attendance.some(a => a.participant_id === activeParticipant.id && a.competition_id === comp.id)
+                                  ? <span style={{ fontSize: 10, color: '#2ed573', fontWeight: 700, padding: '2px 4px', background: 'rgba(46, 213, 115, 0.1)', borderRadius: 4 }}>✅ ATTENDED</span>
+                                  : <span style={{ fontSize: 10, color: '#ff4757', fontWeight: 700, padding: '2px 4px', background: 'rgba(255, 71, 87, 0.1)', borderRadius: 4 }}>❌ ABSENT</span>
+                              )}
+                              {renderStatusBadge(comp.status)}
+                            </div>
+                          ) : (
+                            <button
+                              className={`btn-toggle-assign ${active ? 'active' : ''}`}
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => toggleAssignment(activeParticipant.id, comp.id)}
+                            >
+                              {active ? 'Assigned' : 'Assign'}
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1347,6 +1407,13 @@ export default function TeamDashboard() {
               <p className="team-section-title" style={{ marginBottom: 12 }}>
                 {canAssign ? 'Assign Eligible Members' : 'Assigned Team Members'}
               </p>
+
+              {!getEffectiveCanAssign(activeCompetition.category_id) && (
+                <div style={{ margin: '0 0 16px 0', padding: '10px 12px', background: 'rgba(255, 71, 87, 0.08)', border: '1px solid rgba(255, 71, 87, 0.2)', color: '#ff4757', borderRadius: 8, fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 14, lineHeight: 1 }}>🔒</span>
+                  <span style={{ lineHeight: 1.4 }}>Modifications are locked for this competition. You can only view existing assignments.</span>
+                </div>
+              )}
 
               {activeCompetition.is_group && (
                 <div style={{ 
@@ -1404,6 +1471,12 @@ export default function TeamDashboard() {
                     (p.chess_number && p.chess_number.toString().includes(drawerSearch)) ||
                     (p.categories?.name && p.categories.name.toLowerCase().includes(drawerSearch.toLowerCase()))
                   )
+                  .filter(p => {
+                    const active = isAssigned(p.id, activeCompetition.id)
+                    const canAssignThis = isAssignmentAllowed(p, activeCompetition)
+                    if (!canAssignThis && !active) return false
+                    return true
+                  })
 
                 if (drawerItems.length === 0) {
                   return (
@@ -1434,15 +1507,22 @@ export default function TeamDashboard() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                        <button
-                          className={`btn-toggle-assign ${active ? 'active' : ''}`}
-                          onClick={() => toggleAssignment(p.id, activeCompetition.id)}
-                          disabled={!canAssignThis}
-                        >
-                          {active ? 'Assigned' : 'Assign'}
-                        </button>
-                        {!canAssignThis && (
-                          <span style={{ fontSize: 9, color: '#ff4757', fontWeight: 600 }}>🔒 Locked</span>
+                        {!canAssignThis ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {activeCompetition.status !== 'Pending' && activeCompetition.status !== 'Scheduled' && (
+                              attendance.some(a => a.participant_id === p.id && a.competition_id === activeCompetition.id)
+                                ? <span style={{ fontSize: 10, color: '#2ed573', fontWeight: 700, padding: '2px 4px', background: 'rgba(46, 213, 115, 0.1)', borderRadius: 4 }}>✅ ATTENDED</span>
+                                : <span style={{ fontSize: 10, color: '#ff4757', fontWeight: 700, padding: '2px 4px', background: 'rgba(255, 71, 87, 0.1)', borderRadius: 4 }}>❌ ABSENT</span>
+                            )}
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Assigned</span>
+                          </div>
+                        ) : (
+                          <button
+                            className={`btn-toggle-assign ${active ? 'active' : ''}`}
+                            onClick={() => toggleAssignment(p.id, activeCompetition.id)}
+                          >
+                            {active ? 'Assigned' : 'Assign'}
+                          </button>
                         )}
                       </div>
                     </div>

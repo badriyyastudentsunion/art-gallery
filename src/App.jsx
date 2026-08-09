@@ -13,10 +13,12 @@ import MediaDashboard from './pages/media/MediaDashboard'
 
 import PWAInstallPrompt from './components/PWAInstallPrompt'
 import MaintenanceScreen from './components/MaintenanceScreen'
+import LogoLoader from './components/LogoLoader'
 
 function AppRoutes() {
   const { user } = useAuth()
   const [maintenance, setMaintenance] = useState({ all: false, notice: '' })
+  const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(true)
 
   const fetchMaintenance = async () => {
     try {
@@ -26,6 +28,8 @@ function AppRoutes() {
       }
     } catch (e) {
       console.error(e)
+    } finally {
+      setIsMaintenanceLoading(false)
     }
   }
 
@@ -49,6 +53,14 @@ function AppRoutes() {
       clearInterval(timer)
     }
   }, [])
+
+  if (isMaintenanceLoading) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>
+        <LogoLoader />
+      </div>
+    )
+  }
 
   // Admin panel is NEVER blocked by maintenance
   if (user?.role === 'Admin') {

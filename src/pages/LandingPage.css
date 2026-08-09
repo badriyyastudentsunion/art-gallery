@@ -386,50 +386,46 @@
   line-height: 1;
 }
 
-/* Minimalist Countdown */
+/* Minimalist Countdown Badge */
 .lp-countdown {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
-  margin-top: 2px;
+  gap: 10px;
+  margin-top: 4px;
   margin-bottom: 24px;
-  padding: 8px 22px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 7px 18px;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  transition: all 0.25s ease;
 }
 
-.lp-cd-unit {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.lp-countdown:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .lp-cd-val {
   font-family: 'Inter', sans-serif;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 800;
-  color: #fff;
+  background: linear-gradient(135deg, #fb7185, #e11d48);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   line-height: 1;
-  letter-spacing: -0.5px;
+  letter-spacing: 0.2px;
 }
 
 .lp-cd-lbl {
   font-family: 'Inter', sans-serif;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.85);
   letter-spacing: 1.5px;
-  margin-top: 3px;
-}
-
-.lp-cd-dots {
-  font-size: 14px;
-  font-weight: 700;
-  color: #B8193C;
-  opacity: 0.8;
-  margin-top: -10px;
+  text-transform: uppercase;
 }
 
 .lp-home-cta {
@@ -2194,6 +2190,145 @@
 }
 
 /* ════════════════════════════════════════
+   EVENT POSTERS SECTION
+   ════════════════════════════════════════ */
+.lp-home-posters-section {
+  width: 100%;
+  max-width: 100vw;
+  margin: 20px auto 10px auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 20px;
+}
+
+.lp-posters-grid {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 10px 0 20px 0;
+  width: 100%;
+  max-width: 1200px;
+  scroll-snap-type: x mandatory;
+}
+
+.lp-posters-grid::-webkit-scrollbar {
+  height: 6px;
+}
+
+.lp-posters-grid::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+}
+
+.lp-posters-grid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 4px;
+}
+
+.lp-poster-card {
+  flex: 0 0 auto;
+  width: 280px;
+  aspect-ratio: 3/4;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  scroll-snap-align: start;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.lp-poster-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.lp-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ════════════════════════════════════════
+   LIVE STAGE BROADCAST CARD
+   ════════════════════════════════════════ */
+.lp-home-live-minimal {
+  width: 100%;
+  max-width: 720px;
+  margin: 30px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 20px;
+  box-sizing: border-box;
+}
+
+.lp-live-minimal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lp-live-indicator-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+  animation: pulse 1.5s infinite;
+}
+
+.lp-live-header-text {
+  font-size: 11px;
+  font-weight: 800;
+  color: #f43f5e;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.lp-live-minimal-player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.lp-live-minimal-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.lp-live-minimal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.4;
+}
+
+.lp-live-minimal-yt {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.lp-live-minimal-yt:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* ════════════════════════════════════════
    HOME PAGE DUAL MARQUEE GALLERY SLIDER
    ════════════════════════════════════════ */
 .lp-home-gallery-wrap {
@@ -2232,60 +2367,64 @@
   display: flex;
   width: max-content;
   gap: 14px;
+  will-change: transform;
 }
 
 .lp-marquee-left {
-  animation: marquee-slide-left 28s linear infinite;
+  animation: marquee-slide-left 35s linear infinite;
 }
 
 .lp-marquee-right {
-  animation: marquee-slide-right 28s linear infinite;
+  animation: marquee-slide-right 35s linear infinite;
 }
 
-.lp-marquee-container:hover .lp-marquee-row {
+.lp-marquee-row:hover {
   animation-play-state: paused;
 }
 
 @keyframes marquee-slide-left {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
 }
 
 @keyframes marquee-slide-right {
-  0% { transform: translateX(-50%); }
-  100% { transform: translateX(0); }
+  0% { transform: translate3d(-50%, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
 }
 
 .lp-marquee-card {
   position: relative;
-  width: 150px;
+  width: max-content;
   height: 200px;
   flex-shrink: 0;
-  background: #141416;
   border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.08);
   overflow: hidden;
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   cursor: pointer;
-  transition: transform 0.25s ease, border-color 0.25s ease;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 @media (min-width: 768px) {
   .lp-marquee-card {
-    width: 180px;
     height: 240px;
   }
 }
 
 .lp-marquee-card:hover {
   transform: scale(1.03);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.6);
   border-color: rgba(255, 255, 255, 0.25);
 }
 
 .lp-marquee-img {
-  width: 100%;
+  width: auto;
   height: 100%;
-  object-fit: cover;
+  display: block;
+  object-fit: cover; /* Fits container exactly since width is dynamic auto */
 }
 
 .lp-marquee-caption-overlay {
@@ -2307,4 +2446,50 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ════════════════════════════════════════
+   EVENT GALLERY GOOGLE PHOTOS MASONRY GRID
+   ════════════════════════════════════════ */
+.lp-gallery-masonry {
+  columns: 2 140px;
+  column-gap: 12px;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .lp-gallery-masonry {
+    columns: 3 190px;
+    column-gap: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lp-gallery-masonry {
+    columns: 4 230px;
+    column-gap: 20px;
+  }
+}
+
+.lp-gallery-card-item {
+  break-inside: avoid;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+@media (min-width: 640px) {
+  .lp-gallery-card-item {
+    margin-bottom: 16px;
+  }
+}
+
+.lp-gallery-card-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
 }

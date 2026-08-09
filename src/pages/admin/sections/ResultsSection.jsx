@@ -92,7 +92,7 @@ export default function ResultsSection() {
     // Judge results for this competition
     const { data: jResults } = await supabase
       .from('judge_results')
-      .select('code_letter, points_raw, grade')
+      .select('judge_id, code_letter, points_raw, grade')
       .eq('competition_id', comp.id)
 
     // Invigilator reports (code → participant)
@@ -124,11 +124,14 @@ export default function ResultsSection() {
       }
     }).sort((a, b) => b.avg_points - a.avg_points)
 
-    // Assign positions with tie support (Dense Ranking: 1, 1, 2, 3...)
+    // Assign positions with tie support based on Grade
     let currentPos = 1
     aggregated.forEach((r, i) => {
-      if (i > 0 && r.avg_points < aggregated[i - 1].avg_points) {
-        currentPos += 1
+      if (i > 0) {
+        const prev = aggregated[i - 1]
+        if (r.grade !== prev.grade) {
+          currentPos += 1
+        }
       }
       r.position = currentPos
     })
@@ -254,7 +257,12 @@ export default function ResultsSection() {
             </div>
           ) : (
             <table className="data-table" style={{ margin: '0' }}>
-              <thead><tr><th>Competition</th><th>Category</th><th>Type</th><th>Status</th></tr></thead>
+              <thead><tr>
+                <th style={{ top: 0 }}>Competition</th>
+                <th style={{ top: 0 }}>Category</th>
+                <th style={{ top: 0 }}>Type</th>
+                <th style={{ top: 0 }}>Status</th>
+              </tr></thead>
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.id} className="row-clickable" onClick={() => openResult(c)}>
@@ -289,11 +297,11 @@ export default function ResultsSection() {
               <table className="data-table" style={{ marginBottom: 24 }}>
                 <thead>
                   <tr>
-                    <th>Pos</th>
-                    <th>Participant</th>
-                    <th>Team</th>
-                    <th>Avg Points</th>
-                    <th>Grade</th>
+                    <th style={{ top: 0 }}>Pos</th>
+                    <th style={{ top: 0 }}>Participant</th>
+                    <th style={{ top: 0 }}>Team</th>
+                    <th style={{ top: 0 }}>Avg Points</th>
+                    <th style={{ top: 0 }}>Grade</th>
                   </tr>
                 </thead>
                 <tbody>

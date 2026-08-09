@@ -51,6 +51,14 @@ const IconLogOut = () => (
   </svg>
 )
 
+const IconLayers = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+    <polyline points="2 17 12 22 22 17" />
+    <polyline points="2 12 12 17 22 12" />
+  </svg>
+)
+
 export default function MediaDashboard() {
   const { user, logout } = useAuth()
   
@@ -66,14 +74,22 @@ export default function MediaDashboard() {
   const [mediaFeed, setMediaFeed] = useState([])
   const [competitions, setCompetitions] = useState([])
   const [toast, setToast] = useState(null)
+  const [itemToDelete, setItemToDelete] = useState(null)
+
+  // PNG Overlay States
+  const [overlays, setOverlays] = useState({ overlay43: '', overlay34: '' })
+  const [applyOverlay, setApplyOverlay] = useState(true)
+  const [showOverlaySettings, setShowOverlaySettings] = useState(false)
 
   useEffect(() => {
     fetchMedia()
     fetchCompetitions()
+    fetchOverlays()
 
     // Subscribe to events updates in real-time
     const ch = supabase.channel('media-dashboard-feed')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, fetchMedia)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.gallery_overlays' }, fetchOverlays)
       .subscribe()
 
     return () => supabase.removeChannel(ch)
@@ -102,6 +118,58 @@ export default function MediaDashboard() {
     }
   }
 
+  async function fetchOverlays() {
+    try {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'gallery_overlays')
+        .maybeSingle()
+
+      if (data?.value) {
+        setOverlays(JSON.parse(data.value))
+      }
+    } catch (err) {
+      console.error('Error fetching overlays:', err)
+    }
+  }
+
+  const handleOverlayUpload = (key, file) => {
+    if (!file || !file.type.startsWith('image/')) {
+      showToast('Please select a valid PNG/Image file.', 'error')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64 = e.target.result
+      const newOverlays = { ...overlays, [key]: base64 }
+      setOverlays(newOverlays)
+      try {
+        await supabase
+          .from('app_settings')
+          .upsert({ key: 'gallery_overlays', value: JSON.stringify(newOverlays) })
+        showToast('PNG Overlay frame saved successfully!')
+      } catch (err) {
+        console.error(err)
+        showToast('Failed to save overlay to database.', 'error')
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveOverlay = async (key) => {
+    const newOverlays = { ...overlays, [key]: '' }
+    setOverlays(newOverlays)
+    try {
+      await supabase
+        .from('app_settings')
+        .upsert({ key: 'gallery_overlays', value: JSON.stringify(newOverlays) })
+      showToast('Overlay frame removed.')
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   async function fetchCompetitions() {
     try {
       const { data } = await supabase
@@ -114,12 +182,13 @@ export default function MediaDashboard() {
     }
   }
 
-  // Helper to crop & resize a single image file on canvas
+  // Helper to crop & resize a single image file on canvas (with PNG overlay support)
   const processSingleFile = (file, ratio) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (event) => {
         const img = new Image()
+        img.onerror = reject
         img.onload = () => {
           const canvas = document.createElement('canvas')
           let sourceX = 0
@@ -140,8 +209,8 @@ export default function MediaDashboard() {
               sourceHeight = img.width / targetRatio
               sourceY = (img.height - sourceHeight) / 2
             }
-            targetWidth = 800
-            targetHeight = 600
+            targetWidth = 1600
+            targetHeight = 1200
           } else if (ratio === '3:4') {
             const targetRatio = 3 / 4
             const imgRatio = img.width / img.height
@@ -152,10 +221,10 @@ export default function MediaDashboard() {
               sourceHeight = img.width / targetRatio
               sourceY = (img.height - sourceHeight) / 2
             }
-            targetWidth = 600
-            targetHeight = 800
+            targetWidth = 1200
+            targetHeight = 1600
           } else {
-            const maxDim = 800
+            const maxDim = 1600
             let w = img.width
             let h = img.height
             if (w > h) {
@@ -177,10 +246,36 @@ export default function MediaDashboard() {
           canvas.height = targetHeight
           const ctx = canvas.getContext('2d')
           ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight)
-          const base64 = canvas.toDataURL('image/jpeg', 0.75)
-          resolve(base64)
+
+          // Check if PNG Overlay should be applied
+          let overlaySrc = null
+          if (applyOverlay) {
+            if (ratio === '4:3' || targetWidth > targetHeight) {
+              overlaySrc = overlays.overlay43 || overlays.overlay34
+            } else {
+              overlaySrc = overlays.overlay34 || overlays.overlay43
+            }
+          }
+
+          if (overlaySrc) {
+            const ovImg = new Image()
+            ovImg.crossOrigin = 'anonymous'
+            ovImg.onload = () => {
+              ctx.drawImage(ovImg, 0, 0, targetWidth, targetHeight)
+              const base64 = canvas.toDataURL('image/jpeg', 0.85)
+              resolve(base64)
+            }
+            ovImg.onerror = () => {
+              // Fallback if overlay fails to draw
+              const base64 = canvas.toDataURL('image/jpeg', 0.85)
+              resolve(base64)
+            }
+            ovImg.src = overlaySrc
+          } else {
+            const base64 = canvas.toDataURL('image/jpeg', 0.85)
+            resolve(base64)
+          }
         }
-        img.onerror = reject
         img.src = event.target.result
       }
       reader.onerror = reject
@@ -201,7 +296,7 @@ export default function MediaDashboard() {
     setSelectedFiles(prev => [...prev, ...validFiles])
   }
 
-  // Re-process all selected images when the file list or aspect ratio choice changes
+  // Re-process all selected images when the file list, aspect ratio, or overlay toggle changes
   useEffect(() => {
     if (selectedFiles.length === 0) {
       setImagePreviews([])
@@ -215,7 +310,8 @@ export default function MediaDashboard() {
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i]
         try {
-          const base64 = await processSingleFile(file, aspectRatio)
+          const ratioToUse = mediaType === 'photo' ? aspectRatio : 'original'
+          const base64 = await processSingleFile(file, ratioToUse)
           if (isCurrent) {
             processedList.push(base64)
           }
@@ -233,7 +329,7 @@ export default function MediaDashboard() {
     return () => {
       isCurrent = false
     }
-  }, [selectedFiles, aspectRatio])
+  }, [selectedFiles, aspectRatio, mediaType, applyOverlay, overlays])
 
   const removeSelectedFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, idx) => idx !== index))
@@ -242,17 +338,14 @@ export default function MediaDashboard() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (mediaType !== 'photo' && !caption.trim()) {
-      showToast('Please enter a description or title.', 'error')
-      return
-    }
+    const isImageUpload = mediaType === 'photo' || mediaType === 'poster'
 
-    if (mediaType === 'photo' && imagePreviews.length === 0) {
+    if (isImageUpload && imagePreviews.length === 0) {
       showToast('Please select at least one photo.', 'error')
       return
     }
 
-    if (mediaType !== 'photo' && !link.trim()) {
+    if (!isImageUpload && !link.trim()) {
       showToast('Please enter the YouTube URL.', 'error')
       return
     }
@@ -270,10 +363,11 @@ export default function MediaDashboard() {
       const currentFeed = data?.value ? JSON.parse(data.value) : []
 
       let newItems = []
-      if (mediaType === 'photo') {
+      
+      if (isImageUpload) {
         newItems = imagePreviews.map((imgBase64, idx) => ({
           id: Math.random().toString(36).substring(2, 9) + '-' + Date.now() + '-' + idx,
-          type: 'photo',
+          type: mediaType,
           caption: caption.trim(),
           url: imgBase64,
           competition_id: compTag || null,
@@ -317,8 +411,14 @@ export default function MediaDashboard() {
     }
   }
 
-  const handleDelete = async (itemId) => {
-    if (!window.confirm('Are you sure you want to delete this media item?')) return
+  const handleDelete = (itemId) => {
+    setItemToDelete(itemId)
+  }
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return
+    const targetId = itemToDelete
+    setItemToDelete(null)
 
     try {
       const { data } = await supabase
@@ -330,7 +430,7 @@ export default function MediaDashboard() {
       if (!data?.value) return
 
       const currentFeed = JSON.parse(data.value)
-      const filteredFeed = currentFeed.filter(item => item.id !== itemId)
+      const filteredFeed = currentFeed.filter(item => item.id !== targetId)
 
       const { error } = await supabase
         .from('app_settings')
@@ -362,15 +462,15 @@ export default function MediaDashboard() {
       )
     }
     return items.map(item => {
-      const isPhoto = item.type === 'photo'
-      const ytId = !isPhoto ? getYoutubeId(item.url) : null
+      const isPhotoOrPoster = item.type === 'photo' || item.type === 'poster'
+      const ytId = !isPhotoOrPoster ? getYoutubeId(item.url) : null
       const relatedCompName = competitions.find(c => c.id === item.competition_id)?.name
 
       return (
         <div key={item.id} className="med-feed-card" style={{ marginBottom: '6px' }}>
           {/* Media Thumbnail */}
           <div className="med-feed-thumbnail-box">
-            {isPhoto ? (
+            {isPhotoOrPoster ? (
               <img src={item.url} alt="Photo" className="med-feed-thumbnail" />
             ) : ytId ? (
               <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -446,11 +546,118 @@ export default function MediaDashboard() {
         
         {/* Left Side: Upload Form */}
         <section className="med-card med-form-section">
-          <h2 className="med-section-title">Upload New Media</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+            <h2 className="med-section-title" style={{ margin: 0 }}>Upload New Media</h2>
+            {mediaType === 'photo' && (
+              <button
+                type="button"
+                onClick={() => setShowOverlaySettings(!showOverlaySettings)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <IconLayers />
+                <span>{showOverlaySettings ? 'Hide Overlay Frames' : 'Manage PNG Frames'}</span>
+                {(overlays.overlay34 || overlays.overlay43) && (
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Expandable PNG Overlay Settings Box (Photo tab only) */}
+          {mediaType === 'photo' && showOverlaySettings && (
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.25)',
+              border: '1px dashed rgba(255, 255, 255, 0.12)',
+              borderRadius: '12px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '13px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <IconLayers />
+                <span>PNG Frame Overlays</span>
+              </h4>
+              <p style={{ margin: '0 0 14px 0', fontSize: '11px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>
+                Upload transparent PNG frames to auto-overlay on photos.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {/* 3:4 Portrait Overlay */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
+                      Portrait (3:4)
+                    </span>
+                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+                      1200 × 1600 px
+                    </span>
+                  </div>
+                  {overlays.overlay34 ? (
+                    <div style={{ position: 'relative' }}>
+                      <img src={overlays.overlay34} alt="Overlay 3:4" style={{ width: '100%', height: '80px', objectFit: 'contain', background: '#000', borderRadius: '6px' }} />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveOverlay('overlay34')}
+                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(239,68,68,0.8)', border: 'none', color: '#fff', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'block', textAlign: 'center', padding: '16px 8px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
+                      Upload 3:4 PNG
+                      <input type="file" accept="image/png" style={{ display: 'none' }} onChange={e => handleOverlayUpload('overlay34', e.target.files[0])} />
+                    </label>
+                  )}
+                </div>
+
+                {/* 4:3 Landscape Overlay */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
+                      Landscape (4:3)
+                    </span>
+                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
+                      1600 × 1200 px
+                    </span>
+                  </div>
+                  {overlays.overlay43 ? (
+                    <div style={{ position: 'relative' }}>
+                      <img src={overlays.overlay43} alt="Overlay 4:3" style={{ width: '100%', height: '80px', objectFit: 'contain', background: '#000', borderRadius: '6px' }} />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveOverlay('overlay43')}
+                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(239,68,68,0.8)', border: 'none', color: '#fff', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'block', textAlign: 'center', padding: '16px 8px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
+                      Upload 4:3 PNG
+                      <input type="file" accept="image/png" style={{ display: 'none' }} onChange={e => handleOverlayUpload('overlay43', e.target.files[0])} />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="med-type-tabs">
             {[
               { id: 'photo', label: 'Photo', icon: <IconImage /> },
+              { id: 'poster', label: 'Poster', icon: <IconImage /> },
               { id: 'live', label: 'Live Stream', icon: <IconYoutube /> },
               { id: 'video', label: 'Video Clip', icon: <IconVideo /> },
               { id: 'shorts', label: 'Shorts', icon: <IconYoutube /> }
@@ -469,59 +676,78 @@ export default function MediaDashboard() {
 
           <form onSubmit={handleSubmit} className="med-form">
             <div className="med-field">
-              <label className="med-label">Title / Caption {mediaType === 'photo' ? '(Optional)' : ''}</label>
+              <label className="med-label">Title / Caption (Optional)</label>
               <textarea
                 className="med-input med-textarea"
                 rows={2}
-                placeholder={mediaType === 'photo' ? "Write an optional caption..." : "Write a suitable caption or title..."}
+                placeholder="Write an optional caption or title..."
                 value={caption}
                 onChange={e => setCaption(e.target.value)}
                 maxLength={200}
-                required={mediaType !== 'photo'}
               />
             </div>
 
             {mediaType === 'photo' && (
               <>
-                {/* Aspect Ratio Selector */}
-                <div className="med-field">
-                  <label className="med-label">Select Aspect Ratio</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {[
-                      { id: 'original', label: 'Original' },
-                      { id: '4:3', label: '4:3 (Landscape)' },
-                      { id: '3:4', label: '3:4 (Portrait)' }
-                    ].map(r => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => setAspectRatio(r.id)}
-                        style={{
-                          flex: 1,
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          border: aspectRatio === r.id ? '1px solid #B8193C' : '1px solid rgba(255,255,255,0.08)',
-                          background: aspectRatio === r.id ? 'rgba(184, 25, 60, 0.15)' : 'rgba(255,255,255,0.03)',
-                          color: aspectRatio === r.id ? '#ff6b8a' : 'rgba(255,255,255,0.6)',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          fontFamily: 'inherit',
-                          transition: 'all 0.15s'
-                        }}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
+                {/* PNG Frame Overlay Toggle (if overlay exists, photo tab only) */}
+                {(overlays.overlay34 || overlays.overlay43) && (
+                  <div className="med-field" style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#fff' }}>
+                      <input
+                        type="checkbox"
+                        checked={applyOverlay}
+                        onChange={e => setApplyOverlay(e.target.checked)}
+                        style={{ accentColor: '#ef4444', width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <IconLayers />
+                        <span>Attach Event PNG Frame Overlay</span>
+                      </div>
+                    </label>
                   </div>
-                </div>
+                )}
+
+                {/* Aspect Ratio Selector (Photo only) */}
+                {mediaType === 'photo' && (
+                  <div className="med-field">
+                    <label className="med-label">Select Aspect Ratio</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {[
+                        { id: 'original', label: 'Original' },
+                        { id: '4:3', label: '4:3 (Landscape)' },
+                        { id: '3:4', label: '3:4 (Portrait)' }
+                      ].map(r => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setAspectRatio(r.id)}
+                          style={{
+                            flex: 1,
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: aspectRatio === r.id ? '1px solid #B8193C' : '1px solid rgba(255,255,255,0.08)',
+                            background: aspectRatio === r.id ? 'rgba(184, 25, 60, 0.15)' : 'rgba(255,255,255,0.03)',
+                            color: aspectRatio === r.id ? '#ff6b8a' : 'rgba(255,255,255,0.6)',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="med-field">
-                  <label className="med-label">Photos Upload (Multiple allowed)</label>
+                  <label className="med-label">{mediaType === 'poster' ? 'Poster Upload' : 'Photos Upload'} (Multiple allowed)</label>
                   <div className="med-upload-zone">
                     <label className="med-upload-label">
                       <IconUpload />
-                      <span className="med-upload-title">Choose Photo(s)</span>
+                      <span className="med-upload-title">Choose File(s)</span>
                       <span className="med-upload-sub">Supports JPEG, PNG</span>
                       <input
                         type="file"
@@ -537,7 +763,7 @@ export default function MediaDashboard() {
                 {/* Previews List */}
                 {imagePreviews.length > 0 && (
                   <div className="med-field">
-                    <label className="med-label">Selected Photos ({imagePreviews.length})</label>
+                    <label className="med-label">Selected Files ({imagePreviews.length})</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px', maxHeight: '180px', overflowY: 'auto', padding: '4px' }}>
                       {imagePreviews.map((imgBase64, idx) => (
                         <div key={idx} style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -570,9 +796,9 @@ export default function MediaDashboard() {
                   </div>
                 )}
               </>
-            )}
+              )}
 
-            {mediaType !== 'photo' && (
+            {(mediaType !== 'photo' && mediaType !== 'poster') && (
               <div className="med-field">
                 <label className="med-label">
                   {mediaType === 'live' ? 'YouTube Live Link' : mediaType === 'shorts' ? 'YouTube Shorts Link' : 'YouTube Video Link'}
@@ -591,20 +817,7 @@ export default function MediaDashboard() {
               </div>
             )}
 
-            <div className="med-field">
-              <label className="med-label">Tag Competition (Optional)</label>
-              <select
-                className="med-input med-select"
-                value={compTag}
-                onChange={e => setCompTag(e.target.value)}
-                style={{ colorScheme: 'dark' }}
-              >
-                <option value="">Choose Competition...</option>
-                {competitions.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+
 
             <button
               type="submit"
@@ -668,6 +881,97 @@ export default function MediaDashboard() {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      {itemToDelete && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#121218',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '380px',
+            padding: '24px',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8)',
+            textAlign: 'center',
+            animation: 'medModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.12)',
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto'
+            }}>
+              <IconTrash />
+            </div>
+
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '700', color: '#fff' }}>
+              Delete Media Item?
+            </h3>
+            <p style={{ margin: '0 0 24px 0', fontSize: '13px', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.5' }}>
+              Are you sure you want to delete this update? This action cannot be undone.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setItemToDelete(null)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
+                  transition: 'all 0.15s'
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

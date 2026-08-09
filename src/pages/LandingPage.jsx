@@ -60,7 +60,7 @@ const IconLogIn = () => (
   </svg>
 )
 const IconArrow = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
     strokeLinecap="round" strokeLinejoin="round">
     <line x1="5" y1="12" x2="19" y2="12" />
     <polyline points="12 5 19 12 12 19" />
@@ -91,9 +91,17 @@ const IconAlert = () => (
 )
 const IconX = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-    strokeLinecap="round" strokeLinejoin="round">
+    strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
     <line x1="18" y1="6" x2="6" y2="18" />
     <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+const IconDownload = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
   </svg>
 )
 const IconUser = () => (
@@ -222,48 +230,24 @@ function TypewriterText({ text, speed = 70, delay = 200 }) {
 
 /* ══════════ MINIMAL COUNTDOWN ══════════ */
 function MinimalCountdown() {
-  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+  const [daysLeft, setDaysLeft] = useState(0)
 
   useEffect(() => {
     const target = new Date('2026-09-02T00:00:00').getTime()
     const update = () => {
       const now = new Date().getTime()
       const diff = Math.max(0, target - now)
-      setTimeLeft({
-        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
-        hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-        minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
-        seconds: Math.floor((diff % (1000 * 60)) / 1000)
-      })
+      setDaysLeft(Math.ceil(diff / (1000 * 60 * 60 * 24)))
     }
     update()
-    const timer = setInterval(update, 1000)
+    const timer = setInterval(update, 60000) // update every min is enough for days
     return () => clearInterval(timer)
   }, [])
 
-  const pad = n => String(n).padStart(2, '0')
-
   return (
     <div className="lp-countdown lp-scroll-reveal" aria-label="Event Countdown">
-      <div className="lp-cd-unit">
-        <span className="lp-cd-val">{pad(timeLeft.days)}</span>
-        <span className="lp-cd-lbl">DAYS</span>
-      </div>
-      <span className="lp-cd-dots">:</span>
-      <div className="lp-cd-unit">
-        <span className="lp-cd-val">{pad(timeLeft.hours)}</span>
-        <span className="lp-cd-lbl">HOURS</span>
-      </div>
-      <span className="lp-cd-dots">:</span>
-      <div className="lp-cd-unit">
-        <span className="lp-cd-val">{pad(timeLeft.minutes)}</span>
-        <span className="lp-cd-lbl">MINS</span>
-      </div>
-      <span className="lp-cd-dots">:</span>
-      <div className="lp-cd-unit">
-        <span className="lp-cd-val">{pad(timeLeft.seconds)}</span>
-        <span className="lp-cd-lbl">SECS</span>
-      </div>
+      <span className="lp-cd-val">{daysLeft}</span>
+      <span className="lp-cd-lbl">DAYS TO GO</span>
     </div>
   )
 }
@@ -271,6 +255,7 @@ function MinimalCountdown() {
 /* ══════════ HOME TAB ══════════ */
 function HomeTab({ onLoginClick, setTab, liveStream }) {
   const [photos, setPhotos] = useState([])
+  const [posters, setPosters] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
 
   useEffect(() => {
@@ -280,18 +265,24 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
         try {
           const feed = JSON.parse(data.value)
           const imgItems = feed.filter(item => item.type === 'photo')
+          const posterItems = feed.filter(item => item.type === 'poster')
           setPhotos(imgItems)
+          setPosters(posterItems)
         } catch {}
       }
     }
     loadPhotos()
 
-    const ch = supabase.channel('lp-home-photos')
+    const rand = Math.random().toString(36).substring(2, 7)
+    const ch = supabase.channel(`lp-home-photos-${rand}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, loadPhotos)
       .subscribe()
 
+    const pollTimer = setInterval(loadPhotos, 4000)
+
     return () => {
       supabase.removeChannel(ch)
+      clearInterval(pollTimer)
     }
   }, [])
 
@@ -402,78 +393,92 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
           </div>
         </div>
 
+        {/* Event Posters Section */}
+        {posters.length > 0 && (
+          <div className="lp-home-posters-section lp-scroll-reveal">
+            <h3 className="lp-home-gallery-title" style={{ marginBottom: 16 }}>Event Posters</h3>
+            <div className="lp-posters-grid">
+              {posters.map(poster => (
+                <div key={poster.id} className="lp-poster-card" onClick={() => setTab('gallery')}>
+                  <img src={poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" />
+                  <button
+                    className="lp-poster-download-btn"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const a = document.createElement('a')
+                      a.href = poster.url
+                      a.download = `poster-${poster.id}.jpg`
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                    }}
+                    title="Download Poster"
+                    style={{
+                      position: 'absolute',
+                      bottom: '10px',
+                      right: '10px',
+                      background: 'rgba(0, 0, 0, 0.75)',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: '#fff',
+                      borderRadius: '50%',
+                      width: '34px',
+                      height: '34px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      zIndex: 2
+                    }}
+                  >
+                    <IconDownload />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Live Broadcast Section (if active) */}
         {liveStream && (
-          <div style={{
-            width: '100%',
-            maxWidth: '650px',
-            margin: '40px auto 20px auto',
-            background: 'rgba(184, 25, 60, 0.04)',
-            border: '1px solid rgba(184, 25, 60, 0.2)',
-            borderRadius: '16px',
-            padding: '24px 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxSizing: 'border-box'
-          }} className="lp-scroll-reveal">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{
-                display: 'inline-block',
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: '#ef4444',
-                animation: 'pulse 1.5s infinite'
-              }} />
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#ff6b8a', letterSpacing: '2px', textTransform: 'uppercase' }}>
-                Active Live Broadcast
-              </span>
+          <div className="lp-home-live-minimal lp-scroll-reveal">
+            <div className="lp-live-minimal-header">
+              <span className="lp-live-indicator-dot" />
+              <span className="lp-live-header-text">LIVE STAGE</span>
             </div>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-              {(() => {
-                const ytId = getYoutubeId(liveStream.url)
-                return ytId ? (
-                  <div style={{ flex: '1 1 320px', aspectRatio: '16/9', borderRadius: '10px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <iframe
-                      width="100%"
-                      height="100%"
-                      src={`https://www.youtube-nocookie.com/embed/${ytId}`}
-                      title={liveStream.caption}
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                    />
-                  </div>
-                ) : null
-              })()}
-              <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '15px', fontWeight: 700, color: '#fff', lineHeight: 1.4 }}>{liveStream.caption}</h3>
-                <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
-                  Broadcasting live from the stage. Watch standard streams or open on YouTube.
-                </p>
-                <button
-                  onClick={() => setTab('gallery')}
-                  style={{
-                    background: '#B8193C',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '8px 16px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    cursor: 'pointer',
-                    alignSelf: 'flex-start',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#d01f48' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#B8193C' }}
-                >
-                  Watch in Gallery
-                </button>
-              </div>
+
+            {(() => {
+              const ytId = getYoutubeId(liveStream.url)
+              return ytId ? (
+                <div className="lp-live-minimal-player">
+                  <iframe
+                    width="100%"
+                    height="100%"
+                    src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1`}
+                    title={liveStream.caption}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+              ) : null
+            })()}
+
+            <div className="lp-live-minimal-info">
+              <h3 className="lp-live-minimal-title">{liveStream.caption}</h3>
+              <a
+                href={liveStream.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lp-live-minimal-yt"
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.376.55 9.376.55s7.505 0 9.377-.55a3.016 3.016 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                  </svg>
+                  Open in YouTube
+                </span>
+              </a>
             </div>
           </div>
         )}
@@ -484,55 +489,65 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
             <h3 className="lp-home-gallery-title">Live Event Gallery</h3>
             
             <div className="lp-marquee-container">
-              {/* Row 1: Slides Left */}
+              {/* Helper to build seamless infinite loop row */}
               {(() => {
-                const list1 = photos.slice(0, Math.ceil(photos.length / 2))
-                const items1 = list1.length > 0 ? list1 : photos
-                // Duplicate for seamless infinite loop
-                const row1 = [...items1, ...items1, ...items1, ...items1]
-                return (
-                  <div className="lp-marquee-row lp-marquee-left">
-                    {row1.map((item, idx) => (
-                      <div
-                        key={`row1-${item.id}-${idx}`}
-                        className="lp-marquee-card"
-                        onClick={() => setTab('gallery')}
-                      >
-                        <img src={item.url} alt={item.caption} className="lp-marquee-img" />
-                        {item.caption && (
-                          <div className="lp-marquee-caption-overlay">
-                            <p className="lp-marquee-caption">{item.caption}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
+                const getMarqueeRow = (items) => {
+                  if (!items || items.length === 0) return []
+                  let singleHalf = [...items]
+                  while (singleHalf.length < 15) {
+                    singleHalf = [...singleHalf, ...items]
+                  }
+                  return [...singleHalf, ...singleHalf]
+                }
 
-              {/* Row 2: Slides Right (Opposite) */}
-              {(() => {
-                const list2 = photos.slice(Math.ceil(photos.length / 2))
+                const halfCount = Math.ceil(photos.length / 2)
+                const list1 = photos.slice(0, halfCount)
+                const list2 = photos.slice(halfCount)
+                
+                const items1 = list1.length > 0 ? list1 : photos
                 const items2 = list2.length > 0 ? list2 : photos
-                // Duplicate for seamless infinite loop
-                const row2 = [...items2, ...items2, ...items2, ...items2]
+
+                const row1 = getMarqueeRow(items1)
+                const row2 = getMarqueeRow(items2)
+
                 return (
-                  <div className="lp-marquee-row lp-marquee-right">
-                    {row2.map((item, idx) => (
-                      <div
-                        key={`row2-${item.id}-${idx}`}
-                        className="lp-marquee-card"
-                        onClick={() => setTab('gallery')}
-                      >
-                        <img src={item.url} alt={item.caption} className="lp-marquee-img" />
-                        {item.caption && (
-                          <div className="lp-marquee-caption-overlay">
-                            <p className="lp-marquee-caption">{item.caption}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    {/* Row 1: Slides Left */}
+                    <div className="lp-marquee-row lp-marquee-left">
+                      {row1.map((item, idx) => (
+                        <div
+                          key={`row1-${item.id}-${idx}`}
+                          className="lp-marquee-card"
+                          onClick={() => setTab('gallery')}
+                        >
+                          <img src={item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" />
+                          {item.caption && (
+                            <div className="lp-marquee-caption-overlay">
+                              <p className="lp-marquee-caption">{item.caption}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Row 2: Slides Right */}
+                    <div className="lp-marquee-row lp-marquee-right">
+                      {row2.map((item, idx) => (
+                        <div
+                          key={`row2-${item.id}-${idx}`}
+                          className="lp-marquee-card"
+                          onClick={() => setTab('gallery')}
+                        >
+                          <img src={item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" />
+                          {item.caption && (
+                            <div className="lp-marquee-caption-overlay">
+                              <p className="lp-marquee-caption">{item.caption}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )
               })()}
             </div>
@@ -569,7 +584,9 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
               }}
             >
               <span>See details in Gallery section</span>
-              <span style={{ fontSize: '12px' }}>→</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <IconArrow />
+              </span>
             </button>
           </div>
         )}
@@ -619,13 +636,12 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
       </div>
 
       <footer className="lp-home-footer">
-        <div>
-          <p className="lp-footer-org">Badriyya Dars Students' Association</p>
-          <p className="lp-footer-place">Karukulangara, Narikkuni, Kozhikkode</p>
-        </div>
-        <div className="lp-footer-live">
-          <span className="lp-live-dot" />
-          Live Event
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <img src="/bdsa-logo.svg" alt="BDSA Logo" className="lp-footer-logo" style={{ height: '38px', width: 'auto', objectFit: 'contain' }} />
+          <div>
+            <p className="lp-footer-org">Badriyya Dars Students' Association</p>
+            <p className="lp-footer-place">Karukulangara, Narikkuni, Kozhikkode</p>
+          </div>
         </div>
       </footer>
     </div>
@@ -633,10 +649,9 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
 }
 
 /* ══════════ TEAM POINTS TAB ══════════ */
-function TeamPointsTab() {
+function TeamPointsTab({ compact = false, showHeader = true }) {
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
   const [suspenseInfo, setSuspenseInfo] = useState(null)
 
   useEffect(() => {
@@ -713,25 +728,70 @@ function TeamPointsTab() {
   const maxPoints = teams[0]?.points || 0
   const isAllTied = teams.length > 0 && teams.every(t => t.points === teams[0].points)
   const isZeroPoints = isAllTied && maxPoints === 0
-
-  const filtered = teams.filter(t =>
-    !search || t.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = teams
 
   const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32']
 
-  return (
-    <div className="lp-tab-content">
-      <div className="lp-section-header">
-        <div>
-          <h2 className="lp-section-title">Team Points</h2>
-          <p className="lp-section-sub">Live leaderboard & rankings</p>
+  if (compact) {
+    if (loading) return null
+    return (
+      <div className="lp-team-compact-strip" style={{
+        background: 'rgba(255, 255, 255, 0.025)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '14px',
+        padding: '12px 16px',
+        marginBottom: '20px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-light)', letterSpacing: '1px', textTransform: 'uppercase' }}>
+            🏆 Live Team Standings
+          </span>
+          {suspenseInfo?.active && (
+            <span style={{ fontSize: '10px', color: '#F97316', fontWeight: 700 }}>🔒 Standings Locked</span>
+          )}
         </div>
-        <div className="lp-live-badge">
-          <span className="lp-live-dot" />
-          Live
+        <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
+          {teams.map((t, idx) => {
+            const rank = teams.findIndex(team => team.points === t.points) + 1
+            return (
+              <div key={t.id} style={{
+                flex: '0 0 auto',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '10px',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: rankColors[rank - 1] || 'rgba(255,255,255,0.5)' }}>
+                  #{rank}
+                </span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>{t.name}</span>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-light)', marginLeft: '4px' }}>{t.points.toFixed(1)}</span>
+              </div>
+            )
+          })}
         </div>
       </div>
+    )
+  }
+
+  return (
+    <div className="lp-tab-content" style={{ padding: showHeader ? undefined : 0, marginBottom: '24px' }}>
+      {showHeader && (
+        <div className="lp-section-header">
+          <div>
+            <h2 className="lp-section-title">Team Points & Standings</h2>
+            <p className="lp-section-sub">Live leaderboard & rankings</p>
+          </div>
+          <div className="lp-live-badge">
+            <span className="lp-live-dot" />
+            Live
+          </div>
+        </div>
+      )}
 
       {/* Suspense Mode Alert */}
       {suspenseInfo?.active && (
@@ -769,33 +829,15 @@ function TeamPointsTab() {
         </div>
       )}
 
-      <div className="lp-search-wrap">
-        <IconSearch />
-        <input className="lp-search-input" type="text" placeholder="Search teams…"
-          value={search} onChange={e => setSearch(e.target.value)} />
-      </div>
-
       {loading ? (
         <LogoLoader text="Loading team points..." />
       ) : teams.length === 0 ? (
         <div className="lp-empty"><IconTrophy /><p>No team data yet</p></div>
       ) : (
         <div className="lp-team-list">
-          {/* Tied / All Equal Banner */}
-          {isAllTied && !search && (
-            <div className="lp-tied-banner">
-              <span className="lp-tied-icon">{isZeroPoints ? <IconTimer /> : <IconHandshake />}</span>
-              <div>
-                <p className="lp-tied-title">
-                  {isZeroPoints ? 'Event Starting Soon — All Teams Ready' : `All Teams Tied at ${maxPoints.toFixed(1)} PTS`}
-                </p>
-                <p className="lp-tied-sub">Rankings will update live as scores are published</p>
-              </div>
-            </div>
-          )}
 
           {/* Top 3 Podium — Only show when there is an actual leader (not all tied) */}
-          {!isAllTied && filtered.length >= 3 && !search && (
+          {!isAllTied && filtered.length >= 3 && (
             <div className="lp-podium">
               {[1, 0, 2].map(idx => {
                 const team = teams[idx]
@@ -923,6 +965,9 @@ function ResultsTab() {
   if (selected) {
     return (
       <div className="lp-tab-content">
+        {/* Compact Team Standings Bar at the top of individual results */}
+        <TeamPointsTab compact={true} showHeader={false} />
+
         <div className="lp-results-header">
           <button className="lp-back-btn" onClick={() => setSelected(null)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
@@ -970,10 +1015,13 @@ function ResultsTab() {
 
   return (
     <div className="lp-tab-content">
-      <div className="lp-section-header">
+      {/* Integrated Team Points Leaderboard at the top of Results */}
+      <TeamPointsTab showHeader={true} />
+
+      <div className="lp-section-header" style={{ marginTop: '30px' }}>
         <div>
-          <h2 className="lp-section-title">Results</h2>
-          <p className="lp-section-sub">Select a competition</p>
+          <h2 className="lp-section-title">Competition Results</h2>
+          <p className="lp-section-sub">Select a competition to view rankings</p>
         </div>
       </div>
 
@@ -1405,16 +1453,23 @@ function GalleryTab() {
   const [lightboxItem, setLightboxItem] = useState(null)
   const [activeVideo, setActiveVideo] = useState(null)
 
-  useEffect(() => {
-    fetchMedia()
-    const ch = supabase.channel('lp-gallery')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, fetchMedia)
-      .subscribe()
-    return () => supabase.removeChannel(ch)
-  }, [])
+  const openItemModal = (item, isPhoto) => {
+    if (isPhoto) setLightboxItem(item)
+    else setActiveVideo(item)
+    window.history.pushState({ modal: 'gallery-lightbox' }, '')
+  }
 
-  async function fetchMedia() {
-    setLoading(true)
+  useEffect(() => {
+    const handlePopState = () => {
+      if (lightboxItem) setLightboxItem(null)
+      if (activeVideo) setActiveVideo(null)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [lightboxItem, activeVideo])
+
+  const fetchMedia = async (isInitial = false) => {
+    if (isInitial) setLoading(true)
     try {
       const { data } = await supabase
         .from('app_settings')
@@ -1429,9 +1484,24 @@ function GalleryTab() {
     } catch (e) {
       console.error(e)
     } finally {
-      setLoading(false)
+      if (isInitial) setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchMedia(true)
+    const rand = Math.random().toString(36).substring(2, 7)
+    const ch = supabase.channel(`lp-gallery-${rand}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, () => fetchMedia(false))
+      .subscribe()
+
+    const pollTimer = setInterval(() => fetchMedia(false), 4000)
+
+    return () => {
+      supabase.removeChannel(ch)
+      clearInterval(pollTimer)
+    }
+  }, [])
 
   function getYoutubeId(url) {
     if (!url) return null
@@ -1499,18 +1569,14 @@ function GalleryTab() {
                   </div>
                 ) : null}
                 <div style={{ flex: '1 1 240px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <h3 style={{ margin: '0 0 8px 0', fontSize: 16, fontWeight: 700, color: '#fff', lineHeight: 1.4 }}>{currentLive.caption}</h3>
-                  <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
-                    Broadcasting live from the main stage. Click on the video player to watch the live performance directly inside the app, or open on YouTube.
-                  </p>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 700, color: '#fff', lineHeight: 1.4 }}>{currentLive.caption}</h3>
                   <a
                     href={currentLive.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="lp-submit-btn"
-                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, textDecoration: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, padding: '10px 18px', borderRadius: 8, marginTop: 14, alignSelf: 'flex-start', border: 'none', cursor: 'pointer' }}
+                    className="lp-live-yt-link"
                   >
-                    Open on YouTube External ↗
+                    Watch on YouTube ↗
                   </a>
                 </div>
               </div>
@@ -1523,6 +1589,7 @@ function GalleryTab() {
       <div className="lp-cat-chips" style={{ marginBottom: 20 }}>
         {[
           { id: 'all', label: 'All Updates' },
+          { id: 'poster', label: 'Posters' },
           { id: 'photo', label: 'Photos' },
           { id: 'video', label: 'Videos & Shorts' },
           { id: 'live', label: 'Live Broadcasts' }
@@ -1547,7 +1614,7 @@ function GalleryTab() {
           <p>No media updates found in this category</p>
         </div>
       ) : (
-        <div className="lp-comp-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
+        <div className="lp-gallery-masonry">
           {otherMedia.map(item => {
             const isPhoto = item.type === 'photo'
             const ytId = !isPhoto ? getYoutubeId(item.url) : null
@@ -1555,49 +1622,64 @@ function GalleryTab() {
             return (
               <div
                 key={item.id}
-                onClick={() => {
-                  if (isPhoto) setLightboxItem(item)
-                  else setActiveVideo(item)
-                }}
-                style={{
-                  padding: 0,
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: 14,
-                  transition: 'transform 0.2s ease, border-color 0.2s ease'
-                }}
+                className="lp-gallery-card-item"
+                onClick={() => openItemModal(item, isPhoto)}
               >
-                {/* Media frame */}
-                <div style={{ height: 180, width: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
-                  {isPhoto ? (
-                    <img src={item.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : ytId ? (
-                    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                      <img src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
-                      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#ef4444', color: '#fff', width: 44, height: 30, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900 }}>▶</div>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: 24 }}>🎥</span>
-                  )}
-                  <span style={{ position: 'absolute', top: 10, left: 10, background: isPhoto ? 'rgba(79, 156, 249, 0.85)' : 'rgba(239, 68, 68, 0.85)', color: '#fff', fontSize: 9, fontWeight: 800, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    {item.type}
-                  </span>
-                </div>
-
-                {/* Caption / details info */}
-                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#fff', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
-                    {item.caption}
-                  </p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.04)', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-                    <span>By: {item.uploader_name}</span>
-                    <span>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                {isPhoto ? (
+                  <div style={{ position: 'relative', width: '100%', display: 'block', overflow: 'hidden' }}>
+                    <img
+                      src={item.url}
+                      alt=""
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        display: 'block',
+                        borderRadius: 12,
+                        objectFit: 'contain'
+                      }}
+                    />
+                    {item.caption && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 60%, transparent 100%)',
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          padding: '10px 12px',
+                          borderRadius: 12
+                        }}
+                      >
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: '#fff', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {item.caption}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ position: 'relative', width: '100%', aspectRatio: item.type === 'shorts' ? '9/16' : '16/9', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      {ytId ? (
+                        <>
+                          <img src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
+                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#ef4444', color: '#fff', width: 42, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900 }}>▶</div>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 24 }}>🎥</span>
+                      )}
+                      <span style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(239, 68, 68, 0.85)', color: '#fff', fontSize: 9, fontWeight: 800, padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        {item.type}
+                      </span>
+                    </div>
+                    {item.caption && (
+                      <div style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.3)' }}>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#fff', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
+                          {item.caption}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -1606,30 +1688,133 @@ function GalleryTab() {
 
       {/* ── Photo Lightbox Modal ── */}
       {lightboxItem && (
-        <div className="lp-modal-backdrop" onClick={() => setLightboxItem(null)} style={{ zIndex: 999999 }}>
-          <div className="lp-modal-card" style={{ maxWidth: 720, padding: 0, background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-            <button className="lp-modal-close" onClick={() => setLightboxItem(null)} style={{ position: 'absolute', top: -40, right: 0, color: '#fff' }}><IconX /></button>
-            <img src={lightboxItem.url} alt="" style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 12, boxShadow: '0 10px 40px rgba(0,0,0,0.5)', objectFit: 'contain' }} />
-            <div style={{ background: 'rgba(13, 18, 28, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 20px', width: '100%', boxSizing: 'border-box' }}>
-              <p style={{ margin: '0 0 6px 0', fontSize: 14, fontWeight: 600, color: '#fff' }}>{lightboxItem.caption}</p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
-                <span>Uploaded by {lightboxItem.uploader_name}</span>
-                <span>{new Date(lightboxItem.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
-              </div>
-            </div>
+        <div 
+          onClick={() => setLightboxItem(null)} 
+          style={{ 
+            position: 'fixed', inset: 0, zIndex: 999999, 
+            background: 'rgba(0, 0, 0, 0.95)', 
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20
+          }}
+        >
+          {/* Top Right Controls (Download & Close) */}
+          <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 16, zIndex: 10 }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                const a = document.createElement('a')
+                a.href = lightboxItem.url
+                a.download = `${lightboxItem.type || 'photo'}-${lightboxItem.id}.jpg`
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#fff', width: 44, height: 44, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', backdropFilter: 'blur(8px)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              title="Download HD Image"
+            >
+              <IconDownload />
+            </button>
+            <button
+              onClick={() => setLightboxItem(null)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#fff', width: 44, height: 44, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', backdropFilter: 'blur(8px)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              title="Close"
+            >
+              <IconX />
+            </button>
           </div>
+
+          <img 
+            src={lightboxItem.url} 
+            alt="" 
+            onClick={e => e.stopPropagation()}
+            style={{ 
+              maxWidth: '100%', maxHeight: '85vh', 
+              objectFit: 'contain', 
+              borderRadius: 8,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+            }} 
+          />
+          
+          {/* Caption overlay at the bottom */}
+          {lightboxItem.caption && (
+            <div style={{
+              position: 'absolute', bottom: 40,
+              maxWidth: '80%', textAlign: 'center',
+              background: 'rgba(0, 0, 0, 0.65)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: '#fff',
+              padding: '12px 24px',
+              borderRadius: 30,
+              fontSize: 14, fontWeight: 500,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+              pointerEvents: 'none'
+            }}>
+              {lightboxItem.caption}
+            </div>
+          )}
         </div>
       )}
 
       {/* ── YouTube Video Player Modal ── */}
       {activeVideo && (
-        <div className="lp-modal-backdrop" onClick={() => setActiveVideo(null)} style={{ zIndex: 999999 }}>
-          <div className="lp-modal-card" style={{ maxWidth: 720, padding: 0, background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-            <button className="lp-modal-close" onClick={() => setActiveVideo(null)} style={{ position: 'absolute', top: -40, right: 0, color: '#fff' }}><IconX /></button>
+        <div 
+          onClick={() => setActiveVideo(null)} 
+          style={{ 
+            position: 'fixed', inset: 0, zIndex: 999999, 
+            background: 'rgba(0, 0, 0, 0.95)', 
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20
+          }}
+        >
+          {/* Top Right Controls (Close) */}
+          <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 16, zIndex: 10 }}>
+            <button
+              onClick={() => setActiveVideo(null)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#fff', width: 44, height: 44, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', backdropFilter: 'blur(8px)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              title="Close"
+            >
+              <IconX />
+            </button>
+          </div>
+
+          <div style={{ width: '100%', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 16 }} onClick={e => e.stopPropagation()}>
             {(() => {
               const ytId = getYoutubeId(activeVideo.url)
               return ytId ? (
-                <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', background: '#000' }}>
+                <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.6)', background: '#000' }}>
                   <iframe
                     width="100%"
                     height="100%"
@@ -1642,13 +1827,12 @@ function GalleryTab() {
                 </div>
               ) : null
             })()}
-            <div style={{ background: 'rgba(13, 18, 28, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 20px', width: '100%', boxSizing: 'border-box' }}>
-              <p style={{ margin: '0 0 6px 0', fontSize: 14, fontWeight: 600, color: '#fff' }}>{activeVideo.caption}</p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
-                <span>Uploaded by {activeVideo.uploader_name}</span>
-                <span>{new Date(activeVideo.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+            {activeVideo.caption && (
+              <div style={{ textAlign: 'center', marginTop: 10 }}>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#fff' }}>{activeVideo.caption}</p>
+                <p style={{ margin: '6px 0 0 0', fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Uploaded by {activeVideo.uploader_name} • {new Date(activeVideo.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -1669,6 +1853,27 @@ export default function LandingPage() {
   const [rulesMap, setRulesMap] = useState({})
   const [liveStream, setLiveStream] = useState(null)
 
+  const VALID_TABS = ['home', 'gallery', 'points', 'results', 'schedule', 'profile']
+
+  const changeTab = (newTab, push = true) => {
+    if (!VALID_TABS.includes(newTab)) return
+    setTab(newTab)
+    const targetHash = newTab === 'home' ? '' : `#${newTab}`
+    if (push && window.location.hash !== targetHash) {
+      window.history.pushState({ tab: newTab }, '', targetHash || window.location.pathname)
+    }
+  }
+
+  const openLoginModal = () => {
+    setShowLogin(true)
+    window.history.pushState({ modal: 'login' }, '')
+  }
+
+  const openRulesModal = (rules) => {
+    setViewingRules(rules)
+    window.history.pushState({ modal: 'rules' }, '')
+  }
+
   useEffect(() => {
     async function checkLive() {
       const { data } = await supabase.from('app_settings').select('value').eq('key', 'event_media').maybeSingle()
@@ -1677,16 +1882,30 @@ export default function LandingPage() {
           const feed = JSON.parse(data.value)
           const live = feed.find(item => item.type === 'live')
           setLiveStream(live || null)
-        } catch {}
+        } catch {
+          setLiveStream(null)
+        }
       } else {
         setLiveStream(null)
       }
     }
     checkLive()
-    const ch = supabase.channel('lp-global-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, checkLive)
+
+    const rand = Math.random().toString(36).substring(2, 7)
+    const ch = supabase.channel(`lp-global-live-${rand}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+        if (!payload.new || payload.new.key === 'event_media') {
+          checkLive()
+        }
+      })
       .subscribe()
-    return () => supabase.removeChannel(ch)
+
+    const liveTimer = setInterval(checkLive, 3000)
+
+    return () => {
+      supabase.removeChannel(ch)
+      clearInterval(liveTimer)
+    }
   }, [])
 
   useEffect(() => {
@@ -1712,43 +1931,50 @@ export default function LandingPage() {
   }, [])
 
   useEffect(() => {
-    async function checkHash() {
+    async function handleRouteSync() {
       const rawHash = window.location.hash.replace('#', '').trim()
-      if (!rawHash) return
+      const decodedHash = decodeURIComponent(rawHash)
 
-      const hash = decodeURIComponent(rawHash)
-
-      setLoadingScanned(true)
-      setTab('profile') // auto-navigate to profile tab
-
-      const { data: part, error: partError } = await supabase
-        .from('participants')
-        .select('id, name, chess_number, teams(name), categories(name)')
-        .ilike('chess_number', hash)
-        .maybeSingle()
-
-      if (part) {
-        setScannedParticipant(part)
-        const { data: regs } = await supabase
-          .from('competition_participants')
-          .select('competition_id, competitions(id, name, competition_type, rules_description, rules_duration, mark_criteria, stages(name), competition_schedule(scheduled_date, estimated_duration_mins))')
-          .eq('participant_id', part.id)
-        setParticipantRegistrations(regs || [])
+      if (VALID_TABS.includes(decodedHash)) {
+        setTab(decodedHash)
+      } else if (!decodedHash) {
+        setTab('home')
       } else {
-        console.warn('No participant found for chess number:', hash, partError)
+        setLoadingScanned(true)
+        setTab('profile')
+
+        const { data: part, error: partError } = await supabase
+          .from('participants')
+          .select('id, name, chess_number, teams(name), categories(name)')
+          .ilike('chess_number', decodedHash)
+          .maybeSingle()
+
+        if (part) {
+          setScannedParticipant(part)
+          const { data: regs } = await supabase
+            .from('competition_participants')
+            .select('competition_id, competitions(id, name, competition_type, rules_description, rules_duration, mark_criteria, stages(name), competition_schedule(scheduled_date, estimated_duration_mins))')
+            .eq('participant_id', part.id)
+          setParticipantRegistrations(regs || [])
+        } else {
+          console.warn('No participant found for chess number:', decodedHash, partError)
+        }
+        setLoadingScanned(false)
       }
-      setLoadingScanned(false)
     }
 
-    checkHash()
-    window.addEventListener('hashchange', checkHash)
-    return () => window.removeEventListener('hashchange', checkHash)
+    handleRouteSync()
+    window.addEventListener('popstate', handleRouteSync)
+    window.addEventListener('hashchange', handleRouteSync)
+    return () => {
+      window.removeEventListener('popstate', handleRouteSync)
+      window.removeEventListener('hashchange', handleRouteSync)
+    }
   }, [])
 
   const tabs = [
     { id: 'home',    icon: <IconHome />,     label: 'Home' },
     { id: 'gallery', icon: <IconMedia />,    label: 'Gallery' },
-    { id: 'points',  icon: <IconTrophy />,   label: 'Points' },
     { id: 'results', icon: <IconAward />,    label: 'Results' },
     { id: 'schedule',icon: <IconCalendar />, label: 'Schedule' },
     { id: 'profile', icon: <IconUser />,     label: 'Profile', badge: !!(scannedParticipant || loadingScanned) },
@@ -1768,13 +1994,13 @@ export default function LandingPage() {
           {tabs.map(t => (
             <button key={t.id}
               className={`lp-desktop-nav-btn ${tab === t.id ? 'active' : ''}`}
-              onClick={() => setTab(t.id)}>
+              onClick={() => changeTab(t.id)}>
               {t.label}
             </button>
           ))}
         </nav>
 
-        <button id="topbar-login-btn" className="lp-topbar-login" onClick={() => setShowLogin(true)}>
+        <button id="topbar-login-btn" className="lp-topbar-login" onClick={openLoginModal}>
           <IconLogIn />
           <span>Login</span>
         </button>
@@ -1783,7 +2009,7 @@ export default function LandingPage() {
       {/* ── Live Banner ── */}
       {liveStream && (
         <button
-          onClick={() => setTab('gallery')}
+          onClick={() => changeTab('gallery')}
           className="lp-global-live-banner"
           style={{
             background: 'linear-gradient(90deg, #ef4444, #e11d48)',
@@ -1803,17 +2029,16 @@ export default function LandingPage() {
           }}
         >
           <span className="lp-live-dot" style={{ background: '#fff', animation: 'pulse 1.5s infinite', width: 8, height: 8, borderRadius: '50%' }} />
-          <span>🔴 LIVE BROADCAST: {liveStream.caption} — Click to Watch!</span>
+          <span>LIVE BROADCAST: {liveStream.caption} — Click to Watch!</span>
           <span style={{ fontSize: 10 }}>▶</span>
         </button>
       )}
 
       {/* ── Main Content ── */}
       <main className="lp-main">
-        {tab === 'home'    && <HomeTab onLoginClick={() => setShowLogin(true)} setTab={setTab} liveStream={liveStream} />}
+        {tab === 'home'    && <HomeTab onLoginClick={openLoginModal} setTab={changeTab} liveStream={liveStream} />}
         {tab === 'gallery' && <GalleryTab />}
-        {tab === 'points'  && <TeamPointsTab />}
-        {tab === 'results' && <ResultsTab />}
+        {(tab === 'results' || tab === 'points') && <ResultsTab />}
         {tab === 'schedule'&& <ScheduleTab />}
         {tab === 'profile' && (
           <ParticipantProfileTab
@@ -1842,15 +2067,12 @@ export default function LandingPage() {
               }
               setLoadingScanned(false)
             }}
-            setViewingRules={setViewingRules}
+            setViewingRules={openRulesModal}
             rulesMap={rulesMap}
           />
         )}
 
-        {/* ── Footer Version Tag ── */}
-        <footer style={{ textAlign: 'center', padding: '24px 0 80px 0', fontSize: 11, color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>
-          Inspico Platform {APP_VERSION}
-        </footer>
+
       </main>
 
       {/* ── Bottom Navigation (mobile + desktop) ── */}
@@ -1859,7 +2081,7 @@ export default function LandingPage() {
           <button key={t.id}
             id={`nav-${t.id}`}
             className={`lp-nav-btn ${tab === t.id ? 'active' : ''} ${t.id === 'profile' && t.badge ? 'lp-nav-btn--badge' : ''}`}
-            onClick={() => setTab(t.id)}
+            onClick={() => changeTab(t.id)}
             aria-current={tab === t.id ? 'page' : undefined}>
             <span className="lp-nav-icon" style={{ position: 'relative' }}>
               {t.icon}
