@@ -310,7 +310,7 @@ export default function MediaSection() {
                 </div>
               ) : (
                 filteredMedia.map(item => {
-                  const isPhoto = item.type === 'photo'
+                  const isPhoto = item.type === 'photo' || item.type === 'poster'
                   const youtubeId = !isPhoto ? item.url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/)?.[2] : null
 
                   return (

@@ -856,12 +856,22 @@ export default function MediaDashboard() {
             <h3 style={{ fontSize: '11px', color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', margin: '0 0 10px 0' }}>
               📸 Uploaded Photos ({mediaFeed.filter(i => i.type === 'photo').length})
             </h3>
-            <div className="med-feed-list" style={{ maxHeight: '350px', overflowY: 'auto' }}>
+            <div className="med-feed-list" style={{ maxHeight: '250px', overflowY: 'auto' }}>
               {renderFeedList(mediaFeed.filter(i => i.type === 'photo'))}
             </div>
           </div>
 
-          {/* 3. Videos & Shorts Subsection */}
+          {/* 3. Posters Subsection */}
+          <div className="med-feed-subsection">
+            <h3 style={{ fontSize: '11px', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', margin: '0 0 10px 0' }}>
+              🖼️ Event Posters ({mediaFeed.filter(i => i.type === 'poster').length})
+            </h3>
+            <div className="med-feed-list" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+              {renderFeedList(mediaFeed.filter(i => i.type === 'poster'))}
+            </div>
+          </div>
+
+          {/* 4. Videos & Shorts Subsection */}
           <div className="med-feed-subsection">
             <h3 style={{ fontSize: '11px', color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', margin: '0 0 10px 0' }}>
               🎥 Videos &amp; Shorts ({mediaFeed.filter(i => i.type === 'video' || i.type === 'shorts').length})

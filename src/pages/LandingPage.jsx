@@ -1535,6 +1535,7 @@ function GalleryTab() {
   const liveStreams = media.filter(item => item.type === 'live')
   const otherMedia = media.filter(item => {
     if (filter === 'all') return true
+    if (filter === 'poster') return item.type === 'poster'
     if (filter === 'photo') return item.type === 'photo'
     if (filter === 'video') return item.type === 'video' || item.type === 'shorts'
     if (filter === 'live') return item.type === 'live'
@@ -1638,7 +1639,7 @@ function GalleryTab() {
       ) : (
         <div className="lp-gallery-masonry">
           {otherMedia.map(item => {
-            const isPhoto = item.type === 'photo'
+            const isPhoto = item.type === 'photo' || item.type === 'poster'
             const ytId = !isPhoto ? getYoutubeId(item.url) : null
 
             return (
