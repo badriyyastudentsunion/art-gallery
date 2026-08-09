@@ -188,6 +188,11 @@ export default function ResultsSection() {
           {selected ? selected.name : 'Results'}
         </span>
         {!selected && (
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-light)', background: 'rgba(79, 156, 249, 0.12)', border: '1px solid rgba(79, 156, 249, 0.25)', padding: '2px 8px', borderRadius: 12 }}>
+            {filtered.length} Published
+          </span>
+        )}
+        {!selected && (
           <button onClick={() => setUnlocked(false)}
             style={{ marginLeft: 'auto', background: 'none', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: 11, padding: '5px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}>
             🔒 Lock

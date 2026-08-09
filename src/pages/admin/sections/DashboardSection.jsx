@@ -94,12 +94,12 @@ export default function DashboardSection() {
       supabase.from('competition_schedule').select('competition_id, status'),
       supabase.from('app_settings').select('*'),
 
-      // Activities queries
-      supabase.from('competition_results').select('competition_id, updated_at, published, competitions(name)').eq('published', true).order('updated_at', { ascending: false }).limit(15),
-      supabase.from('judge_results').select('competition_id, created_at, competitions(name)').order('created_at', { ascending: false }).limit(15),
-      supabase.from('competition_reports').select('competition_id, created_at, competitions(name)').order('created_at', { ascending: false }).limit(15),
+      // Activities queries (lookup names from comps array instead of PostgREST join to prevent 400 Bad Request errors)
+      supabase.from('competition_results').select('competition_id, updated_at, published').eq('published', true).order('updated_at', { ascending: false }).limit(15),
+      supabase.from('judge_results').select('competition_id, created_at').order('created_at', { ascending: false }).limit(15),
+      supabase.from('competition_reports').select('competition_id, created_at').order('created_at', { ascending: false }).limit(15),
       supabase.from('participants').select('name, created_at, teams(name)').order('created_at', { ascending: false }).limit(15),
-      supabase.from('competition_schedule').select('competition_id, status, updated_at, competitions(name)').order('updated_at', { ascending: false }).limit(15)
+      supabase.from('competition_schedule').select('competition_id, status, updated_at').order('updated_at', { ascending: false }).limit(15)
     ])
 
     const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
@@ -151,12 +151,18 @@ export default function DashboardSection() {
 
     setStats(computedStats)
 
+    const colorSetting = settings?.find(s => s.key === 'team_colors')
+    let colorMap = {}
+    if (colorSetting?.value) {
+      try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+    }
+
     const teamMap = {}
-    ;(teamsRows || []).forEach(t => { teamMap[t.name] = { name: t.name, pts: 0 } })
+    ;(teamsRows || []).forEach(t => { teamMap[t.name] = { id: t.id, name: t.name, color: colorMap[t.id] || null, pts: 0 } })
     pointsResults.forEach(r => {
       const team = r.participants?.teams
       if (!team) return
-      if (!teamMap[team.name]) teamMap[team.name] = { name: team.name, pts: 0 }
+      if (!teamMap[team.name]) teamMap[team.name] = { id: team.id, name: team.name, color: colorMap[team.id] || null, pts: 0 }
       teamMap[team.name].pts += (r.placement_points || 0) + (r.grade_points || 0)
     })
     const sortedTeamPoints = Object.values(teamMap).sort((a, b) => b.pts - a.pts)
@@ -164,7 +170,7 @@ export default function DashboardSection() {
 
     // Calculate team registration counts
     const regMap = {}
-    ;(teamsRows || []).forEach(t => { regMap[t.id] = { name: t.name, count: 0 } })
+    ;(teamsRows || []).forEach(t => { regMap[t.id] = { name: t.name, color: colorMap[t.id] || null, count: 0 } })
     if (participantsRows) {
       participantsRows.forEach(p => {
         if (p.team_id && regMap[p.team_id]) {
@@ -176,14 +182,17 @@ export default function DashboardSection() {
     setTeamRegs(sortedTeamRegs)
 
     // Build Live updates log list
+    const compMap = new Map((all || []).map(c => [c.id, c.name]))
     const activeList = []
+
     if (recentPubResults) {
       const seenPub = new Set()
       recentPubResults.forEach(r => {
-        if (!r.competitions?.name || seenPub.has(r.competition_id)) return
+        const compName = compMap.get(r.competition_id)
+        if (!compName || seenPub.has(r.competition_id)) return
         seenPub.add(r.competition_id)
         activeList.push({
-          text: `${r.competitions.name} result published`,
+          text: `${compName} result published`,
           time: new Date(r.updated_at || Date.now()),
           icon: '🏆'
         })
@@ -192,10 +201,11 @@ export default function DashboardSection() {
     if (recentJudgeResults) {
       const seenJudge = new Set()
       recentJudgeResults.forEach(r => {
-        if (!r.competitions?.name || seenJudge.has(r.competition_id)) return
+        const compName = compMap.get(r.competition_id)
+        if (!compName || seenJudge.has(r.competition_id)) return
         seenJudge.add(r.competition_id)
         activeList.push({
-          text: `${r.competitions.name} judged`,
+          text: `${compName} judged`,
           time: new Date(r.created_at || Date.now()),
           icon: '⭐'
         })
@@ -204,10 +214,11 @@ export default function DashboardSection() {
     if (recentReports) {
       const seenReport = new Set()
       recentReports.forEach(r => {
-        if (!r.competitions?.name || seenReport.has(r.competition_id)) return
+        const compName = compMap.get(r.competition_id)
+        if (!compName || seenReport.has(r.competition_id)) return
         seenReport.add(r.competition_id)
         activeList.push({
-          text: `Exam report submitted: ${r.competitions.name}`,
+          text: `Exam report submitted: ${compName}`,
           time: new Date(r.created_at || Date.now()),
           icon: '📋'
         })
@@ -226,10 +237,11 @@ export default function DashboardSection() {
     if (recentSchedule) {
       const seenSched = new Set()
       recentSchedule.forEach(r => {
-        if (!r.competitions?.name || seenSched.has(r.competition_id) || !r.status) return
+        const compName = compMap.get(r.competition_id)
+        if (!compName || seenSched.has(r.competition_id) || !r.status) return
         seenSched.add(r.competition_id)
         activeList.push({
-          text: `${r.competitions.name} marked ${r.status}`,
+          text: `${compName} marked ${r.status}`,
           time: new Date(r.updated_at || Date.now()),
           icon: r.status === 'completed' ? '✅' : '⏳'
         })
@@ -395,28 +407,34 @@ export default function DashboardSection() {
                       const maxPts = Math.max(...teamPoints.map(x => x.pts), 1)
                       const pct = Math.round((t.pts / maxPts) * 100)
                       const rankColors = ['#f7c948', '#b2bec3', '#cd7f32']
-                      const barGrad = i === 0
-                        ? 'linear-gradient(90deg,#f7c948,#ff9f43)'
-                        : i === 1 ? 'linear-gradient(90deg,#b2bec3,#868e96)'
-                        : i === 2 ? 'linear-gradient(90deg,#cd7f32,#a0622a)'
-                        : 'linear-gradient(90deg,rgba(79,156,249,0.5),rgba(79,156,249,0.2))'
+                      const barGrad = t.color
+                        ? `linear-gradient(90deg, ${t.color}, ${t.color}88)`
+                        : (i === 0
+                          ? 'linear-gradient(90deg,#f7c948,#ff9f43)'
+                          : i === 1 ? 'linear-gradient(90deg,#b2bec3,#868e96)'
+                          : i === 2 ? 'linear-gradient(90deg,#cd7f32,#a0622a)'
+                          : 'linear-gradient(90deg,rgba(79,156,249,0.5),rgba(79,156,249,0.2))')
                       return (
                         <div key={t.name} className="db-lb-row">
                           <span className="db-lb-rank" style={{ color: rankColors[i] || 'rgba(255,255,255,0.2)' }}>
                             {i + 1}
                           </span>
-                          <span className="db-lb-name">{t.name}</span>
+                          <span className="db-lb-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {t.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: t.color, boxShadow: `0 0 6px ${t.color}` }} />}
+                            {t.name}
+                          </span>
                           <div className="db-lb-bar-bg">
                             <div className="db-lb-bar" style={{ width: `${pct}%`, background: barGrad, opacity: t.pts === 0 ? 0.07 : 1 }} />
                           </div>
                           <span className="db-lb-pts" style={{
-                            backgroundImage: t.pts > 0
+                            color: t.color || undefined,
+                            backgroundImage: !t.color && t.pts > 0
                               ? (i === 0 ? 'linear-gradient(135deg,#f7c948,#ff9f43)'
                                 : 'linear-gradient(135deg,rgba(255,255,255,0.85),rgba(255,255,255,0.4))')
                               : undefined,
-                            WebkitBackgroundClip: t.pts > 0 ? 'text' : undefined,
-                            WebkitTextFillColor: t.pts > 0 ? 'transparent' : 'rgba(255,255,255,0.12)',
-                            backgroundClip: t.pts > 0 ? 'text' : undefined,
+                            WebkitBackgroundClip: !t.color && t.pts > 0 ? 'text' : undefined,
+                            WebkitTextFillColor: !t.color && t.pts > 0 ? 'transparent' : (t.color || 'rgba(255,255,255,0.12)'),
+                            backgroundClip: !t.color && t.pts > 0 ? 'text' : undefined,
                           }}>{t.pts}</span>
                         </div>
                       )
@@ -435,16 +453,20 @@ export default function DashboardSection() {
                     {teamRegs.map((r, i) => {
                       const maxCount = Math.max(...teamRegs.map(x => x.count), 1)
                       const pct = Math.round((r.count / maxCount) * 100)
+                      const barGrad = r.color ? `linear-gradient(90deg, ${r.color}, ${r.color}88)` : undefined
                       return (
                         <div key={r.name} className="db-lb-row">
                           <span className="db-lb-rank" style={{ color: 'rgba(255,255,255,0.15)' }}>
                             {i + 1}
                           </span>
-                          <span className="db-lb-name">{r.name}</span>
+                          <span className="db-lb-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {r.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: r.color }} />}
+                            {r.name}
+                          </span>
                           <div className="db-lb-bar-bg">
-                            <div className="db-lb-bar" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #38bdf8, #4f9cf9)', opacity: r.count === 0 ? 0.07 : 1 }} />
+                            <div className="db-lb-bar" style={{ width: `${pct}%`, background: barGrad || 'linear-gradient(90deg, #38bdf8, #4f9cf9)', opacity: r.count === 0 ? 0.07 : 1 }} />
                           </div>
-                          <span className="db-lb-pts" style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+                          <span className="db-lb-pts" style={{ fontSize: 13, color: r.color || 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
                             {r.count} registered
                           </span>
                         </div>

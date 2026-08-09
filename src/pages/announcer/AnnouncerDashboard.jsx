@@ -1,5 +1,5 @@
 // src/pages/announcer/AnnouncerDashboard.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import './announcer.css'
@@ -78,15 +78,30 @@ export default function AnnouncerDashboard() {
 
   const announcerId = user?.announcerId || user?.id
 
+  const selectedRef = useRef(selected)
+  useEffect(() => {
+    selectedRef.current = selected
+  }, [selected])
+
   useEffect(() => {
     fetchCompetitions()
 
+    const channelId = `annc-rt-${announcerId || 'all'}-${Math.random().toString(36).substring(2, 7)}`
+    const refreshAll = () => {
+      fetchCompetitions(false)
+      if (selectedRef.current) {
+        openCompetition(selectedRef.current, false)
+      }
+    }
+
     const channel = supabase
-      .channel('schema-db-changes-annc')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, fetchCompetitions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, fetchCompetitions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, fetchCompetitions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, fetchCompetitions)
+      .channel(channelId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, refreshAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, refreshAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_reports' }, refreshAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, refreshAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, refreshAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, refreshAll)
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
@@ -109,8 +124,9 @@ export default function AnnouncerDashboard() {
     };
   }, [selected]);
 
-  async function fetchCompetitions() {
+  async function fetchCompetitions(isInitial = false) {
     if (!announcerId) { setFetching(false); return }
+    if (isInitial) setFetching(true)
 
     // Fetch App Settings
     const { data: settings } = await supabase.from('app_settings').select('*')
@@ -167,7 +183,7 @@ export default function AnnouncerDashboard() {
     setFetching(false)
   }
 
-  async function openCompetition(comp) {
+  async function openCompetition(comp, isInitial = true) {
     if (!comp.hasJudgeResults) return
     
     // If suspense mode is active, enforce sequence order
@@ -181,7 +197,7 @@ export default function AnnouncerDashboard() {
 
     setSelected(comp)
     setPublished(comp.published)
-    setLoadingDetail(true)
+    if (isInitial) setLoadingDetail(true)
 
     try {
       // Aggregate judge results (average if multiple judges)
@@ -310,33 +326,6 @@ export default function AnnouncerDashboard() {
       </header>
 
       <main className="ann-main">
-        {suspenseActive && !selected && (
-          <div className="ann-suspense-banner" style={{
-            background: 'rgba(79, 156, 249, 0.05)',
-            border: '1px solid rgba(79, 156, 249, 0.15)',
-            borderRadius: '10px',
-            padding: '12px 14px',
-            marginBottom: '16px'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--accent-light)', letterSpacing: '0.3px' }}>Leaderboard Suspense Mode</p>
-                <p style={{ margin: '2px 0 0 0', fontSize: 10, color: 'var(--text-muted)' }}>Publish {revealThreshold} results to unlock team standings.</p>
-              </div>
-              <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--accent-light)' }}>
-                {competitions.filter(c => c.published).length} / {revealThreshold}
-              </span>
-            </div>
-            <div style={{ background: 'rgba(255,255,255,0.05)', height: 6, borderRadius: 3, marginTop: 8, overflow: 'hidden' }}>
-              <div style={{
-                background: 'var(--accent-light)',
-                height: '100%',
-                width: `${Math.min((competitions.filter(c => c.published).length / revealThreshold) * 100, 100)}%`,
-                transition: 'width 0.3s ease'
-              }} />
-            </div>
-          </div>
-        )}
         {!selected ? (
           <div className="ann-list" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* PWA-style Navigation Tabs */}

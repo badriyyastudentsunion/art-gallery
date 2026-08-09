@@ -687,7 +687,7 @@ export default function MediaDashboard() {
               />
             </div>
 
-            {mediaType === 'photo' && (
+            {(mediaType === 'photo' || mediaType === 'poster') && (
               <>
                 {/* PNG Frame Overlay Toggle (if overlay exists, photo tab only) */}
                 {(overlays.overlay34 || overlays.overlay43) && (

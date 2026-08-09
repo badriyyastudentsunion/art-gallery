@@ -709,8 +709,14 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
       filteredResults = filteredResults.filter(r => !seqSet.has(r.competition_id))
     }
 
+    const colorSetting = settings?.find(s => s.key === 'team_colors')
+    let colorMap = {}
+    if (colorSetting?.value) {
+      try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+    }
+
     const teamMap = {}
-    ;(teamsData || []).forEach(t => { teamMap[t.id] = { ...t, points: 0, count: 0 } })
+    ;(teamsData || []).forEach(t => { teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0, count: 0 } })
     
     filteredResults.forEach(r => {
       const tid = r.participants?.team_id
@@ -747,18 +753,16 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
           <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-light)', letterSpacing: '1px', textTransform: 'uppercase' }}>
             🏆 Live Team Standings
           </span>
-          {suspenseInfo?.active && (
-            <span style={{ fontSize: '10px', color: '#F97316', fontWeight: 700 }}>🔒 Standings Locked</span>
-          )}
         </div>
         <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
           {teams.map((t, idx) => {
             const rank = teams.findIndex(team => team.points === t.points) + 1
+            const teamColor = t.color || 'var(--accent-light)'
             return (
               <div key={t.id} style={{
                 flex: '0 0 auto',
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
+                background: t.color ? `${t.color}15` : 'rgba(255, 255, 255, 0.04)',
+                border: `1px solid ${t.color ? `${t.color}40` : 'rgba(255, 255, 255, 0.06)'}`,
                 borderRadius: '10px',
                 padding: '8px 12px',
                 display: 'flex',
@@ -768,8 +772,9 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
                 <span style={{ fontSize: '11px', fontWeight: 800, color: rankColors[rank - 1] || 'rgba(255,255,255,0.5)' }}>
                   #{rank}
                 </span>
+                {t.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: t.color }} />}
                 <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>{t.name}</span>
-                <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-light)', marginLeft: '4px' }}>{t.points.toFixed(1)}</span>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: teamColor, marginLeft: '4px' }}>{t.points.toFixed(1)}</span>
               </div>
             )
           })}
@@ -793,42 +798,6 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
         </div>
       )}
 
-      {/* Suspense Mode Alert */}
-      {suspenseInfo?.active && (
-        <div style={{
-          background: 'rgba(79, 156, 249, 0.04)',
-          border: '1px solid rgba(79, 156, 249, 0.15)',
-          borderRadius: '12px',
-          padding: '16px',
-          marginBottom: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12
-        }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-            <span style={{ fontSize: 20 }}>🔒</span>
-            <div>
-              <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--accent-light)' }}>Leaderboard Suspense Mode Active</p>
-              <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                Team standings are locked during the final announcements. Live points will reveal automatically once the announcer publishes all remaining results. Showing baseline standings prior to sequence announcements.
-              </p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-            <span>Announcement Progress:</span>
-            <span>{suspenseInfo.current} / {suspenseInfo.threshold} Completed</span>
-          </div>
-          <div style={{ background: 'rgba(255,255,255,0.05)', height: 6, borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{
-              background: 'var(--accent-light)',
-              height: '100%',
-              width: `${Math.min((suspenseInfo.current / suspenseInfo.threshold) * 100, 100)}%`,
-              transition: 'width 0.3s ease'
-            }} />
-          </div>
-        </div>
-      )}
-
       {loading ? (
         <LogoLoader text="Loading team points..." />
       ) : teams.length === 0 ? (
@@ -844,16 +813,22 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
                 if (!team) return null
                 const rank = teams.findIndex(t => t.points === team.points) + 1
                 const isTied = teams.filter(t => t.points === team.points).length > 1
+                const teamColor = team.color || rankColors[rank - 1] || '#F97316'
                 return (
                   <div key={team.id} className={`lp-podium-item lp-podium-${idx === 0 ? 'first' : idx === 1 ? 'second' : 'third'}`}>
                     <div className="lp-podium-crown">
                       <IconCrown color={rankColors[rank - 1] || 'rgba(255,255,255,0.5)'} />
                     </div>
-                    <div className="lp-podium-avatar" style={{ borderColor: rankColors[rank - 1] || 'rgba(255,255,255,0.2)' }}>
+                    <div className="lp-podium-avatar" style={{
+                      borderColor: teamColor,
+                      background: team.color ? `${team.color}25` : undefined,
+                      color: team.color || '#fff',
+                      boxShadow: team.color ? `0 0 20px ${team.color}40` : undefined
+                    }}>
                       {team.name.slice(0, 2).toUpperCase()}
                     </div>
-                    <p className="lp-podium-name">{team.name}</p>
-                    <p className="lp-podium-pts" style={{ color: rankColors[rank - 1] || '#F97316' }}>{team.points.toFixed(1)}</p>
+                    <p className="lp-podium-name" style={{ color: team.color || undefined }}>{team.name}</p>
+                    <p className="lp-podium-pts" style={{ color: teamColor }}>{team.points.toFixed(1)}</p>
                     <p className="lp-podium-rank">
                       {isTied ? `TIED #${rank}` : rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}
                     </p>
@@ -869,23 +844,31 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
               const rank = teams.findIndex(t => t.points === team.points) + 1
               const isTied = teams.filter(t => t.points === team.points).length > 1
               const pct = maxPoints > 0 ? (team.points / maxPoints) * 100 : 0
+              const teamColor = team.color || 'var(--accent-light)'
 
               return (
-                <div key={team.id} className="lp-team-row">
+                <div key={team.id} className="lp-team-row" style={{
+                  background: team.color ? `${team.color}08` : undefined,
+                  borderColor: team.color ? `${team.color}30` : undefined
+                }}>
                   <span className={`lp-team-rank ${rank <= 3 ? 'lp-rank-top' : ''}`}
                     style={{ color: rank <= 3 ? rankColors[rank - 1] : 'rgba(255,255,255,0.4)' }}>
                     {rank}
                   </span>
                   <div className="lp-team-info">
-                    <div className="lp-team-name-row">
-                      <span className="lp-team-name">{team.name}</span>
+                    <div className="lp-team-name-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {team.color && <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: team.color, boxShadow: `0 0 8px ${team.color}` }} />}
+                      <span className="lp-team-name" style={{ color: team.color || undefined }}>{team.name}</span>
                     </div>
                     <div className="lp-team-bar-wrap">
-                      <div className="lp-team-bar" style={{ width: isAllTied ? '100%' : `${pct}%` }} />
+                      <div className="lp-team-bar" style={{
+                        width: isAllTied ? '100%' : `${pct}%`,
+                        background: team.color ? `linear-gradient(90deg, ${team.color}, ${team.color}88)` : undefined
+                      }} />
                     </div>
                   </div>
                   <div className="lp-team-score-wrap">
-                    <span className="lp-team-pts">{team.points.toFixed(1)}</span>
+                    <span className="lp-team-pts" style={{ color: team.color || undefined }}>{team.points.toFixed(1)}</span>
                     <span className="lp-team-count">{team.count} comps</span>
                   </div>
                 </div>
@@ -950,9 +933,23 @@ function ResultsTab() {
       `)
       .eq('competition_id', comp.id)
       .eq('published', true)
-      .order('position', { ascending: true })
       
-    setResults(data || [])
+    // Sort by avg_points (or placement) and compute Grade-based tie positions dynamically
+    const list = (data || []).map(r => ({ ...r }))
+    list.sort((a, b) => (b.avg_points || 0) - (a.avg_points || 0))
+
+    let currentPos = 1
+    list.forEach((r, idx) => {
+      if (idx > 0) {
+        const prev = list[idx - 1]
+        if (r.grade && prev.grade && r.grade !== prev.grade) {
+          currentPos += 1
+        }
+      }
+      r.displayPosition = (r.grade && r.grade !== '—') ? currentPos : (r.position || (idx + 1))
+    })
+
+    setResults(list)
     setLoadingResults(false)
   }
 
@@ -988,14 +985,22 @@ function ResultsTab() {
         ) : (
           <div className="lp-results-list">
             {results.map((r, i) => {
-              const pos = r.position !== undefined && r.position !== null ? r.position : (i + 1)
+              const pos = r.displayPosition || r.position || (i + 1)
+              const isTied = results.filter(x => (x.displayPosition || x.position) === pos).length > 1
               return (
                 <div key={r.id} className={`lp-result-row ${pos === 1 ? 'lp-result-first' : pos === 2 ? 'lp-result-second' : pos === 3 ? 'lp-result-third' : ''}`}>
                   <div className="lp-result-rank-medal">
                     <span className="lp-result-num">{pos}</span>
                   </div>
                   <div className="lp-result-info">
-                    <span className="lp-result-name">{r.participants?.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="lp-result-name">{r.participants?.name}</span>
+                      {isTied && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent-light)', background: 'rgba(79, 156, 249, 0.12)', border: '1px solid rgba(79, 156, 249, 0.3)', padding: '1px 5px', borderRadius: 4 }}>
+                          TIED
+                        </span>
+                      )}
+                    </div>
                     <span className="lp-result-meta">
                       {r.participants?.teams?.name && <span className="lp-result-team">{r.participants.teams.name}</span>}
                       {r.participants?.chess_number && <span className="lp-result-chess">#{r.participants.chess_number}</span>}
@@ -1020,8 +1025,25 @@ function ResultsTab() {
 
       <div className="lp-section-header" style={{ marginTop: '30px' }}>
         <div>
-          <h2 className="lp-section-title">Competition Results</h2>
-          <p className="lp-section-sub">Select a competition to view rankings</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h2 className="lp-section-title" style={{ margin: 0 }}>Competition Results</h2>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--accent-light)',
+              background: 'rgba(79, 156, 249, 0.08)',
+              border: '1px solid rgba(79, 156, 249, 0.25)',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-light)', boxShadow: '0 0 8px var(--accent-light)' }} />
+              {competitions.length} Results Published
+            </span>
+          </div>
+          <p className="lp-section-sub" style={{ marginTop: 4 }}>Select a competition to view rankings</p>
         </div>
       </div>
 
