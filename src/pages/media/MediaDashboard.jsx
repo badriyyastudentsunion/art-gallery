@@ -690,7 +690,7 @@ export default function MediaDashboard() {
             {(mediaType === 'photo' || mediaType === 'poster') && (
               <>
                 {/* PNG Frame Overlay Toggle (if overlay exists, photo tab only) */}
-                {(overlays.overlay34 || overlays.overlay43) && (
+                {mediaType === 'photo' && (overlays.overlay34 || overlays.overlay43) && (
                   <div className="med-field" style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#fff' }}>
                       <input
