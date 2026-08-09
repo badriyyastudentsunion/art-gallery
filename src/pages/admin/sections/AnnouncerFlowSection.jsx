@@ -99,7 +99,7 @@ export default function AnnouncerFlowSection() {
       setTeams(teamsData || [])
 
       // 2. Fetch App Settings
-      const { data: settings } = await supabase.from('app_settings').select('*')
+      const { data: settings } = await supabase.from('app_settings').select('key, value').in('key', ['leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'leaderboard_revealed_by_admin'])
       const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
       const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
       const seqSetting = settings?.find(s => s.key === 'announcer_sequence')

@@ -278,27 +278,30 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
 
   useEffect(() => {
     async function loadPhotos() {
-      const { data } = await supabase.from('app_settings').select('value').eq('key', 'event_media').maybeSingle()
-      if (data?.value) {
-        try {
-          const feed = JSON.parse(data.value)
-          const imgItems = feed.filter(item => item.type === 'photo')
-          const posterItems = feed.filter(item => item.type === 'poster')
+      try {
+        const { data } = await supabase
+          .from('gallery_media')
+          .select('id, type, caption, thumb_url, competition_id, created_at')
+          .order('created_at', { ascending: false })
+        
+        if (data && data.length > 0) {
+          const imgItems = data.filter(item => item.type === 'photo').map(i => ({ ...i, thumbUrl: i.thumb_url }))
+          const posterItems = data.filter(item => item.type === 'poster').map(i => ({ ...i, thumbUrl: i.thumb_url }))
           setPhotos(imgItems)
           setPosters(posterItems)
-          try { localStorage.setItem('inspico_gallery_cache', data.value) } catch {}
-        } catch {}
+        }
+      } catch (e) {
+        console.error("Error loading photos:", e)
       }
     }
     loadPhotos()
 
-    const rand = Math.random().toString(36).substring(2, 7)
-    const ch = supabase.channel(`lp-home-photos-${rand}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, loadPhotos)
+    const ch = supabase.channel('lp-home-gallery-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, loadPhotos)
       .subscribe()
 
     return () => {
-      safeRemoveChannel(ch)
+      supabase.removeChannel(ch)
     }
   }, [])
 
@@ -416,19 +419,28 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
             <div className="lp-posters-grid">
               {posters.map(poster => (
                 <div key={poster.id} className="lp-poster-card" onClick={() => setTab('gallery')}>
-                  <img src={poster.thumbUrl || poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" loading="lazy" decoding="async" />
+                  <img src={poster.thumb_url || poster.thumbUrl || poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" loading="lazy" decoding="async" />
                   <button
                     className="lp-poster-download-btn"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation()
-                      const a = document.createElement('a')
-                      a.href = poster.url
-                      a.download = `poster-${poster.id}.jpg`
-                      document.body.appendChild(a)
-                      a.click()
-                      document.body.removeChild(a)
+                      try {
+                        let downloadUrl = poster.hd_url
+                        if (!downloadUrl) {
+                          const { data } = await supabase.from('gallery_media').select('hd_url').eq('id', poster.id).single()
+                          downloadUrl = data?.hd_url || poster.thumb_url || poster.thumbUrl
+                        }
+                        const a = document.createElement('a')
+                        a.href = downloadUrl
+                        a.download = `poster-${poster.id}.jpg`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                      } catch (err) {
+                        console.error('Download error:', err)
+                      }
                     }}
-                    title="Download Poster"
+                    title="Download HD Poster"
                     style={{
                       position: 'absolute',
                       bottom: '10px',
@@ -687,7 +699,7 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
       { data: settings }
     ] = await Promise.all([
       supabase.from('teams').select('id, name').order('name'),
-      supabase.from('app_settings').select('*')
+      supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'leaderboard_revealed_by_admin'])
     ])
 
     const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
@@ -1545,22 +1557,19 @@ function GalleryTab() {
     if (isInitial && media.length === 0) setLoading(true)
     try {
       const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'event_media')
-        .maybeSingle()
+        .from('gallery_media')
+        .select('id, type, caption, thumb_url, competition_id, uploader_name, created_at')
+        .order('created_at', { ascending: false })
 
-      if (data?.value) {
-        const parsed = JSON.parse(data.value)
-        setMedia(parsed)
-        try {
-          localStorage.setItem('inspico_gallery_cache', data.value)
-        } catch (e) {
-          console.warn('LocalStorage quota:', e)
-        }
+      if (data) {
+        const mapped = data.map(item => ({
+          ...item,
+          thumbUrl: item.thumb_url,
+          url: item.thumb_url // preview
+        }))
+        setMedia(mapped)
       } else {
         setMedia([])
-        try { localStorage.removeItem('inspico_gallery_cache') } catch {}
       }
     } catch (e) {
       console.error(e)
@@ -1571,13 +1580,12 @@ function GalleryTab() {
 
   useEffect(() => {
     fetchMedia(media.length === 0)
-    const rand = Math.random().toString(36).substring(2, 7)
-    const ch = supabase.channel(`lp-gallery-${rand}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, () => fetchMedia(false))
+    const ch = supabase.channel('lp-gallery-stream-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, () => fetchMedia(false))
       .subscribe()
 
     return () => {
-      safeRemoveChannel(ch)
+      supabase.removeChannel(ch)
     }
   }, [])
 
@@ -1770,7 +1778,7 @@ function GalleryTab() {
       {/* ── Photo Lightbox Modal ── */}
       {lightboxItem && (
         <div 
-          onClick={() => setLightboxItem(null)} 
+          onClick={() => { setLightboxItem(null); setHdImage(null) }} 
           style={{ 
             position: 'fixed', inset: 0, zIndex: 999999, 
             background: 'rgba(0, 0, 0, 0.95)', 
@@ -1782,13 +1790,8 @@ function GalleryTab() {
           {/* Top Right Controls (Download & Close) */}
           <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 16, zIndex: 10 }}>
             <button
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation()
-                const a = document.createElement('a')
-                a.href = lightboxItem.url
-                a.download = `${lightboxItem.type || 'photo'}-${lightboxItem.id}.jpg`
-                document.body.appendChild(a)
-                a.click()
                 document.body.removeChild(a)
               }}
               style={{

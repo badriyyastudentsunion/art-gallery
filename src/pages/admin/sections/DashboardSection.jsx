@@ -92,7 +92,7 @@ export default function DashboardSection() {
       supabase.from('teams').select('id, name'),
       supabase.from('participants').select('id, team_id'),
       supabase.from('competition_schedule').select('competition_id, status'),
-      supabase.from('app_settings').select('*'),
+      supabase.from('app_settings').select('key, value').in('key', ['leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'team_colors']),
 
       // Activities queries (lookup names from comps array instead of PostgREST join to prevent 400 Bad Request errors)
       supabase.from('competition_results').select('competition_id, updated_at, published').eq('published', true).order('updated_at', { ascending: false }).limit(15),

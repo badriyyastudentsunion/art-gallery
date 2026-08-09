@@ -43,7 +43,7 @@ export default function PointSettingsSection() {
     const [{ data: g }, { data: p }, { data: s }] = await Promise.all([
       supabase.from('point_settings').select('*').order('max_percent', { ascending: false }),
       supabase.from('placement_points').select('*').order('competition_category').order('position'),
-      supabase.from('app_settings').select('*'),
+      supabase.from('app_settings').select('key, value').in('key', ['results_password', 'team_leader_access', 'max_stage_events', 'max_offstage_events']),
     ])
     const fetchedG = g || []
     const fetchedP = p || []

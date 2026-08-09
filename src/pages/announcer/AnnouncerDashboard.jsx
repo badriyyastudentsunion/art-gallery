@@ -97,7 +97,7 @@ export default function AnnouncerDashboard() {
   useEffect(() => {
     fetchCompetitions(competitions.length === 0)
 
-    const channelId = `annc-rt-${announcerId || 'all'}-${Math.random().toString(36).substring(2, 7)}`
+    const channelName = `annc-rt-${announcerId || 'all'}`
     const refreshAll = () => {
       fetchCompetitions(false)
       if (selectedRef.current) {
@@ -106,7 +106,7 @@ export default function AnnouncerDashboard() {
     }
 
     const channel = supabase
-      .channel(channelId)
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, refreshAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, refreshAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_reports' }, refreshAll)
@@ -115,7 +115,9 @@ export default function AnnouncerDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, refreshAll)
       .subscribe()
 
-    return () => { safeRemoveChannel(channel) }
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [announcerId])
 
   // Handle hardware/browser back swipe to close detail view instead of exiting app
@@ -180,10 +182,16 @@ export default function AnnouncerDashboard() {
           .sort((a, b) => new Date(a.published_at) - new Date(b.published_at))
         publishedSorted.forEach((c, i) => { c.announcementNumber = i + 1 })
 
-        if (active && seqIds.length > 0) {
+        if (seqIds.length > 0) {
           const seqSet = new Set(seqIds)
-          mapped = mapped.filter(c => seqSet.has(c.id))
-          mapped.sort((a, b) => seqIds.indexOf(a.id) - seqIds.indexOf(b.id))
+          mapped.sort((a, b) => {
+            const aInSeq = seqSet.has(a.id)
+            const bInSeq = seqSet.has(b.id)
+            if (aInSeq && bInSeq) return seqIds.indexOf(a.id) - seqIds.indexOf(b.id)
+            if (aInSeq) return -1
+            if (bInSeq) return 1
+            return a.name.localeCompare(b.name)
+          })
         }
 
         setCompetitions(mapped)

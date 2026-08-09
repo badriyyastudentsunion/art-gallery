@@ -271,7 +271,7 @@ export default function TeamDashboard() {
     // 1. Fetch team settings, permissions, and dynamic event limits
     const [{ data: teamData }, { data: settingsData }] = await Promise.all([
       supabase.from('teams').select('can_assign').eq('id', user.teamId).single(),
-      supabase.from('app_settings').select('*')
+      supabase.from('app_settings').select('key, value').in('key', ['global_assign', 'max_stage_events', 'max_offstage_events', 'registration_start_time', 'registration_end_time', 'locked_categories_global', 'team_category_permissions'])
     ])
 
     const teamAllowed = teamData ? teamData.can_assign !== false : true
