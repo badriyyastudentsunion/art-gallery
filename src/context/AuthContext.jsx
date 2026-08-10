@@ -2,10 +2,6 @@
 import { createContext, useContext, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const ADMIN_USERS = [
-  { username: 'admin', password: 'admin123', role: 'Admin' },
-]
-
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -15,118 +11,49 @@ export function AuthProvider({ children }) {
   })
 
   const login = async (username, password) => {
-    // 1. Check hardcoded admin
-    const adminMatch = ADMIN_USERS.find(
-      u => u.username === username && u.password === password
-    )
-    if (adminMatch) {
-      const userData = { id: 'admin', username: adminMatch.username, role: adminMatch.role }
-      setUser(userData)
-      sessionStorage.setItem('ag_user', JSON.stringify(userData))
-      sessionStorage.removeItem('pwa_prompt_dismissed')
-      return { success: true, user: userData }
-    }
+    try {
+      const { data, error } = await supabase.rpc('authenticate_user', {
+        p_username: username,
+        p_password: password
+      })
 
-    // 2. Check teams table (team login)
-    const { data: teams, error: teamsErr } = await supabase
-      .from('teams')
-      .select('id, name, password')
-      .ilike('name', username)
-      .limit(1)
-
-    if (!teamsErr && teams?.length > 0) {
-      const team = teams[0]
-      if (team.password === password) {
-        const userData = { id: team.id, username: team.name, role: 'Team', teamId: team.id }
-        setUser(userData)
-        sessionStorage.setItem('ag_user', JSON.stringify(userData))
-        return { success: true, user: userData }
+      if (error) {
+        console.error('Auth RPC error:', error)
+        return { success: false, message: 'Authentication service error' }
       }
-    }
 
-    // 3. Check invigilators table
-    const { data: invigs } = await supabase
-      .from('invigilators')
-      .select('id, name, username, password')
-      .ilike('username', username)
-      .limit(1)
-
-    if (invigs?.length > 0) {
-      const invig = invigs[0]
-      if (invig.password === password) {
-        const userData = { id: invig.id, username: invig.username, name: invig.name, role: 'Invigilator', invigilatorId: invig.id }
-        setUser(userData)
-        sessionStorage.setItem('ag_user', JSON.stringify(userData))
-        return { success: true, user: userData }
-      }
-    }
-
-    // 4. Check judges table
-    const { data: judges } = await supabase
-      .from('judges')
-      .select('id, name, username, password')
-      .ilike('username', username)
-      .limit(1)
-
-    if (judges?.length > 0) {
-      const judge = judges[0]
-      if (judge.password === password) {
-        const userData = { id: judge.id, username: judge.username, name: judge.name, role: 'Judge', judgeId: judge.id }
-        setUser(userData)
-        sessionStorage.setItem('ag_user', JSON.stringify(userData))
-        return { success: true, user: userData }
-      }
-    }
-
-    // 5. Check announcers table
-    const { data: announcers } = await supabase
-      .from('announcers')
-      .select('id, name, username, password')
-      .ilike('username', username)
-      .limit(1)
-
-    if (announcers?.length > 0) {
-      const announcer = announcers[0]
-      if (announcer.password === password) {
-        const userData = { id: announcer.id, username: announcer.username, name: announcer.name, role: 'Announcer', announcerId: announcer.id }
-        setUser(userData)
-        sessionStorage.setItem('ag_user', JSON.stringify(userData))
-        return { success: true, user: userData }
-      }
-    }
-
-    // 6. Check media uploaders list in app_settings table
-    const { data: mediaSetting } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'media_uploaders')
-      .maybeSingle()
-
-    if (mediaSetting?.value) {
-      try {
-        const uploaders = JSON.parse(mediaSetting.value)
-        if (Array.isArray(uploaders)) {
-          const match = uploaders.find(
-            u => u.username?.toLowerCase() === username.toLowerCase() && u.password === password
-          )
-          if (match) {
-            const userData = { id: match.id, username: match.username, name: match.name, role: 'Media', uploaderId: match.id }
-            setUser(userData)
-            sessionStorage.setItem('ag_user', JSON.stringify(userData))
-            return { success: true, user: userData }
-          }
+      if (data) {
+        const userData = {
+          id: data.id,
+          username: data.username,
+          name: data.name || data.username,
+          role: data.role,
+          ...(data.teamId && { teamId: data.teamId }),
+          ...(data.invigilatorId && { invigilatorId: data.invigilatorId }),
+          ...(data.judgeId && { judgeId: data.judgeId }),
+          ...(data.announcerId && { announcerId: data.announcerId }),
+          ...(data.uploaderId && { uploaderId: data.uploaderId }),
         }
-      } catch (e) {
-        console.error("Error parsing media uploaders:", e)
+        if (data.role === 'Admin') {
+          sessionStorage.setItem('ag_pass', password)
+        }
+        setUser(userData)
+        sessionStorage.setItem('ag_user', JSON.stringify(userData))
+        sessionStorage.removeItem('pwa_prompt_dismissed')
+        return { success: true, user: userData }
       }
-    }
 
-    return { success: false, message: 'Invalid username or password' }
+      return { success: false, message: 'Invalid username or password' }
+    } catch (err) {
+      console.error('Login error:', err)
+      return { success: false, message: 'Connection error. Please try again.' }
+    }
   }
 
   const logout = () => {
     setUser(null)
     sessionStorage.removeItem('ag_user')
+    sessionStorage.removeItem('ag_pass')
     sessionStorage.removeItem('admin_section')
     sessionStorage.removeItem('pwa_prompt_dismissed')
   }

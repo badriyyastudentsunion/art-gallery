@@ -7,7 +7,7 @@ export default function PointSettingsSection() {
   const [unlocked, setUnlocked] = useState(false)
   const [pwInput, setPwInput] = useState('')
   const [pwError, setPwError] = useState('')
-  const [dbPassword, setDbPassword] = useState('er')
+  const [verifying, setVerifying] = useState(false)
 
   const [grades, setGrades] = useState([])
   const [placements, setPlacements] = useState([])
@@ -21,21 +21,26 @@ export default function PointSettingsSection() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.from('app_settings').select('value').eq('key', 'results_password').single()
-      .then(({ data }) => { if (data) setDbPassword(data.value) })
-  }, [])
-
-  useEffect(() => {
     if (unlocked) fetchAll()
   }, [unlocked])
 
-  function tryUnlock(e) {
+  async function tryUnlock(e) {
     e.preventDefault()
-    if (pwInput === dbPassword) {
-      setUnlocked(true)
-      setPwError('')
-    } else {
-      setPwError('Incorrect password.')
+    setVerifying(true)
+    setPwError('')
+    try {
+      const { data, error } = await supabase.rpc('verify_section_password', { p_password: pwInput })
+      if (error) throw error
+      if (data === true) {
+        setUnlocked(true)
+        setPwError('')
+      } else {
+        setPwError('Incorrect password.')
+      }
+    } catch (err) {
+      setPwError('Verification failed. Try again.')
+    } finally {
+      setVerifying(false)
     }
   }
 
@@ -93,8 +98,21 @@ export default function PointSettingsSection() {
 
   async function saveAppSettings() {
     setSavingSection('settings')
+    const adminPassword = sessionStorage.getItem('ag_pass') || ''
     for (const [key, value] of Object.entries(settings)) {
-      await supabase.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      if (key === 'results_password') {
+        const { error } = await supabase.rpc('update_sensitive_setting', {
+          p_key: key,
+          p_value: value,
+          p_admin_password: adminPassword
+        })
+        if (error) {
+          console.error(error)
+          alert('Failed to update password: Unauthorized or invalid admin password.')
+        }
+      } else {
+        await supabase.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      }
     }
     setInitialSettings(JSON.parse(JSON.stringify(settings)))
     setSavingSection(null); setSaved(true); setTimeout(() => setSaved(false), 2000)

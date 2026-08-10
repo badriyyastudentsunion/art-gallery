@@ -78,7 +78,7 @@ export default function JudgesSection({ navigateTo }) {
   }, [])
 
   async function fetchAll() {
-    const { data } = await supabase.from('judges').select('*').order('name')
+    const { data } = await supabase.from('judges').select('id, name, username, created_at').order('name')
     if (data) { setRows(data); localStorage.setItem('cache_judges', JSON.stringify(data)) }
     setFetching(false)
   }

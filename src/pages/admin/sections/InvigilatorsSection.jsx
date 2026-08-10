@@ -60,7 +60,7 @@ export default function InvigilatorsSection({ navigateTo }) {
   }, [])
 
   async function fetchAll() {
-    const { data } = await supabase.from('invigilators').select('*').order('name')
+    const { data } = await supabase.from('invigilators').select('id, name, username, created_at').order('name')
     if (data) { setRows(data); localStorage.setItem('cache_invigilators', JSON.stringify(data)) }
     setFetching(false)
   }

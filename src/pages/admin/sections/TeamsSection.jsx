@@ -247,7 +247,7 @@ export default function TeamsSection({ navigateTo }) {
 
   async function fetchTeams(showSpinner = false) {
     if (showSpinner) setFetching(true)
-    const { data } = await supabase.from('teams').select('*').order('created_at', { ascending: false })
+    const { data } = await supabase.from('teams').select('id, name, can_assign, created_at').order('created_at', { ascending: false })
     if (data) {
       setTeams(data)
       localStorage.setItem('cache_teams', JSON.stringify(data))

@@ -326,13 +326,13 @@ function SystemDetailsCard() {
         { data: posterData },
         { data: overlayData }
       ] = await Promise.all([
-        supabase.from('competitions').select('*', { count: 'exact', head: true }),
-        supabase.from('participants').select('*', { count: 'exact', head: true }),
-        supabase.from('teams').select('*', { count: 'exact', head: true }),
-        supabase.from('stages').select('*', { count: 'exact', head: true }),
-        supabase.from('judges').select('*', { count: 'exact', head: true }),
-        supabase.from('invigilators').select('*', { count: 'exact', head: true }),
-        supabase.from('competition_results').select('*', { count: 'exact', head: true }),
+        supabase.from('competitions').select('id', { count: 'exact', head: true }),
+        supabase.from('participants').select('id', { count: 'exact', head: true }),
+        supabase.from('teams').select('id', { count: 'exact', head: true }),
+        supabase.from('stages').select('id', { count: 'exact', head: true }),
+        supabase.from('judges').select('id', { count: 'exact', head: true }),
+        supabase.from('invigilators').select('id', { count: 'exact', head: true }),
+        supabase.from('competition_results').select('competition_id', { count: 'exact', head: true }),
         supabase.from('app_settings').select('value').eq('key', 'event_media').maybeSingle(),
         supabase.from('app_settings').select('value').eq('key', 'competition_posters').maybeSingle(),
         supabase.from('app_settings').select('value').eq('key', 'gallery_overlays').maybeSingle()

@@ -7,7 +7,7 @@ export default function ResultsSection() {
   const [unlocked, setUnlocked] = useState(false)
   const [pwInput, setPwInput] = useState('')
   const [pwError, setPwError] = useState('')
-  const [dbPassword, setDbPassword] = useState('er')
+  const [verifying, setVerifying] = useState(false)
   const [gradeSettings, setGradeSettings] = useState([])
 
   const [competitions, setCompetitions] = useState([])
@@ -23,12 +23,6 @@ export default function ResultsSection() {
   const [catFilter, setCatFilter] = useState('')
 
   useEffect(() => {
-    // Fetch password from DB
-    supabase.from('app_settings').select('value').eq('key', 'results_password').single()
-      .then(({ data }) => { if (data) setDbPassword(data.value) })
-  }, [])
-
-  useEffect(() => {
     if (unlocked) {
       fetchCompetitions()
       const ch = supabase.channel('results-realtime')
@@ -39,13 +33,23 @@ export default function ResultsSection() {
     }
   }, [unlocked])
 
-  function tryUnlock(e) {
+  async function tryUnlock(e) {
     e.preventDefault()
-    if (pwInput === dbPassword) {
-      setUnlocked(true)
-      setPwError('')
-    } else {
-      setPwError('Incorrect password.')
+    setVerifying(true)
+    setPwError('')
+    try {
+      const { data, error } = await supabase.rpc('verify_section_password', { p_password: pwInput })
+      if (error) throw error
+      if (data === true) {
+        setUnlocked(true)
+        setPwError('')
+      } else {
+        setPwError('Incorrect password.')
+      }
+    } catch (err) {
+      setPwError('Verification failed. Try again.')
+    } finally {
+      setVerifying(false)
     }
   }
 
