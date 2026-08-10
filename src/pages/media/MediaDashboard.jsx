@@ -1,997 +1,725 @@
 // src/pages/media/MediaDashboard.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
 import './MediaDashboard.css'
 
-const IconUpload = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 24, height: 24 }}>
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
+/* ── SVG Icons ─────────────────────────────────────────── */
+const Ico = ({ d, w = 24, h = 24, fill = 'none', sw = 2 }) => (
+  <svg viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={sw}
+    strokeLinecap="round" strokeLinejoin="round" width={w} height={h}>
+    {Array.isArray(d) ? d.map((el, i) => {
+      const [tag, props] = el
+      if (tag === 'path')    return <path key={i} {...props} />
+      if (tag === 'line')    return <line key={i} {...props} />
+      if (tag === 'polyline') return <polyline key={i} {...props} />
+      if (tag === 'polygon') return <polygon key={i} {...props} />
+      if (tag === 'rect')    return <rect key={i} {...props} />
+      if (tag === 'circle')  return <circle key={i} {...props} />
+      return null
+    }) : <path d={d} />}
   </svg>
 )
 
-const IconYoutube = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
-    <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
-    <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
-  </svg>
-)
+const IconUpload   = ({ s = 20 }) => <Ico w={s} h={s} d={[['path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}],['polyline',{points:'17 8 12 3 7 8'}],['line',{x1:'12',y1:'3',x2:'12',y2:'15'}]]} />
+const IconImage    = ({ s = 16 }) => <Ico w={s} h={s} d={[['rect',{x:'3',y:'3',width:'18',height:'18',rx:'2'}],['circle',{cx:'8.5',cy:'8.5',r:'1.5'}],['polyline',{points:'21 15 16 10 5 21'}]]} />
+const IconPoster   = ({ s = 16 }) => <Ico w={s} h={s} d={[['rect',{x:'4',y:'2',width:'16',height:'20',rx:'2'}],['line',{x1:'8',y1:'7',x2:'16',y2:'7'}],['line',{x1:'8',y1:'11',x2:'16',y2:'11'}],['line',{x1:'8',y1:'15',x2:'13',y2:'15'}]]} />
+const IconYoutube  = ({ s = 16 }) => <Ico w={s} h={s} d={[['path',{d:'M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z'}],['polygon',{points:'9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02'}]]} />
+const IconVideo    = ({ s = 16 }) => <Ico w={s} h={s} d={[['polygon',{points:'23 7 16 12 23 17 23 7'}],['rect',{x:'1',y:'5',width:'15',height:'14',rx:'2'}]]} />
+const IconTrash    = ({ s = 14 }) => <Ico w={s} h={s} d={[['polyline',{points:'3 6 5 6 21 6'}],['path',{d:'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'}],['line',{x1:'10',y1:'11',x2:'10',y2:'17'}],['line',{x1:'14',y1:'11',x2:'14',y2:'17'}]]} />
+const IconLogOut   = ({ s = 15 }) => <Ico w={s} h={s} d={[['path',{d:'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'}],['polyline',{points:'16 17 21 12 16 7'}],['line',{x1:'21',y1:'12',x2:'9',y2:'12'}]]} />
+const IconLayers   = ({ s = 13 }) => <Ico w={s} h={s} d={[['polygon',{points:'12 2 2 7 12 12 22 7 12 2'}],['polyline',{points:'2 17 12 22 22 17'}],['polyline',{points:'2 12 12 17 22 12'}]]} />
+const IconSearch   = ({ s = 14 }) => <Ico w={s} h={s} d={[['circle',{cx:'11',cy:'11',r:'8'}],['line',{x1:'21',y1:'21',x2:'16.65',y2:'16.65'}]]} />
+const IconCheck    = ({ s = 11 }) => <Ico w={s} h={s} sw={2.5} d={[['polyline',{points:'20 6 9 17 4 12'}]]} />
+const IconX        = ({ s = 13 }) => <Ico w={s} h={s} sw={2.5} d={[['line',{x1:'18',y1:'6',x2:'6',y2:'18'}],['line',{x1:'6',y1:'6',x2:'18',y2:'18'}]]} />
+const IconChevL    = ({ s = 16 }) => <Ico w={s} h={s} sw={2.5} d={[['polyline',{points:'15 18 9 12 15 6'}]]} />
+const IconChevR    = ({ s = 16 }) => <Ico w={s} h={s} sw={2.5} d={[['polyline',{points:'9 18 15 12 9 6'}]]} />
+const IconRadio    = ({ s = 15 }) => <Ico w={s} h={s} d={[['circle',{cx:'12',cy:'12',r:'2'}],['path',{d:'M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14'}]]} />
+const IconRefresh  = ({ s = 14 }) => <Ico w={s} h={s} d={[['polyline',{points:'23 4 23 10 17 10'}],['path',{d:'M20.49 15a9 9 0 1 1-2.12-9.36L23 10'}]]} />
+const IconGrid     = ({ s = 15 }) => <Ico w={s} h={s} d={[['rect',{x:'3',y:'3',width:'7',height:'7'}],['rect',{x:'14',y:'3',width:'7',height:'7'}],['rect',{x:'3',y:'14',width:'7',height:'7'}],['rect',{x:'14',y:'14',width:'7',height:'7'}]]} />
+const IconWarn     = ({ s = 20 }) => <Ico w={s} h={s} d={[['path',{d:'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'}],['line',{x1:'12',y1:'9',x2:'12',y2:'13'}],['line',{x1:'12',y1:'17',x2:'12.01',y2:'17'}]]} />
+const IconPlay     = ({ s = 18 }) => <Ico w={s} h={s} fill="currentColor" d={[['polygon',{points:'5 3 19 12 5 21 5 3'}]]} />
+const IconTag      = ({ s = 10 }) => <Ico w={s} h={s} d={[['path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}],['line',{x1:'7',y1:'7',x2:'7.01',y2:'7'}]]} />
+const IconSelAll   = ({ s = 13 }) => <Ico w={s} h={s} d={[['rect',{x:'3',y:'3',width:'18',height:'18',rx:'2'}],['polyline',{points:'9 11 12 14 22 4'}]]} />
 
-const IconImage = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
-    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-    <circle cx="8.5" cy="8.5" r="1.5" />
-    <polyline points="21 15 16 10 5 21" />
-  </svg>
-)
+const PAGE_SIZE = 24
 
-const IconTrash = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
-    <polyline points="3 6 5 6 21 6" />
-    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    <line x1="10" y1="11" x2="10" y2="17" />
-    <line x1="14" y1="11" x2="14" y2="17" />
-  </svg>
-)
+const TYPES = [
+  { id: 'photo',  label: 'Photo',  Icon: IconImage },
+  { id: 'poster', label: 'Poster', Icon: IconPoster },
+  { id: 'live',   label: 'Live',   Icon: IconRadio },
+  { id: 'video',  label: 'Video',  Icon: IconVideo },
+  { id: 'shorts', label: 'Shorts', Icon: IconYoutube },
+]
+const FILTERS = [
+  { id: 'all',    label: 'All' },
+  { id: 'photo',  label: 'Photos' },
+  { id: 'poster', label: 'Posters' },
+  { id: 'live',   label: 'Live' },
+  { id: 'video',  label: 'Video' },
+  { id: 'shorts', label: 'Shorts' },
+]
 
-const IconVideo = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
-    <polygon points="23 7 16 12 23 17 23 7" />
-    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-  </svg>
-)
+function relTime(iso) {
+  const m = Math.floor((Date.now() - new Date(iso)) / 60000)
+  if (m < 1)  return 'just now'
+  if (m < 60) return m + 'm ago'
+  const h = Math.floor(m / 60)
+  if (h < 24) return h + 'h ago'
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
 
-const IconLogOut = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-)
+function detectRatio(w, h) {
+  const r = w / h
+  if (r >= 1.15) return '4:3'
+  if (r <= 0.87) return '3:4'
+  return 'original'
+}
 
-const IconLayers = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
-    <polygon points="12 2 2 7 12 12 22 7 12 2" />
-    <polyline points="2 17 12 22 22 17" />
-    <polyline points="2 12 12 17 22 12" />
-  </svg>
-)
+function ratioPaddingTop(ratio, tw, th) {
+  if (ratio === '3:4')     return '133.33%'
+  if (ratio === '4:3')     return '75%'
+  if (tw && th)            return (th / tw * 100).toFixed(2) + '%'
+  return '75%'
+}
 
 export default function MediaDashboard() {
   const { user, logout } = useAuth()
-  
-  const [mediaType, setMediaType] = useState('photo') // 'photo' | 'live' | 'video' | 'shorts'
-  const [caption, setCaption] = useState('')
-  const [link, setLink] = useState('')
-  const [compTag, setCompTag] = useState('')
-  const [selectedFiles, setSelectedFiles] = useState([])
-  const [imagePreviews, setImagePreviews] = useState([]) // Array of Base64 strings
-  const [aspectRatio, setAspectRatio] = useState('original') // 'original' | '4:3' | '3:4'
-  
-  const [uploading, setUploading] = useState(false)
-  const [mediaFeed, setMediaFeed] = useState([])
-  const [competitions, setCompetitions] = useState([])
-  const [toast, setToast] = useState(null)
-  const [itemToDelete, setItemToDelete] = useState(null)
 
-  // PNG Overlay States
-  const [overlays, setOverlays] = useState({ overlay43: '', overlay34: '' })
-  const [applyOverlay, setApplyOverlay] = useState(true)
-  const [showOverlaySettings, setShowOverlaySettings] = useState(false)
+  // Upload state
+  const [mediaType,     setMediaType]     = useState('photo')
+  const [caption,       setCaption]       = useState('')
+  const [link,          setLink]          = useState('')
+  const [compTag,       setCompTag]       = useState('')
+  const [selectedFiles, setSelectedFiles] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([])
+  const [aspectRatio,   setAspectRatio]   = useState('auto')
+  const [uploading,     setUploading]     = useState(false)
+
+  // Overlay
+  const [overlays,         setOverlays]         = useState({ overlay43: '', overlay34: '' })
+  const [applyOverlay,     setApplyOverlay]      = useState(true)
+  const [showOverlayPanel, setShowOverlayPanel]  = useState(false)
+
+  // Library
+  const [mediaFeed,      setMediaFeed]      = useState([])
+  const [competitions,   setCompetitions]   = useState([])
+  const [libFilter,      setLibFilter]      = useState('all')
+  const [libSearch,      setLibSearch]      = useState('')
+  const [currentPage,    setCurrentPage]    = useState(1)
+  const [selectedItems,  setSelectedItems]  = useState(new Set())
+  const [bulkMode,       setBulkMode]       = useState(false)
+  const [confirmDel,     setConfirmDel]     = useState(null)
+
+  // UI
+  const [activePanel, setActivePanel] = useState('upload')
+  const [toast,       setToast]       = useState(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
-    fetchMedia()
-    fetchCompetitions()
-    fetchOverlays()
-
-    // Subscribe to events updates in real-time
-    const ch = supabase.channel('media-dashboard-feed')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.event_media' }, fetchMedia)
+    fetchMedia(); fetchCompetitions(); fetchOverlays()
+    const ch = supabase.channel('media-db-v2')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, fetchMedia)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.gallery_overlays' }, fetchOverlays)
       .subscribe()
-
     return () => supabase.removeChannel(ch)
   }, [])
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3200)
   }
 
   async function fetchMedia() {
     try {
       const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'event_media')
-        .maybeSingle()
-
-      if (data?.value) {
-        setMediaFeed(JSON.parse(data.value))
-      } else {
-        setMediaFeed([])
-      }
-    } catch (e) {
-      console.error('Error fetching media feed:', e)
-    }
+        .from('gallery_media')
+        .select('id,type,caption,thumb_url,hd_url,competition_id,uploader_name,created_at')
+        .order('created_at', { ascending: false })
+      setMediaFeed(data ? data.map(i => ({ ...i, thumbUrl: i.thumb_url, url: i.hd_url || i.thumb_url })) : [])
+    } catch {}
   }
 
   async function fetchOverlays() {
     try {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'gallery_overlays')
-        .maybeSingle()
-
-      if (data?.value) {
-        setOverlays(JSON.parse(data.value))
-      }
-    } catch (err) {
-      console.error('Error fetching overlays:', err)
-    }
-  }
-
-  const handleOverlayUpload = (key, file) => {
-    if (!file || !file.type.startsWith('image/')) {
-      showToast('Please select a valid PNG/Image file.', 'error')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const base64 = e.target.result
-      const newOverlays = { ...overlays, [key]: base64 }
-      setOverlays(newOverlays)
-      try {
-        await supabase
-          .from('app_settings')
-          .upsert({ key: 'gallery_overlays', value: JSON.stringify(newOverlays) })
-        showToast('PNG Overlay frame saved successfully!')
-      } catch (err) {
-        console.error(err)
-        showToast('Failed to save overlay to database.', 'error')
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const handleRemoveOverlay = async (key) => {
-    const newOverlays = { ...overlays, [key]: '' }
-    setOverlays(newOverlays)
-    try {
-      await supabase
-        .from('app_settings')
-        .upsert({ key: 'gallery_overlays', value: JSON.stringify(newOverlays) })
-      showToast('Overlay frame removed.')
-    } catch (err) {
-      console.error(err)
-    }
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'gallery_overlays').maybeSingle()
+      if (data?.value) setOverlays(JSON.parse(data.value))
+    } catch {}
   }
 
   async function fetchCompetitions() {
     try {
-      const { data } = await supabase
-        .from('competitions')
-        .select('id, name')
-        .order('name')
+      const { data } = await supabase.from('competitions').select('id,name').order('name')
       if (data) setCompetitions(data)
-    } catch (e) {
-      console.error(e)
-    }
+    } catch {}
   }
 
-  // Helper to crop & resize a single image file on canvas (with PNG overlay support)
-  const processSingleFile = (file, ratio) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const img = new Image()
-        img.onerror = reject
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          let sourceX = 0
-          let sourceY = 0
-          let sourceWidth = img.width
-          let sourceHeight = img.height
+  // Overlay handlers
+  const handleOverlayUpload = async (key, file) => {
+    if (!file?.type.startsWith('image/')) return
+    try {
+      const path = `overlays/${key}_${Date.now()}.png`
+      const { error } = await supabase.storage.from('event-media').upload(path, file, { upsert: true })
+      if (error) throw error
+      const url = supabase.storage.from('event-media').getPublicUrl(path).data.publicUrl
+      const next = { ...overlays, [key]: url }
+      setOverlays(next)
+      await supabase.from('app_settings').upsert({ key: 'gallery_overlays', value: JSON.stringify(next) })
+      showToast('Overlay uploaded.')
+    } catch (e) { showToast('Upload failed: ' + e.message, 'error') }
+  }
+  const handleRemoveOverlay = async (key) => {
+    const next = { ...overlays, [key]: '' }
+    setOverlays(next)
+    try { await supabase.from('app_settings').upsert({ key: 'gallery_overlays', value: JSON.stringify(next) }) } catch {}
+    showToast('Overlay removed.')
+  }
 
-          let targetWidth = img.width
-          let targetHeight = img.height
+  // Image processing
+  const processSingleFile = (file, ratio) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let sx = 0, sy = 0, sw = img.width, sh = img.height, tw, th
 
-          if (ratio === '4:3') {
-            const targetRatio = 4 / 3
-            const imgRatio = img.width / img.height
-            if (imgRatio > targetRatio) {
-              sourceWidth = img.height * targetRatio
-              sourceX = (img.width - sourceWidth) / 2
-            } else {
-              sourceHeight = img.width / targetRatio
-              sourceY = (img.height - sourceHeight) / 2
-            }
-            targetWidth = 1080
-            targetHeight = 810
-          } else if (ratio === '3:4') {
-            const targetRatio = 3 / 4
-            const imgRatio = img.width / img.height
-            if (imgRatio > targetRatio) {
-              sourceWidth = img.height * targetRatio
-              sourceX = (img.width - sourceWidth) / 2
-            } else {
-              sourceHeight = img.width / targetRatio
-              sourceY = (img.height - sourceHeight) / 2
-            }
-            targetWidth = 810
-            targetHeight = 1080
+        if (ratio === '4:3') {
+          const ir = img.width / img.height
+          if (ir > 4/3) { sw = img.height * 4/3; sx = (img.width - sw) / 2 }
+          else { sh = img.width / (4/3); sy = (img.height - sh) / 2 }
+          tw = 1600; th = 1200
+        } else if (ratio === '3:4') {
+          const ir = img.width / img.height
+          if (ir > 3/4) { sw = img.height * 3/4; sx = (img.width - sw) / 2 }
+          else { sh = img.width / (3/4); sy = (img.height - sh) / 2 }
+          tw = 1200; th = 1600
+        } else {
+          const mx = 1920
+          let w = img.width, h = img.height
+          if (w > h) { if (w > mx) { h = Math.round(h * mx / w); w = mx } }
+          else { if (h > mx) { w = Math.round(w * mx / h); h = mx } }
+          tw = w; th = h
+        }
+
+        canvas.width = tw; canvas.height = th
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, tw, th)
+
+        let overlaySrc = null
+        if (applyOverlay && mediaType === 'photo') {
+          // Only apply overlay if the EXACT matching ratio overlay exists — no cross-ratio fallback
+          if (ratio === '4:3' || tw > th) {
+            overlaySrc = overlays.overlay43 || null
           } else {
-            const maxDim = 1080
-            let w = img.width
-            let h = img.height
-            if (w > h) {
-              if (w > maxDim) {
-                h = Math.round((h * maxDim) / w)
-                w = maxDim
-              }
-            } else {
-              if (h > maxDim) {
-                w = Math.round((w * maxDim) / h)
-                h = maxDim
-              }
-            }
-            targetWidth = w
-            targetHeight = h
-          }
-
-          canvas.width = targetWidth
-          canvas.height = targetHeight
-          const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight)
-
-          // Check if PNG Overlay should be applied
-          let overlaySrc = null
-          if (applyOverlay && mediaType === 'photo') {
-            if (ratio === '4:3' || targetWidth > targetHeight) {
-              overlaySrc = overlays.overlay43 || overlays.overlay34
-            } else {
-              overlaySrc = overlays.overlay34 || overlays.overlay43
-            }
-          }
-
-          const createResult = (cvs) => {
-            const fullUrl = cvs.toDataURL('image/jpeg', 0.78)
-            const tCvs = document.createElement('canvas')
-            const maxT = 400
-            let tw = cvs.width, th = cvs.height
-            if (tw > th) {
-              if (tw > maxT) { th = Math.round((th * maxT) / tw); tw = maxT }
-            } else {
-              if (th > maxT) { tw = Math.round((tw * maxT) / th); th = maxT }
-            }
-            tCvs.width = tw
-            tCvs.height = th
-            const tctx = tCvs.getContext('2d')
-            tctx.drawImage(cvs, 0, 0, tw, th)
-            const thumbUrl = tCvs.toDataURL('image/jpeg', 0.50)
-            return { fullUrl, thumbUrl }
-          }
-
-          if (overlaySrc) {
-            const ovImg = new Image()
-            ovImg.crossOrigin = 'anonymous'
-            ovImg.onload = () => {
-              ctx.drawImage(ovImg, 0, 0, targetWidth, targetHeight)
-              resolve(createResult(canvas))
-            }
-            ovImg.onerror = () => {
-              resolve(createResult(canvas))
-            }
-            ovImg.src = overlaySrc
-          } else {
-            resolve(createResult(canvas))
+            overlaySrc = overlays.overlay34 || null
           }
         }
-        img.src = event.target.result
-      }
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  }
 
-  // Handle files selection and add to active selection queue
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files || [])
-    const validFiles = files.filter(file => {
-      if (!file.type.startsWith('image/')) {
-        showToast(`"${file.name}" is not an image file.`, 'error')
-        return false
+        const buildResult = cvs => {
+          const fullUrl = cvs.toDataURL('image/jpeg', 0.92)
+          const tC = document.createElement('canvas')
+          const mx = 400
+          let tW = cvs.width, tH = cvs.height
+          if (tW > tH) { if (tW > mx) { tH = Math.round(tH * mx / tW); tW = mx } }
+          else { if (tH > mx) { tW = Math.round(tW * mx / tH); tH = mx } }
+          tC.width = tW; tC.height = tH
+          tC.getContext('2d').drawImage(cvs, 0, 0, tW, tH)
+          const thumbUrl = tC.toDataURL('image/jpeg', 0.5)
+          const outRatio = ratio === 'original' ? detectRatio(tw, th) : ratio
+          const overlayApplied = !!overlaySrc
+          return { fullUrl, thumbUrl, outRatio, tw, th, overlayApplied }
+        }
+
+        if (overlaySrc) {
+          const ov = new Image(); ov.crossOrigin = 'anonymous'
+          ov.onload = () => { ctx.drawImage(ov, 0, 0, tw, th); resolve(buildResult(canvas)) }
+          ov.onerror = () => resolve(buildResult(canvas))
+          ov.src = overlaySrc
+        } else resolve(buildResult(canvas))
       }
+      img.src = ev.target.result
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+
+  const detectFileRatio = file => new Promise(res => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => { res(detectRatio(img.width, img.height)); URL.revokeObjectURL(url) }
+    img.onerror = () => { res('original'); URL.revokeObjectURL(url) }
+    img.src = url
+  })
+
+  const handleImageChange = async e => {
+    const files = Array.from(e.target.files || []).filter(f => {
+      if (!f.type.startsWith('image/')) { showToast(f.name + ' is not an image.', 'error'); return false }
       return true
     })
-    setSelectedFiles(prev => [...prev, ...validFiles])
+    const withRatio = await Promise.all(files.map(async f => {
+      f.detectedRatio = await detectFileRatio(f); return f
+    }))
+    setSelectedFiles(prev => [...prev, ...withRatio])
+    if (e.target) e.target.value = ''
   }
 
-  // Re-process all selected images when the file list, aspect ratio, or overlay toggle changes
   useEffect(() => {
-    if (selectedFiles.length === 0) {
-      setImagePreviews([])
-      return
-    }
-
-    let isCurrent = true
-    const processedList = []
-
-    const processFiles = async () => {
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i]
-        try {
-          const ratioToUse = mediaType === 'photo' ? aspectRatio : 'original'
-          const resObj = await processSingleFile(file, ratioToUse)
-          if (isCurrent) {
-            processedList.push(resObj)
-          }
-        } catch (err) {
-          console.error(err)
-        }
+    if (!selectedFiles.length) { setImagePreviews([]); return }
+    let alive = true; const out = [];
+    (async () => {
+      for (const f of selectedFiles) {
+        const ratio = aspectRatio === 'auto' ? (f.detectedRatio || 'original') : aspectRatio
+        try { const r = await processSingleFile(f, ratio); if (alive) out.push(r) } catch {}
       }
-      if (isCurrent) {
-        setImagePreviews(processedList)
-      }
-    }
-
-    processFiles()
-
-    return () => {
-      isCurrent = false
-    }
+      if (alive) setImagePreviews([...out])
+    })()
+    return () => { alive = false }
   }, [selectedFiles, aspectRatio, mediaType, applyOverlay, overlays])
 
-  const removeSelectedFile = (index) => {
-    setSelectedFiles(prev => prev.filter((_, idx) => idx !== index))
+  const removeFile = idx => setSelectedFiles(p => p.filter((_, i) => i !== idx))
+
+  const dataURLtoBlob = url => {
+    const [h, d] = url.split(','); const mime = h.match(/:(.*?);/)[1]
+    const b = atob(d); let n = b.length; const u = new Uint8Array(n)
+    while (n--) u[n] = b.charCodeAt(n); return new Blob([u], { type: mime })
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault()
-
-    const isImageUpload = mediaType === 'photo' || mediaType === 'poster'
-
-    if (isImageUpload && imagePreviews.length === 0) {
-      showToast('Please select at least one photo.', 'error')
-      return
-    }
-
-    if (!isImageUpload && !link.trim()) {
-      showToast('Please enter the YouTube URL.', 'error')
-      return
-    }
-
+    const isImg = mediaType === 'photo' || mediaType === 'poster'
+    if (isImg && !imagePreviews.length) { showToast('Select at least one image.', 'error'); return }
+    if (!isImg && !link.trim()) { showToast('Enter a YouTube URL.', 'error'); return }
     setUploading(true)
-
     try {
-      // 1. Fetch current feed from DB to append to
-      const { data } = await supabase
-        .from('app_settings')
-        .select('*')
-        .eq('key', 'event_media')
-        .maybeSingle()
-
-      const currentFeed = data?.value ? JSON.parse(data.value) : []
-
-      let newItems = []
-      
-      if (isImageUpload) {
-        newItems = imagePreviews.map((imgObj, idx) => ({
-          id: Math.random().toString(36).substring(2, 9) + '-' + Date.now() + '-' + idx,
-          type: mediaType,
-          caption: caption.trim(),
-          url: imgObj.fullUrl || imgObj,
-          thumbUrl: imgObj.thumbUrl || imgObj.fullUrl || imgObj,
-          competition_id: compTag || null,
-          uploader_name: user?.name || user?.username || 'Media Team',
-          created_at: new Date().toISOString()
-        }))
+      let rows = []
+      if (isImg) {
+        for (let i = 0; i < imagePreviews.length; i++) {
+          const p = imagePreviews[i]
+          const fid = Math.random().toString(36).slice(2, 9) + '-' + Date.now() + '-' + i
+          let hdUrl = p.fullUrl, thUrl = p.thumbUrl
+          if (p.fullUrl?.startsWith('data:')) {
+            try {
+              const blob = dataURLtoBlob(p.fullUrl)
+              const fp = `hd/${fid}.jpg`
+              const { error } = await supabase.storage.from('event-media').upload(fp, blob, { contentType: 'image/jpeg' })
+              if (!error) hdUrl = supabase.storage.from('event-media').getPublicUrl(fp).data.publicUrl
+            } catch {}
+          }
+          if (p.thumbUrl?.startsWith('data:')) {
+            try {
+              const blob = dataURLtoBlob(p.thumbUrl)
+              const tp = `thumbs/${fid}.jpg`
+              const { error } = await supabase.storage.from('event-media').upload(tp, blob, { contentType: 'image/jpeg' })
+              if (!error) thUrl = supabase.storage.from('event-media').getPublicUrl(tp).data.publicUrl
+            } catch {}
+          }
+          rows.push({ id: fid, type: mediaType, caption: caption.trim(), thumb_url: thUrl, hd_url: hdUrl, competition_id: compTag || null, uploader_name: user?.name || user?.username || 'Media' })
+        }
       } else {
-        newItems = [{
-          id: Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
-          type: mediaType,
-          caption: caption.trim(),
-          url: link.trim(),
-          competition_id: compTag || null,
-          uploader_name: user?.name || user?.username || 'Media Team',
-          created_at: new Date().toISOString()
-        }]
+        rows = [{ id: Math.random().toString(36).slice(2, 9) + '-' + Date.now(), type: mediaType, caption: caption.trim(), thumb_url: link.trim(), hd_url: link.trim(), competition_id: compTag || null, uploader_name: user?.name || user?.username || 'Media' }]
       }
-
-      const updatedFeed = [...newItems, ...currentFeed]
-
-      const { error } = await supabase
-        .from('app_settings')
-        .upsert({ key: 'event_media', value: JSON.stringify(updatedFeed) })
-
+      const { error } = await supabase.from('gallery_media').insert(rows)
       if (error) throw error
-
-      // Reset form
-      setCaption('')
-      setLink('')
-      setSelectedFiles([])
-      setImagePreviews([])
-      setCompTag('')
-      
-      setMediaFeed(updatedFeed)
-      showToast('Media uploaded successfully!')
-    } catch (err) {
-      console.error(err)
-      showToast(`Failed to upload: ${err.message}`, 'error')
-    } finally {
-      setUploading(false)
-    }
+      setCaption(''); setLink(''); setSelectedFiles([]); setImagePreviews([]); setCompTag('')
+      fetchMedia()
+      showToast(`${rows.length} item${rows.length > 1 ? 's' : ''} published.`)
+      if (window.innerWidth < 900) setActivePanel('library')
+    } catch (err) { showToast('Failed: ' + err.message, 'error') }
+    finally { setUploading(false) }
   }
 
-  const handleDelete = (itemId) => {
-    setItemToDelete(itemId)
-  }
-
-  const confirmDelete = async () => {
-    if (!itemToDelete) return
-    const targetId = itemToDelete
-    setItemToDelete(null)
-
-    try {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'event_media')
-        .maybeSingle()
-
-      if (!data?.value) return
-
-      const currentFeed = JSON.parse(data.value)
-      const filteredFeed = currentFeed.filter(item => item.id !== targetId)
-
-      const { error } = await supabase
-        .from('app_settings')
-        .upsert({ key: 'event_media', value: JSON.stringify(filteredFeed) })
-
-      if (error) throw error
-
-      setMediaFeed(filteredFeed)
-      showToast('Media deleted successfully.')
-    } catch (err) {
-      console.error(err)
-      showToast('Failed to delete media.', 'error')
-    }
-  }
-
-  const getYoutubeId = (url) => {
-    if (!url) return null
-    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i
-    const match = url.trim().match(regExp)
-    return match ? match[1] : null
-  }
-
-  const renderFeedList = (items) => {
-    if (items.length === 0) {
-      return (
-        <div style={{ padding: '14px', fontSize: '12px', color: 'rgba(255,255,255,0.25)', textAlign: 'center' }}>
-          No items in this section
-        </div>
-      )
-    }
-    return items.map(item => {
-      const isPhotoOrPoster = item.type === 'photo' || item.type === 'poster'
-      const ytId = !isPhotoOrPoster ? getYoutubeId(item.url) : null
-      const relatedCompName = competitions.find(c => c.id === item.competition_id)?.name
-
-      return (
-        <div key={item.id} className="med-feed-card" style={{ marginBottom: '6px' }}>
-          {/* Media Thumbnail */}
-          <div className="med-feed-thumbnail-box">
-            {isPhotoOrPoster ? (
-              <img src={item.url} alt="Photo" className="med-feed-thumbnail" />
-            ) : ytId ? (
-              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                <img
-                  src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`}
-                  alt="YouTube Preview"
-                  className="med-feed-thumbnail"
-                />
-                <div className="med-play-overlay">
-                  <span>▶</span>
-                </div>
-              </div>
-            ) : (
-              <div className="med-feed-thumbnail med-thumbnail-fallback">
-                <span>🎥</span>
-              </div>
-            )}
-          </div>
-
-          {/* Media Info */}
-          <div className="med-feed-info">
-            <div className="med-feed-top-row">
-              <span className={`med-badge-type ${item.type}`}>
-                {item.type.toUpperCase()}
-              </span>
-              <span className="med-feed-time">
-                {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-            <p className="med-feed-caption" title={item.caption}>{item.caption}</p>
-            {relatedCompName && (
-              <span className="med-feed-tagged-comp" style={{ fontSize: '9px', opacity: 0.7 }}>🏷️ {relatedCompName}</span>
-            )}
-          </div>
-
-          {/* Delete Action */}
-          <button
-            type="button"
-            className="med-delete-btn"
-            onClick={() => handleDelete(item.id)}
-            title="Delete Update"
-          >
-            <IconTrash />
-          </button>
-        </div>
-      )
+  // Delete helpers
+  const purgeStorage = items => {
+    const paths = []
+    items.forEach(it => {
+      if (it.hd_url?.includes('/event-media/')) { const p = it.hd_url.split('/event-media/')[1]?.split('?')[0]; if (p) paths.push(p) }
+      if (it.thumb_url?.includes('/event-media/')) { const p = it.thumb_url.split('/event-media/')[1]?.split('?')[0]; if (p) paths.push(p) }
     })
+    if (paths.length) supabase.storage.from('event-media').remove(paths).catch(() => {})
   }
+
+  const handleConfirmDelete = async () => {
+    const target = confirmDel; setConfirmDel(null)
+    try {
+      if (target === 'bulk') {
+        const ids = [...selectedItems]
+        const items = mediaFeed.filter(m => ids.includes(m.id))
+        const { error } = await supabase.from('gallery_media').delete().in('id', ids)
+        if (error) throw error
+        purgeStorage(items); setSelectedItems(new Set()); setBulkMode(false)
+        showToast(`${ids.length} items deleted.`)
+      } else {
+        const item = mediaFeed.find(m => m.id === target)
+        const { error } = await supabase.from('gallery_media').delete().eq('id', target)
+        if (error) throw error
+        if (item) purgeStorage([item])
+        showToast('Item deleted.')
+      }
+      fetchMedia()
+    } catch (err) { showToast('Delete failed: ' + err.message, 'error') }
+  }
+
+  // Library computed
+  const filtered = mediaFeed.filter(it => {
+    const typeOk = libFilter === 'all' || it.type === libFilter
+    const q = libSearch.trim().toLowerCase()
+    const searchOk = !q || it.caption?.toLowerCase().includes(q) ||
+      competitions.find(c => c.id === it.competition_id)?.name?.toLowerCase().includes(q)
+    return typeOk && searchOk
+  })
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const page = Math.min(currentPage, totalPages)
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const toggleSel = id => setSelectedItems(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const selectAll  = () => setSelectedItems(new Set(filtered.map(i => i.id)))
+  const clearSel   = () => setSelectedItems(new Set())
+
+  const getYtId = url => {
+    if (!url) return null
+    const m = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i)
+    return m ? m[1] : null
+  }
+
+  const isImg = mediaType === 'photo' || mediaType === 'poster'
 
   return (
     <div className="med-root">
-      
-      {/* ── Top Bar ── */}
+
+      {/* Topbar */}
       <header className="med-topbar">
-        <div className="med-topbar-brand">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <img src="/inspico-logo.svg" alt="Inspico Logo" style={{ height: 20, width: 20, filter: 'brightness(0) invert(1)', flexShrink: 0 }} />
-            <img src="/inspico.svg" alt="Inspico" style={{ height: 15, maxWidth: 90 }} />
-          </div>
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }} />
+        <div className="med-topbar-left">
+          <img src="/inspico-logo.svg" alt="" className="med-logo-mark" />
+          <img src="/inspico.svg"      alt="Inspico" className="med-logo-text" />
+          <div className="med-topbar-div" />
           <span className="med-topbar-name">{user?.name || user?.username || 'Media Team'}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button className="med-logout-btn" onClick={logout}>
-            <IconLogOut />
-            Sign Out
-          </button>
-        </div>
+        <button className="med-signout-btn" onClick={logout}>
+          <IconLogOut /> Sign out
+        </button>
       </header>
 
-      {/* ── Main Layout ── */}
-      <main className="med-container">
-        
-        {/* Left Side: Upload Form */}
-        <section className="med-card med-form-section">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
-            <h2 className="med-section-title" style={{ margin: 0 }}>Upload New Media</h2>
+      {/* Mobile tab switcher */}
+      <div className="med-mob-tabs">
+        <button className={'med-mob-tab' + (activePanel === 'upload' ? ' active' : '')} onClick={() => setActivePanel('upload')}>
+          <IconUpload s={15} /> Upload
+        </button>
+        <button className={'med-mob-tab' + (activePanel === 'library' ? ' active' : '')} onClick={() => setActivePanel('library')}>
+          <IconGrid s={15} /> Library
+          {mediaFeed.length > 0 && <span className="med-mob-count">{mediaFeed.length}</span>}
+        </button>
+      </div>
+
+      {/* Two-panel layout */}
+      <main className="med-main">
+
+        {/* ── Upload Panel ────────────────────────── */}
+        <section className={'med-panel med-upload-panel' + (activePanel === 'upload' ? ' mob-visible' : '')}>
+
+          <div className="med-panel-head">
+            <h2 className="med-panel-title">Upload</h2>
             {mediaType === 'photo' && (
-              <button
-                type="button"
-                onClick={() => setShowOverlaySettings(!showOverlaySettings)}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  color: '#fff',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
+              <button type="button" className="med-pill" onClick={() => setShowOverlayPanel(p => !p)}>
                 <IconLayers />
-                <span>{showOverlaySettings ? 'Hide Overlay Frames' : 'Manage PNG Frames'}</span>
-                {(overlays.overlay34 || overlays.overlay43) && (
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-                )}
+                PNG Frames
+                {(overlays.overlay34 || overlays.overlay43) && <span className="med-dot" />}
               </button>
             )}
           </div>
 
-          {/* Expandable PNG Overlay Settings Box (Photo tab only) */}
-          {mediaType === 'photo' && showOverlaySettings && (
-            <div style={{
-              background: 'rgba(0, 0, 0, 0.25)',
-              border: '1px dashed rgba(255, 255, 255, 0.12)',
-              borderRadius: '12px',
-              padding: '16px',
-              marginBottom: '20px'
-            }}>
-              <h4 style={{ margin: '0 0 6px 0', fontSize: '13px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <IconLayers />
-                <span>PNG Frame Overlays</span>
-              </h4>
-              <p style={{ margin: '0 0 14px 0', fontSize: '11px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>
-                Upload transparent PNG frames to auto-overlay on photos.
-              </p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                {/* 3:4 Portrait Overlay */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
-                      Portrait (3:4)
-                    </span>
-                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
-                      1200 × 1600 px
-                    </span>
-                  </div>
-                  {overlays.overlay34 ? (
-                    <div style={{ position: 'relative' }}>
-                      <img src={overlays.overlay34} alt="Overlay 3:4" style={{ width: '100%', height: '80px', objectFit: 'contain', background: '#000', borderRadius: '6px' }} />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveOverlay('overlay34')}
-                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(239,68,68,0.8)', border: 'none', color: '#fff', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
-                      >
-                        Remove
-                      </button>
+          {/* Overlay config */}
+          {mediaType === 'photo' && showOverlayPanel && (
+            <div className="med-overlay-box">
+              <p className="med-overlay-desc">Transparent PNG frames applied to all photos automatically.</p>
+              <div className="med-overlay-slots">
+                {[
+                  { key: 'overlay34', label: 'Portrait 3:4',  dim: '1200×1600' },
+                  { key: 'overlay43', label: 'Landscape 4:3', dim: '1600×1200' },
+                ].map(({ key, label, dim }) => (
+                  <div key={key} className="med-overlay-slot">
+                    <div className="med-overlay-slot-hd">
+                      <span>{label}</span><code>{dim}</code>
                     </div>
-                  ) : (
-                    <label style={{ display: 'block', textAlign: 'center', padding: '16px 8px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
-                      Upload 3:4 PNG
-                      <input type="file" accept="image/png" style={{ display: 'none' }} onChange={e => handleOverlayUpload('overlay34', e.target.files[0])} />
-                    </label>
-                  )}
-                </div>
-
-                {/* 4:3 Landscape Overlay */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
-                      Landscape (4:3)
-                    </span>
-                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
-                      1600 × 1200 px
-                    </span>
+                    {overlays[key]
+                      ? <div className="med-overlay-img-wrap">
+                          <img src={overlays[key]} alt={label} />
+                          <button type="button" className="med-overlay-rm" onClick={() => handleRemoveOverlay(key)}>
+                            <IconX s={10} /> Remove
+                          </button>
+                        </div>
+                      : <label className="med-overlay-drop">
+                          <IconUpload s={16} />
+                          <span>Upload PNG</span>
+                          <input type="file" accept="image/png" style={{ display: 'none' }} onChange={e => handleOverlayUpload(key, e.target.files[0])} />
+                        </label>
+                    }
                   </div>
-                  {overlays.overlay43 ? (
-                    <div style={{ position: 'relative' }}>
-                      <img src={overlays.overlay43} alt="Overlay 4:3" style={{ width: '100%', height: '80px', objectFit: 'contain', background: '#000', borderRadius: '6px' }} />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveOverlay('overlay43')}
-                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(239,68,68,0.8)', border: 'none', color: '#fff', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <label style={{ display: 'block', textAlign: 'center', padding: '16px 8px', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
-                      Upload 4:3 PNG
-                      <input type="file" accept="image/png" style={{ display: 'none' }} onChange={e => handleOverlayUpload('overlay43', e.target.files[0])} />
-                    </label>
-                  )}
-                </div>
+                ))}
               </div>
             </div>
           )}
-          
+
+          {/* Type tabs */}
           <div className="med-type-tabs">
-            {[
-              { id: 'photo', label: 'Photo', icon: <IconImage /> },
-              { id: 'poster', label: 'Poster', icon: <IconImage /> },
-              { id: 'live', label: 'Live Stream', icon: <IconYoutube /> },
-              { id: 'video', label: 'Video Clip', icon: <IconVideo /> },
-              { id: 'shorts', label: 'Shorts', icon: <IconYoutube /> }
-            ].map(t => (
+            {TYPES.map(({ id, label, Icon }) => (
               <button
-                key={t.id}
+                key={id}
                 type="button"
-                className={`med-type-btn ${mediaType === t.id ? 'active' : ''}`}
-                onClick={() => { setMediaType(t.id); setLink(''); setSelectedFiles([]); setImagePreviews([]) }}
+                className={'med-type-btn' + (mediaType === id ? ' active' : '')}
+                onClick={() => { setMediaType(id); setLink(''); setSelectedFiles([]); setImagePreviews([]) }}
               >
-                {t.icon}
-                <span>{t.label}</span>
+                <Icon s={15} /><span>{label}</span>
               </button>
             ))}
           </div>
 
+          {/* Form */}
           <form onSubmit={handleSubmit} className="med-form">
-            <div className="med-field">
-              <label className="med-label">Title / Caption (Optional)</label>
-              <textarea
-                className="med-input med-textarea"
-                rows={2}
-                placeholder="Write an optional caption or title..."
-                value={caption}
-                onChange={e => setCaption(e.target.value)}
-                maxLength={200}
-              />
-            </div>
 
-            {(mediaType === 'photo' || mediaType === 'poster') && (
+            {/* Competition tag — only for non-photo types */}
+            {mediaType !== 'photo' && competitions.length > 0 && (
+              <div className="med-field">
+                <label className="med-label">Competition</label>
+                <select className="med-input med-select" value={compTag} onChange={e => setCompTag(e.target.value)}>
+                  <option value="">None</option>
+                  {competitions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {isImg && (
               <>
-                {/* PNG Frame Overlay Toggle (if overlay exists, photo tab only) */}
                 {mediaType === 'photo' && (overlays.overlay34 || overlays.overlay43) && (
-                  <div className="med-field" style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#fff' }}>
-                      <input
-                        type="checkbox"
-                        checked={applyOverlay}
-                        onChange={e => setApplyOverlay(e.target.checked)}
-                        style={{ accentColor: '#ef4444', width: '16px', height: '16px', cursor: 'pointer' }}
-                      />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <IconLayers />
-                        <span>Attach Event PNG Frame Overlay</span>
-                      </div>
-                    </label>
-                  </div>
+                  <label className="med-check-row">
+                    <input type="checkbox" checked={applyOverlay} onChange={e => setApplyOverlay(e.target.checked)} />
+                    <IconLayers s={13} />
+                    Apply PNG frame overlay
+                  </label>
                 )}
 
-                {/* Aspect Ratio Selector (Photo only) */}
                 {mediaType === 'photo' && (
                   <div className="med-field">
-                    <label className="med-label">Select Aspect Ratio</label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <label className="med-label">Aspect ratio</label>
+                    <div className="med-ratio-row">
                       {[
-                        { id: 'original', label: 'Original' },
-                        { id: '4:3', label: '4:3 (Landscape)' },
-                        { id: '3:4', label: '3:4 (Portrait)' }
+                        { id: 'auto',     txt: 'Auto' },
+                        { id: '4:3',      txt: '4:3' },
+                        { id: '3:4',      txt: '3:4' },
+                        { id: 'original', txt: 'Original' },
                       ].map(r => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => setAspectRatio(r.id)}
-                          style={{
-                            flex: 1,
-                            padding: '8px 10px',
-                            borderRadius: '8px',
-                            border: aspectRatio === r.id ? '1px solid #B8193C' : '1px solid rgba(255,255,255,0.08)',
-                            background: aspectRatio === r.id ? 'rgba(184, 25, 60, 0.15)' : 'rgba(255,255,255,0.03)',
-                            color: aspectRatio === r.id ? '#ff6b8a' : 'rgba(255,255,255,0.6)',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            fontFamily: 'inherit',
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          {r.label}
+                        <button key={r.id} type="button"
+                          className={'med-ratio-btn' + (aspectRatio === r.id ? ' active' : '')}
+                          onClick={() => setAspectRatio(r.id)}>
+                          {r.txt}
                         </button>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div className="med-field">
-                  <label className="med-label">{mediaType === 'poster' ? 'Poster Upload' : 'Photos Upload'} (Multiple allowed)</label>
-                  <div className="med-upload-zone">
-                    <label className="med-upload-label">
-                      <IconUpload />
-                      <span className="med-upload-title">Choose File(s)</span>
-                      <span className="med-upload-sub">Supports JPEG, PNG</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple={true}
-                        onChange={handleImageChange}
-                        style={{ display: 'none' }}
-                      />
-                    </label>
-                  </div>
+                {/* Drop zone */}
+                <div className="med-drop" onClick={() => fileInputRef.current?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); handleImageChange({ target: { files: Array.from(e.dataTransfer.files), value: '' } }) }}>
+                  <IconUpload s={22} />
+                  <span className="med-drop-title">Click or drag images here</span>
+                  <span className="med-drop-sub">JPEG, PNG — multiple files allowed</span>
+                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} style={{ display: 'none' }} />
                 </div>
 
-                {/* Previews List */}
+                {/* Preview grid */}
                 {imagePreviews.length > 0 && (
                   <div className="med-field">
-                    <label className="med-label">Selected Files ({imagePreviews.length})</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px', maxHeight: '180px', overflowY: 'auto', padding: '4px' }}>
-                      {imagePreviews.map((imgObj, idx) => (
-                        <div key={idx} style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                          <img src={imgObj.thumbUrl || imgObj.fullUrl || imgObj} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          <button
-                            type="button"
-                            onClick={() => removeSelectedFile(idx)}
-                            style={{
-                              position: 'absolute',
-                              top: '2px',
-                              right: '2px',
-                              width: '18px',
-                              height: '18px',
-                              borderRadius: '50%',
-                              background: 'rgba(0,0,0,0.7)',
-                              color: '#fff',
-                              border: 'none',
-                              fontSize: '10px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
-                            ✕
-                          </button>
+                    <div className="med-field-hd">
+                      <label className="med-label">{imagePreviews.length} file{imagePreviews.length > 1 ? 's' : ''} ready</label>
+                      <button type="button" className="med-text-btn" onClick={() => setSelectedFiles([])}>Clear all</button>
+                    </div>
+                    <div className="med-preview-grid">
+                      {imagePreviews.map((p, i) => (
+                        <div key={i} className="med-preview-card">
+                          <div className="med-preview-ratio" style={{ paddingTop: ratioPaddingTop(p.outRatio, p.tw, p.th) }}>
+                            <img src={p.thumbUrl || p.fullUrl} alt="" />
+                            <button type="button" className="med-preview-rm" onClick={() => removeFile(i)} title="Remove">
+                              <IconX s={10} />
+                            </button>
+                            <span className="med-preview-chip">{p.outRatio}</span>
+                            {applyOverlay && mediaType === 'photo' && (
+                              <span className={'med-preview-overlay-chip' + (p.overlayApplied ? ' on' : ' off')}>
+                                {p.overlayApplied ? 'Frame' : 'No frame'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
               </>
-              )}
+            )}
 
-            {(mediaType !== 'photo' && mediaType !== 'poster') && (
+            {!isImg && (
               <div className="med-field">
                 <label className="med-label">
-                  {mediaType === 'live' ? 'YouTube Live Link' : mediaType === 'shorts' ? 'YouTube Shorts Link' : 'YouTube Video Link'}
+                  {mediaType === 'live' ? 'YouTube Live URL' : mediaType === 'shorts' ? 'YouTube Shorts URL' : 'YouTube URL'}
                 </label>
-                <input
-                  type="url"
-                  className="med-input"
-                  placeholder="https://www.youtube.com/watch?v=... or shorts/..."
-                  value={link}
-                  onChange={e => setLink(e.target.value)}
-                  required
-                />
-                {link && !getYoutubeId(link) && (
-                  <p className="med-field-warning">⚠️ Please check if this is a valid YouTube link</p>
+                <input type="url" className="med-input" placeholder="https://youtube.com/…"
+                  value={link} onChange={e => setLink(e.target.value)} required />
+                {link && !getYtId(link) && (
+                  <span className="med-warn-row"><IconWarn s={14} /> Invalid YouTube URL</span>
                 )}
               </div>
             )}
 
-
-
-            <button
-              type="submit"
-              className="med-submit-btn"
-              disabled={uploading}
-            >
-              {uploading ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                  <div className="spin" style={{ width: 14, height: 14, borderTopColor: '#fff' }} />
-                  <span>Processing...</span>
-                </div>
-              ) : 'Publish Live Updates'}
+            <button type="submit" className="med-submit" disabled={uploading}>
+              {uploading
+                ? <><div className="med-spin" /> Processing…</>
+                : <><IconUpload s={15} /> Publish</>}
             </button>
           </form>
         </section>
 
-        {/* Right Side: Uploaded Feed separated by type sections */}
-        <section className="med-card med-feed-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="med-feed-header" style={{ marginBottom: 0 }}>
-            <h2 className="med-section-title" style={{ margin: 0 }}>Live Gallery Feed</h2>
-            <span className="med-badge">{mediaFeed.length} items</span>
-          </div>
+        {/* ── Library Panel ────────────────────────── */}
+        <section className={'med-panel med-library-panel' + (activePanel === 'library' ? ' mob-visible' : '')}>
 
-          {/* 1. Live Broadcasts Subsection */}
-          <div className="med-feed-subsection">
-            <h3 style={{ fontSize: '11px', color: '#ff6b8a', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', margin: '0 0 10px 0' }}>
-              🔴 Live Broadcasts ({mediaFeed.filter(i => i.type === 'live').length})
-            </h3>
-            <div className="med-feed-list" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-              {renderFeedList(mediaFeed.filter(i => i.type === 'live'))}
+          <div className="med-panel-head">
+            <div className="med-panel-head-left">
+              <h2 className="med-panel-title">Library</h2>
+              <span className="med-count-badge">{filtered.length}</span>
+            </div>
+            <div className="med-panel-head-right">
+              {bulkMode ? (
+                <>
+                  <button type="button" className="med-pill"
+                    onClick={selectedItems.size === filtered.length ? clearSel : selectAll}>
+                    <IconSelAll s={12} />
+                    {selectedItems.size === filtered.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                  <button type="button" className="med-pill med-pill--danger"
+                    disabled={!selectedItems.size}
+                    onClick={() => setConfirmDel('bulk')}>
+                    <IconTrash s={12} />
+                    Delete {selectedItems.size > 0 ? '(' + selectedItems.size + ')' : ''}
+                  </button>
+                  <button type="button" className="med-icon-btn" onClick={() => { setBulkMode(false); clearSel() }} title="Cancel">
+                    <IconX s={14} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="med-icon-btn" onClick={fetchMedia} title="Refresh"><IconRefresh /></button>
+                  <button type="button" className="med-pill" onClick={() => setBulkMode(true)}><IconSelAll s={12} /> Select</button>
+                </>
+              )}
             </div>
           </div>
 
-          {/* 2. Photos Subsection */}
-          <div className="med-feed-subsection">
-            <h3 style={{ fontSize: '11px', color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', margin: '0 0 10px 0' }}>
-              📸 Uploaded Photos ({mediaFeed.filter(i => i.type === 'photo').length})
-            </h3>
-            <div className="med-feed-list" style={{ maxHeight: '250px', overflowY: 'auto' }}>
-              {renderFeedList(mediaFeed.filter(i => i.type === 'photo'))}
-            </div>
+          {/* Search */}
+          <div className="med-search-wrap">
+            <IconSearch s={14} />
+            <input className="med-search" type="text" placeholder="Search captions…"
+              value={libSearch} onChange={e => { setLibSearch(e.target.value); setCurrentPage(1) }} />
+            {libSearch && (
+              <button type="button" className="med-search-clr" onClick={() => setLibSearch('')}><IconX s={11} /></button>
+            )}
           </div>
 
-          {/* 3. Posters Subsection */}
-          <div className="med-feed-subsection">
-            <h3 style={{ fontSize: '11px', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', margin: '0 0 10px 0' }}>
-              🖼️ Event Posters ({mediaFeed.filter(i => i.type === 'poster').length})
-            </h3>
-            <div className="med-feed-list" style={{ maxHeight: '250px', overflowY: 'auto' }}>
-              {renderFeedList(mediaFeed.filter(i => i.type === 'poster'))}
-            </div>
+          {/* Filter tabs */}
+          <div className="med-filter-tabs">
+            {FILTERS.map(f => {
+              const cnt = f.id === 'all' ? mediaFeed.length : mediaFeed.filter(i => i.type === f.id).length
+              return (
+                <button key={f.id} type="button"
+                  className={'med-filter-tab' + (libFilter === f.id ? ' active' : '')}
+                  onClick={() => { setLibFilter(f.id); setCurrentPage(1) }}>
+                  {f.label}
+                  {cnt > 0 && <span className="med-filter-num">{cnt}</span>}
+                </button>
+              )
+            })}
           </div>
 
-          {/* 4. Videos & Shorts Subsection */}
-          <div className="med-feed-subsection">
-            <h3 style={{ fontSize: '11px', color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px', margin: '0 0 10px 0' }}>
-              🎥 Videos &amp; Shorts ({mediaFeed.filter(i => i.type === 'video' || i.type === 'shorts').length})
-            </h3>
-            <div className="med-feed-list" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-              {renderFeedList(mediaFeed.filter(i => i.type === 'video' || i.type === 'shorts'))}
+          {/* Grid */}
+          {paged.length === 0 ? (
+            <div className="med-empty">
+              <IconImage s={28} />
+              <p>{libSearch ? 'No results.' : 'No media here yet.'}</p>
             </div>
-          </div>
+          ) : (
+            <div className="med-lib-grid">
+              {paged.map(item => {
+                const isPhoto = item.type === 'photo' || item.type === 'poster'
+                const ytId = !isPhoto ? getYtId(item.url) : null
+                const comp = competitions.find(c => c.id === item.competition_id)
+                const sel = selectedItems.has(item.id)
+                return (
+                  <div key={item.id}
+                    className={'med-lib-card' + (sel ? ' selected' : '') + (bulkMode ? ' bulk' : '')}
+                    onClick={bulkMode ? () => toggleSel(item.id) : undefined}>
+                    <div className="med-lib-thumb-box">
+                      {isPhoto
+                        ? <img src={item.thumb_url} alt="" className="med-lib-thumb" loading="lazy" />
+                        : ytId
+                          ? <><img src={'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg'} alt="" className="med-lib-thumb" loading="lazy" />
+                              <div className="med-lib-play"><IconPlay s={16} /></div></>
+                          : <div className="med-lib-thumb-fallback"><IconVideo s={22} /></div>
+                      }
+                      <span className={'med-lib-badge type-' + item.type}>{item.type}</span>
+                      {bulkMode && (
+                        <div className={'med-lib-check' + (sel ? ' on' : '')}>{sel && <IconCheck s={10} />}</div>
+                      )}
+                      {!bulkMode && (
+                        <button type="button" className="med-lib-del"
+                          onClick={e => { e.stopPropagation(); setConfirmDel(item.id) }} title="Delete">
+                          <IconTrash s={12} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="med-lib-info">
+                      <p className="med-lib-caption">{item.caption || <em>No caption</em>}</p>
+                      <div className="med-lib-meta">
+                        {comp && <span className="med-lib-comp"><IconTag s={9} /> {comp.name}</span>}
+                        <span className="med-lib-time">{relTime(item.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="med-pager">
+              <button type="button" className="med-page-btn" disabled={page <= 1} onClick={() => setCurrentPage(p => p - 1)}>
+                <IconChevL />
+              </button>
+              <span className="med-page-info">Page {page} of {totalPages}</span>
+              <button type="button" className="med-page-btn" disabled={page >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+                <IconChevR />
+              </button>
+            </div>
+          )}
         </section>
-
       </main>
 
-      {/* Toast Alert */}
-      {toast && (
-        <div className={`med-toast ${toast.type}`}>
-          <span>{toast.message}</span>
-        </div>
-      )}
+      {/* Toast */}
+      {toast && <div className={'med-toast ' + toast.type}>{toast.msg}</div>}
 
-      {/* Delete Confirmation Modal */}
-      {itemToDelete && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: '#121218',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '380px',
-            padding: '24px',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8)',
-            textAlign: 'center',
-            animation: 'medModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
-          }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.12)',
-              color: '#ef4444',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px auto'
-            }}>
-              <IconTrash />
-            </div>
-
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '700', color: '#fff' }}>
-              Delete Media Item?
+      {/* Delete confirm */}
+      {confirmDel && (
+        <div className="med-modal-bg">
+          <div className="med-modal">
+            <div className="med-modal-icon"><IconWarn s={24} /></div>
+            <h3 className="med-modal-title">
+              {confirmDel === 'bulk' ? 'Delete ' + selectedItems.size + ' items?' : 'Delete this item?'}
             </h3>
-            <p style={{ margin: '0 0 24px 0', fontSize: '13px', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.5' }}>
-              Are you sure you want to delete this update? This action cannot be undone.
-            </p>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                type="button"
-                onClick={() => setItemToDelete(null)}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: '#ef4444',
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
-                  transition: 'all 0.15s'
-                }}
-              >
-                Delete
+            <p className="med-modal-desc">Files will be permanently removed from storage. This cannot be undone.</p>
+            <div className="med-modal-btns">
+              <button type="button" className="med-modal-cancel" onClick={() => setConfirmDel(null)}>Cancel</button>
+              <button type="button" className="med-modal-del" onClick={handleConfirmDelete}>
+                <IconTrash s={13} /> Delete
               </button>
             </div>
           </div>

@@ -1,584 +1,386 @@
 /* src/pages/media/MediaDashboard.css */
-/* Self-contained — no external CSS variables required */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-/* ══════════════════════════════════════════
-   ROOT
-══════════════════════════════════════════ */
+@keyframes spin    { to { transform: rotate(360deg) } }
+@keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(10px) } to { opacity:1; transform:translateX(-50%) translateY(0) } }
+@keyframes modalPop{ from { opacity:0; transform:scale(.94) } to { opacity:1; transform:scale(1) } }
+
+/* ── Root ─────────────────────────────────────────────── */
 .med-root {
-  background: #0f0d0e;
-  color: #f5f5f5;
-  min-height: 100vh;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  display: flex;
-  flex-direction: column;
+  background:#0f0d0e; color:#f0f0f0; min-height:100vh;
+  font-family:'Inter',-apple-system,sans-serif;
+  display:flex; flex-direction:column;
 }
 
-/* ══════════════════════════════════════════
-   TOP BAR
-══════════════════════════════════════════ */
+/* ── Topbar ───────────────────────────────────────────── */
 .med-topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 24px;
-  height: 56px;
-  background: rgba(14, 12, 12, 0.97);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  flex-shrink: 0;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 20px; height:52px; flex-shrink:0;
+  background:rgba(10,8,10,.97);
+  border-bottom:1px solid rgba(255,255,255,.07);
+  position:sticky; top:0; z-index:200;
+  backdrop-filter:blur(12px);
+}
+.med-topbar-left  { display:flex; align-items:center; gap:10px }
+.med-logo-mark    { height:18px; width:18px; filter:brightness(0) invert(1) }
+.med-logo-text    { height:13px; max-width:76px }
+.med-topbar-div   { width:1px; height:14px; background:rgba(255,255,255,.1) }
+.med-topbar-name  { font-size:12px; font-weight:600; color:rgba(255,255,255,.75); letter-spacing:.2px }
+.med-signout-btn  {
+  display:flex; align-items:center; gap:6px;
+  background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2);
+  color:#f87171; padding:6px 13px; border-radius:999px;
+  font-size:11px; font-weight:600; letter-spacing:.3px; cursor:pointer;
+  font-family:inherit; transition:all .2s;
+}
+.med-signout-btn:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.4) }
+
+/* ── Mobile tabs ─────────────────────────────────────── */
+.med-mob-tabs {
+  display:none; position:sticky; top:52px; z-index:150;
+  background:rgba(14,12,12,.98);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.med-mob-tab {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  gap:6px; padding:11px 8px;
+  font-size:12px; font-weight:600; color:rgba(255,255,255,.45);
+  background:transparent; border:none; border-bottom:2px solid transparent;
+  cursor:pointer; font-family:inherit; transition:all .2s;
+}
+.med-mob-tab.active { color:#ff6b8a; border-bottom-color:#B8193C }
+.med-mob-count {
+  background:rgba(184,25,60,.2); color:#ff6b8a;
+  font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px;
 }
 
-.med-topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* ── Main layout ─────────────────────────────────────── */
+.med-main {
+  display:grid; grid-template-columns:380px 1fr;
+  gap:0; flex:1; min-height:0;
+}
+.med-panel { display:flex; flex-direction:column; gap:16px; padding:20px; overflow-y:auto }
+.med-upload-panel  { border-right:1px solid rgba(255,255,255,.06); position:sticky; top:52px; max-height:calc(100vh - 52px); overflow-y:auto }
+.med-library-panel { background:rgba(0,0,0,.15) }
+
+.med-panel-head {
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:8px; flex-shrink:0;
+}
+.med-panel-head-left  { display:flex; align-items:center; gap:8px }
+.med-panel-head-right { display:flex; align-items:center; gap:6px }
+.med-panel-title      { font-size:14px; font-weight:700; color:#fff; margin:0 }
+
+/* ── Shared pill / icon buttons ─────────────────────── */
+.med-pill {
+  display:flex; align-items:center; gap:5px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.75); padding:5px 11px; border-radius:999px;
+  font-size:11px; font-weight:600; cursor:pointer; font-family:inherit;
+  transition:all .15s; white-space:nowrap;
+}
+.med-pill:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2) }
+.med-pill:disabled { opacity:.4; cursor:not-allowed }
+.med-pill--danger  { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.25); color:#f87171 }
+.med-pill--danger:hover:not(:disabled) { background:rgba(239,68,68,.2) }
+.med-dot { width:6px; height:6px; border-radius:50%; background:#10b981; flex-shrink:0 }
+
+.med-icon-btn {
+  width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
+  color:rgba(255,255,255,.6); border-radius:8px; cursor:pointer;
+  font-family:inherit; transition:all .15s;
+}
+.med-icon-btn:hover { background:rgba(255,255,255,.09); color:#fff }
+.med-count-badge {
+  background:rgba(184,25,60,.15); border:1px solid rgba(184,25,60,.25);
+  color:#ff6b8a; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px;
 }
 
-.med-topbar-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  letter-spacing: 0.2px;
-}
-
-.med-logout-btn {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  color: #f87171;
-  padding: 7px 16px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.2s ease;
-}
-
-.med-logout-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.45);
-  transform: translateY(-1px);
-}
-
-/* ══════════════════════════════════════════
-   MAIN LAYOUT
-══════════════════════════════════════════ */
-.med-container {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 20px;
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-  flex: 1;
-}
-
-@media (max-width: 900px) {
-  .med-container {
-    grid-template-columns: 1fr;
-    padding: 16px;
-    gap: 16px;
-  }
-}
-
-/* ══════════════════════════════════════════
-   CARDS
-══════════════════════════════════════════ */
-.med-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 14px;
-  padding: 24px;
-}
-
-.med-form-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  align-self: start;
-  position: sticky;
-  top: 76px;
-}
-
-.med-feed-section {
-  display: flex;
-  flex-direction: column;
-  min-height: 400px;
-}
-
-.med-section-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  margin: 0 0 20px 0;
-  letter-spacing: -0.2px;
-}
-
-/* ══════════════════════════════════════════
-   MEDIA TYPE TABS
-══════════════════════════════════════════ */
+/* ── Type tabs ──────────────────────────────────────── */
 .med-type-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  margin-bottom: 20px;
+  display:grid; grid-template-columns:repeat(5,1fr);
+  gap:5px; flex-shrink:0;
 }
-
 .med-type-btn {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.45);
-  border-radius: 9px;
-  padding: 10px 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s ease;
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
+  color:rgba(255,255,255,.4); border-radius:9px; padding:9px 4px;
+  font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+  cursor:pointer; font-family:inherit; transition:all .15s;
 }
+.med-type-btn:hover  { background:rgba(255,255,255,.07); color:rgba(255,255,255,.8) }
+.med-type-btn.active { background:rgba(184,25,60,.15); border-color:#B8193C; color:#ff6b8a }
 
-.med-type-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.med-type-btn.active {
-  background: rgba(184, 25, 60, 0.15);
-  border-color: #B8193C;
-  color: #ff6b8a;
-}
-
-/* ══════════════════════════════════════════
-   FORM
-══════════════════════════════════════════ */
-.med-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.med-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
+/* ── Form ───────────────────────────────────────────── */
+.med-form  { display:flex; flex-direction:column; gap:13px }
+.med-field { display:flex; flex-direction:column; gap:5px }
+.med-field-hd { display:flex; align-items:center; justify-content:space-between }
 .med-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1.1px;
+  color:rgba(255,255,255,.38);
 }
-
-.med-input,
-.med-textarea,
-.med-select {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 9px;
-  padding: 10px 14px;
-  color: #fff;
-  font-size: 13px;
-  font-family: inherit;
-  box-sizing: border-box;
-  outline: none;
-  transition: border-color 0.2s, background 0.2s;
+.med-label-opt { font-weight:500; opacity:.7 }
+.med-text-btn {
+  background:none; border:none; color:rgba(255,255,255,.35);
+  font-size:10px; font-weight:600; cursor:pointer; font-family:inherit;
+  padding:2px 4px; border-radius:4px; transition:color .15s;
 }
+.med-text-btn:hover { color:rgba(255,255,255,.7) }
 
-.med-input:focus,
-.med-textarea:focus,
-.med-select:focus {
-  border-color: #B8193C;
-  background: rgba(184, 25, 60, 0.05);
+.med-input,.med-textarea,.med-select {
+  width:100%; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
+  border-radius:9px; padding:9px 13px; color:#fff; font-size:13px;
+  font-family:inherit; box-sizing:border-box; outline:none; transition:border-color .2s;
 }
-
-.med-input::placeholder,
-.med-textarea::placeholder {
-  color: rgba(255, 255, 255, 0.2);
+.med-input:focus,.med-textarea:focus,.med-select:focus {
+  border-color:#B8193C; background:rgba(184,25,60,.05);
 }
+.med-input::placeholder,.med-textarea::placeholder { color:rgba(255,255,255,.2) }
+.med-textarea { resize:vertical; min-height:68px; line-height:1.5 }
+.med-select option { background:#1a1015 }
 
-.med-textarea {
-  resize: vertical;
-  min-height: 72px;
-  line-height: 1.5;
+.med-check-row {
+  display:flex; align-items:center; gap:8px;
+  font-size:12px; font-weight:500; color:rgba(255,255,255,.7); cursor:pointer;
+  background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06);
+  border-radius:8px; padding:9px 12px;
 }
+.med-check-row input { accent-color:#B8193C; width:14px; height:14px }
 
-/* ══════════════════════════════════════════
-   UPLOAD ZONE
-══════════════════════════════════════════ */
-.med-upload-zone {
-  border: 2px dashed rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  overflow: hidden;
-  transition: border-color 0.2s;
+.med-ratio-row { display:grid; grid-template-columns:repeat(4,1fr); gap:5px }
+.med-ratio-btn {
+  padding:8px 4px; border-radius:8px; font-size:10px; font-weight:700;
+  border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.03);
+  color:rgba(255,255,255,.5); cursor:pointer; font-family:inherit; transition:all .15s;
 }
+.med-ratio-btn:hover  { background:rgba(255,255,255,.07) }
+.med-ratio-btn.active { border-color:#B8193C; background:rgba(184,25,60,.15); color:#ff6b8a }
 
-.med-upload-zone:hover {
-  border-color: rgba(184, 25, 60, 0.5);
+/* ── Drop zone ──────────────────────────────────────── */
+.med-drop {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:7px; padding:24px 16px;
+  border:2px dashed rgba(255,255,255,.1); border-radius:10px;
+  color:rgba(255,255,255,.35); cursor:pointer; transition:all .2s;
 }
+.med-drop:hover { border-color:rgba(184,25,60,.5); background:rgba(184,25,60,.03); color:rgba(255,255,255,.6) }
+.med-drop-title { font-size:12px; font-weight:600; color:rgba(255,255,255,.65) }
+.med-drop-sub   { font-size:11px; color:rgba(255,255,255,.25) }
 
-.med-upload-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 28px 16px;
-  cursor: pointer;
-  color: rgba(255, 255, 255, 0.35);
-  transition: all 0.2s;
+/* ── Preview grid ───────────────────────────────────── */
+.med-preview-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:7px }
+.med-preview-card { border-radius:7px; overflow:hidden }
+.med-preview-ratio { position:relative; width:100% }
+.med-preview-ratio img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block }
+.med-preview-rm {
+  position:absolute; top:4px; right:4px; width:18px; height:18px;
+  border-radius:50%; background:rgba(0,0,0,.75); border:1px solid rgba(255,255,255,.2);
+  color:#fff; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; font-family:inherit; transition:background .15s;
 }
-
-.med-upload-label:hover {
-  color: rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.03);
+.med-preview-rm:hover { background:rgba(239,68,68,.9) }
+.med-preview-chip {
+  position:absolute; bottom:4px; left:4px;
+  background:rgba(0,0,0,.72); color:rgba(255,255,255,.8);
+  font-size:8px; font-weight:700; padding:2px 5px; border-radius:3px; letter-spacing:.5px;
 }
-
-.med-upload-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+.med-preview-overlay-chip {
+  position:absolute; bottom:4px; right:4px;
+  font-size:8px; font-weight:700; padding:2px 6px; border-radius:3px; letter-spacing:.4px;
 }
+.med-preview-overlay-chip.on  { background:rgba(16,185,129,.8); color:#fff }
+.med-preview-overlay-chip.off { background:rgba(0,0,0,.6); color:rgba(255,255,255,.35) }
 
-.med-upload-sub {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.25);
+/* ── Overlay box ─────────────────────────────────────── */
+.med-overlay-box {
+  background:rgba(0,0,0,.25); border:1px dashed rgba(255,255,255,.12);
+  border-radius:11px; padding:14px;
 }
-
-.med-preview-box {
-  position: relative;
+.med-overlay-desc { font-size:11px; color:rgba(255,255,255,.4); margin:0 0 12px 0; line-height:1.5 }
+.med-overlay-slots { display:grid; grid-template-columns:1fr 1fr; gap:10px }
+.med-overlay-slot { background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06); border-radius:8px; padding:9px }
+.med-overlay-slot-hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px }
+.med-overlay-slot-hd span { font-size:10px; font-weight:700; color:rgba(255,255,255,.75) }
+.med-overlay-slot-hd code { font-size:8px; color:rgba(255,255,255,.35); background:rgba(255,255,255,.05); padding:2px 5px; border-radius:3px }
+.med-overlay-img-wrap { position:relative }
+.med-overlay-img-wrap img { width:100%; height:72px; object-fit:contain; background:#000; border-radius:5px; display:block }
+.med-overlay-rm {
+  position:absolute; top:4px; right:4px;
+  display:flex; align-items:center; gap:3px;
+  background:rgba(239,68,68,.85); border:none; color:#fff;
+  border-radius:4px; padding:2px 7px; font-size:10px; font-weight:600; cursor:pointer; font-family:inherit;
 }
-
-.med-image-preview {
-  width: 100%;
-  max-height: 200px;
-  object-fit: cover;
-  display: block;
+.med-overlay-drop {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:5px; padding:16px 6px; border:1px dashed rgba(255,255,255,.14);
+  border-radius:6px; cursor:pointer; color:rgba(255,255,255,.38); font-size:10px; font-weight:600;
+  transition:all .15s;
 }
+.med-overlay-drop:hover { border-color:rgba(184,25,60,.4); color:rgba(255,255,255,.7) }
 
-.med-clear-img-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.2s;
+/* ── Submit ──────────────────────────────────────────── */
+.med-submit {
+  width:100%; background:#B8193C; border:none; color:#fff;
+  border-radius:9px; padding:11px 16px; font-size:13px; font-weight:700;
+  cursor:pointer; font-family:inherit; display:flex; align-items:center;
+  justify-content:center; gap:7px; transition:all .2s;
 }
+.med-submit:hover:not(:disabled) { background:#cf1e44; transform:translateY(-1px); box-shadow:0 6px 20px rgba(184,25,60,.4) }
+.med-submit:disabled { opacity:.5; cursor:not-allowed; transform:none }
+.med-spin { width:13px; height:13px; border:2px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite }
 
-.med-clear-img-btn:hover {
-  background: rgba(239, 68, 68, 0.8);
-  border-color: transparent;
+/* ── Warn row ────────────────────────────────────────── */
+.med-warn-row { display:flex; align-items:center; gap:5px; font-size:11px; color:#f59e0b; margin-top:2px }
+
+/* ── Library: search ─────────────────────────────────── */
+.med-search-wrap {
+  display:flex; align-items:center; gap:8px;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
+  border-radius:9px; padding:8px 12px; flex-shrink:0;
 }
+.med-search { flex:1; background:none; border:none; outline:none; color:#fff; font-size:12px; font-family:inherit }
+.med-search::placeholder { color:rgba(255,255,255,.25) }
+.med-search-clr { background:none; border:none; color:rgba(255,255,255,.4); cursor:pointer; display:flex; align-items:center; padding:0 }
+.med-search-clr:hover { color:#fff }
 
-.med-field-warning {
-  font-size: 11px;
-  color: #f59e0b;
-  margin: 2px 0 0 0;
+/* ── Library: filter tabs ────────────────────────────── */
+.med-filter-tabs { display:flex; gap:5px; flex-wrap:wrap; flex-shrink:0 }
+.med-filter-tab {
+  display:flex; align-items:center; gap:5px;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07);
+  color:rgba(255,255,255,.45); padding:5px 11px; border-radius:999px;
+  font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s;
 }
+.med-filter-tab:hover  { background:rgba(255,255,255,.08); color:rgba(255,255,255,.8) }
+.med-filter-tab.active { background:rgba(184,25,60,.15); border-color:#B8193C; color:#ff6b8a }
+.med-filter-num { background:rgba(255,255,255,.12); font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px }
 
-/* ══════════════════════════════════════════
-   SUBMIT BUTTON
-══════════════════════════════════════════ */
-.med-submit-btn {
-  width: 100%;
-  background: #B8193C;
-  color: #fff;
-  border: none;
-  border-radius: 9px;
-  padding: 12px 20px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-  letter-spacing: 0.2px;
+/* ── Library: grid ───────────────────────────────────── */
+.med-lib-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:10px;
 }
-
-.med-submit-btn:hover:not(:disabled) {
-  background: #d01f48;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(184, 25, 60, 0.4);
+.med-lib-card {
+  background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.07);
+  border-radius:10px; overflow:hidden; transition:all .15s;
 }
+.med-lib-card.bulk { cursor:pointer }
+.med-lib-card.bulk:hover { border-color:rgba(255,255,255,.18) }
+.med-lib-card.selected { border-color:#B8193C; background:rgba(184,25,60,.08) }
 
-.med-submit-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  transform: none;
+.med-lib-thumb-box { position:relative; aspect-ratio:4/3; background:#111; overflow:hidden }
+.med-lib-thumb { position:absolute; inset:0; width:100%; height:100%; object-fit:cover }
+.med-lib-thumb-fallback { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,.2) }
+.med-lib-play  { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.45); color:#fff }
+.med-lib-badge {
+  position:absolute; top:6px; left:6px;
+  font-size:8px; font-weight:800; padding:2px 6px; border-radius:3px;
+  text-transform:uppercase; letter-spacing:.5px;
+  background:rgba(0,0,0,.6); color:rgba(255,255,255,.8); backdrop-filter:blur(4px);
 }
+.med-lib-badge.type-live   { color:#f87171 }
+.med-lib-badge.type-video  { color:#a5b4fc }
+.med-lib-badge.type-shorts { color:#fbbf24 }
+.med-lib-badge.type-poster { color:#38bdf8 }
 
-/* ══════════════════════════════════════════
-   FEED HEADER
-══════════════════════════════════════════ */
-.med-feed-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+.med-lib-check {
+  position:absolute; top:6px; right:6px; width:18px; height:18px;
+  border-radius:4px; border:2px solid rgba(255,255,255,.5);
+  background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center;
+  transition:all .15s;
 }
+.med-lib-check.on { background:#B8193C; border-color:#B8193C; color:#fff }
 
-.med-badge {
-  background: rgba(184, 25, 60, 0.15);
-  border: 1px solid rgba(184, 25, 60, 0.3);
-  color: #ff6b8a;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  letter-spacing: 0.3px;
+.med-lib-del {
+  position:absolute; top:6px; right:6px; width:26px; height:26px;
+  border-radius:6px; background:rgba(0,0,0,.65); border:1px solid rgba(255,255,255,.15);
+  color:#f87171; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; font-family:inherit; opacity:0; transition:opacity .15s;
 }
+.med-lib-card:hover .med-lib-del { opacity:1 }
 
-/* ══════════════════════════════════════════
-   FEED LIST
-══════════════════════════════════════════ */
-.med-feed-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
+.med-lib-info { padding:8px 9px 9px }
+.med-lib-caption {
+  font-size:11px; font-weight:500; color:rgba(255,255,255,.75); margin:0 0 4px 0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+.med-lib-caption em { color:rgba(255,255,255,.25); font-style:normal }
+.med-lib-meta { display:flex; align-items:center; gap:6px; justify-content:space-between }
+.med-lib-comp { font-size:9px; color:rgba(255,255,255,.35); display:flex; align-items:center; gap:3px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.med-lib-time { font-size:9px; color:rgba(255,255,255,.25); flex-shrink:0 }
 
-.med-feed-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 48px 20px;
-  color: rgba(255, 255, 255, 0.25);
-  text-align: center;
+/* ── Empty state ─────────────────────────────────────── */
+.med-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:60px 20px; color:rgba(255,255,255,.2); text-align:center }
+.med-empty p { margin:0; font-size:13px }
+
+/* ── Pagination ──────────────────────────────────────── */
+.med-pager { display:flex; align-items:center; justify-content:center; gap:10px; padding-top:4px; flex-shrink:0 }
+.med-page-btn {
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09);
+  color:rgba(255,255,255,.6); border-radius:8px; cursor:pointer; font-family:inherit; transition:all .15s;
 }
+.med-page-btn:hover:not(:disabled) { background:rgba(255,255,255,.1); color:#fff }
+.med-page-btn:disabled { opacity:.3; cursor:not-allowed }
+.med-page-info { font-size:11px; color:rgba(255,255,255,.45); font-weight:600 }
 
-.med-feed-empty p {
-  margin: 0;
-  font-size: 13px;
-}
-
-/* ══════════════════════════════════════════
-   FEED CARD (List style: row layout)
-══════════════════════════════════════════ */
-.med-feed-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  padding: 10px;
-  transition: all 0.15s ease;
-}
-
-.med-feed-card:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-/* Thumbnail */
-.med-feed-thumbnail-box {
-  width: 80px;
-  height: 60px;
-  border-radius: 7px;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: #1a1215;
-  position: relative;
-}
-
-.med-feed-thumbnail {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.med-thumbnail-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  width: 100%;
-  height: 100%;
-}
-
-.med-play-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  font-size: 16px;
-  color: #fff;
-}
-
-/* Info */
-.med-feed-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.med-feed-top-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.med-badge-type {
-  font-size: 9px;
-  font-weight: 800;
-  padding: 2px 7px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: rgba(184, 25, 60, 0.2);
-  color: #ff6b8a;
-  border: 1px solid rgba(184, 25, 60, 0.3);
-}
-
-.med-badge-type.live {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.35);
-}
-
-.med-badge-type.shorts {
-  background: rgba(234, 179, 8, 0.15);
-  color: #fbbf24;
-  border-color: rgba(234, 179, 8, 0.3);
-}
-
-.med-badge-type.video {
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border-color: rgba(99, 102, 241, 0.3);
-}
-
-.med-feed-time {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.med-feed-caption {
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.75);
-  margin: 0;
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.med-feed-tagged-comp {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
-}
-
-/* Delete Button */
-.med-delete-btn {
-  flex-shrink: 0;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s ease;
-}
-
-.med-delete-btn:hover {
-  background: rgba(239, 68, 68, 0.25);
-  border-color: rgba(239, 68, 68, 0.4);
-  transform: scale(1.05);
-}
-
-/* ══════════════════════════════════════════
-   SPINNER
-══════════════════════════════════════════ */
-.spin {
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ══════════════════════════════════════════
-   TOAST
-══════════════════════════════════════════ */
+/* ── Toast ───────────────────────────────────────────── */
 .med-toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #1a1a1f;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  padding: 12px 24px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  z-index: 9999;
-  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+  background:#1c1820; border:1px solid rgba(255,255,255,.1); color:#fff;
+  padding:11px 22px; border-radius:10px; font-size:13px; font-weight:500;
+  box-shadow:0 8px 32px rgba(0,0,0,.5); z-index:9999; white-space:nowrap;
+  animation:toastIn .3s cubic-bezier(.16,1,.3,1) both;
+}
+.med-toast.success { border-color:rgba(16,185,129,.35); background:rgba(16,185,129,.1); color:#6ee7b7 }
+.med-toast.error   { border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.1); color:#f87171 }
+
+/* ── Modal ───────────────────────────────────────────── */
+.med-modal-bg {
+  position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(8px);
+  display:flex; align-items:center; justify-content:center; z-index:9999; padding:20px;
+}
+.med-modal {
+  background:#16121a; border:1px solid rgba(239,68,68,.25); border-radius:16px;
+  width:100%; max-width:360px; padding:28px 24px; text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.8); animation:modalPop .2s cubic-bezier(.16,1,.3,1);
+}
+.med-modal-icon { display:flex; justify-content:center; margin-bottom:14px; color:#ef4444 }
+.med-modal-title { font-size:17px; font-weight:700; color:#fff; margin:0 0 8px }
+.med-modal-desc  { font-size:12px; color:rgba(255,255,255,.55); line-height:1.6; margin:0 0 22px }
+.med-modal-btns  { display:flex; gap:10px }
+.med-modal-cancel {
+  flex:1; padding:11px; border-radius:9px; border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.05); color:#fff; font-size:13px; font-weight:600;
+  cursor:pointer; font-family:inherit; transition:all .15s;
+}
+.med-modal-cancel:hover { background:rgba(255,255,255,.1) }
+.med-modal-del {
+  flex:1; padding:11px; border-radius:9px; border:none;
+  background:#ef4444; color:#fff; font-size:13px; font-weight:700;
+  cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px;
+  box-shadow:0 4px 14px rgba(239,68,68,.4); transition:all .15s;
+}
+.med-modal-del:hover { background:#f75454 }
+
+/* ── Responsive ─────────────────────────────────────── */
+@media (max-width: 900px) {
+  .med-mob-tabs { display:flex }
+  .med-main { grid-template-columns:1fr; grid-template-rows:1fr }
+  .med-upload-panel  { position:static; max-height:none; display:none }
+  .med-library-panel { display:none }
+  .med-upload-panel.mob-visible  { display:flex }
+  .med-library-panel.mob-visible { display:flex }
 }
 
-.med-toast.success {
-  border-color: rgba(16, 185, 129, 0.35);
-  background: rgba(16, 185, 129, 0.12);
-  color: #6ee7b7;
+@media (max-width: 1100px) and (min-width: 901px) {
+  .med-main { grid-template-columns:340px 1fr }
 }
 
-.med-toast.error {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
-}
-
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+@media (max-width: 640px) {
+  .med-lib-grid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)) }
+  .med-type-tabs { grid-template-columns:repeat(5,1fr) }
+  .med-ratio-row { grid-template-columns:repeat(2,1fr) }
 }

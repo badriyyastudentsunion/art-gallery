@@ -1,5 +1,5 @@
 // src/pages/admin/sections/AnnouncerFlowSection.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../../lib/supabase'
 import '../sections.css'
 
@@ -70,8 +70,9 @@ export default function AnnouncerFlowSection() {
   
   const [revealedByAdmin, setRevealedByAdmin] = useState(false)
   const [suspenseActive, setSuspenseActive] = useState(false)
-  const [threshold, setThreshold] = useState(10)
-  
+  const [revealMilestones, setRevealMilestones] = useState([15, 30])
+  const [revealedMilestone, setRevealedMilestone] = useState(0)
+  const [milestonesInput, setMilestonesInput] = useState('15, 30')
   const [fetching, setFetching] = useState(() => {
     try {
       const c = localStorage.getItem('cache_ann_sequence')
@@ -80,17 +81,13 @@ export default function AnnouncerFlowSection() {
   })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
-  const [simSteps, setSimSteps] = useState([])
+  const [expandedMilestones, setExpandedMilestones] = useState({ 0: true })
+  const [milestoneTargets, setMilestoneTargets] = useState({})
+  const [sortReadyByTeam, setSortReadyByTeam] = useState('')
   
   useEffect(() => {
     fetchInitialData()
   }, [])
-
-  useEffect(() => {
-    if (teams.length > 0 && allComps.length > 0) {
-      calculateSimulation()
-    }
-  }, [sequence, baselinePoints, teams])
 
   async function fetchInitialData() {
     try {
@@ -99,15 +96,22 @@ export default function AnnouncerFlowSection() {
       setTeams(teamsData || [])
 
       // 2. Fetch App Settings
-      const { data: settings } = await supabase.from('app_settings').select('key, value').in('key', ['leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'leaderboard_revealed_by_admin'])
+      const { data: settings } = await supabase.from('app_settings').select('key, value').in('key', ['leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence'])
       const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
-      const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
+      const milestonesSetting = settings?.find(s => s.key === 'leaderboard_reveal_milestones')
+      const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
       const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
-      const revealSetting = settings?.find(s => s.key === 'leaderboard_revealed_by_admin')
 
       setSuspenseActive(activeSetting?.value === 'true')
-      setRevealedByAdmin(revealSetting?.value === 'true')
-      setThreshold(parseInt(threshSetting?.value || '10'))
+      let milList = [15, 30]
+      try {
+        if (milestonesSetting?.value) {
+          milList = JSON.parse(milestonesSetting.value)
+        }
+      } catch (e) {}
+      setRevealMilestones(milList)
+      setMilestonesInput(milList.join(', '))
+      setRevealedMilestone(parseInt(revealedMilestoneSetting?.value || '0'))
 
       // 3. Fetch Competitions and associated data
       const [
@@ -273,51 +277,101 @@ export default function AnnouncerFlowSection() {
     }
   }
 
-  function calculateSimulation() {
-    const steps = []
-    const runningPoints = { ...baselinePoints }
-
+  const milestones = useMemo(() => {
+    if (sequence.length === 0) return []
+    const list = []
     const teamMap = {}
     teams.forEach(t => { teamMap[t.id] = t.name })
 
-    // Initial State (Step 0)
     const getStandings = (pointsObj) => {
       return Object.entries(pointsObj)
         .map(([id, pts]) => ({ id, name: teamMap[id] || '—', points: pts }))
         .sort((a, b) => b.points - a.points)
     }
 
-    let prevLeaderId = null
+    const sortedMils = [...revealMilestones].sort((a, b) => a - b)
+    let prevLimit = 0
 
-    sequence.forEach((comp, idx) => {
-      // Apply simulated points from this competition
-      comp.simulatedPoints.forEach(p => {
-        runningPoints[p.teamId] = (runningPoints[p.teamId] || 0) + p.points
-      })
+    sortedMils.forEach((m, idx) => {
+      if (m <= sequence.length) {
+        const comps = sequence.slice(prevLimit, m)
+        
+        let runningPoints = { ...baselinePoints }
+        sequence.slice(0, m).forEach(comp => {
+          ;(comp.simulatedPoints || []).forEach(p => {
+            runningPoints[p.teamId] = (runningPoints[p.teamId] || 0) + p.points
+          })
+        })
 
-      const standings = getStandings(runningPoints)
-      const leaderId = standings[0]?.id || null
-      let overtake = false
-
-      if (idx > 0 && leaderId && prevLeaderId && leaderId !== prevLeaderId) {
-        overtake = true
+        const standings = getStandings(runningPoints)
+        list.push({
+          index: idx,
+          name: `Milestone ${m}`,
+          startIdx: prevLimit,
+          endIdx: m,
+          comps,
+          standings,
+          milestoneLimit: m
+        })
+        prevLimit = m
       }
-      prevLeaderId = leaderId
-
-      // calculate margin to 2nd place
-      const margin = standings.length > 1 ? standings[0].points - standings[1].points : 0
-
-      steps.push({
-        compName: comp.name,
-        compId: comp.id,
-        standings,
-        overtake,
-        margin
-      })
     })
 
-    setSimSteps(steps)
+    if (prevLimit < sequence.length) {
+      const comps = sequence.slice(prevLimit, sequence.length)
+      let runningPoints = { ...baselinePoints }
+      sequence.forEach(comp => {
+        ;(comp.simulatedPoints || []).forEach(p => {
+          runningPoints[p.teamId] = (runningPoints[p.teamId] || 0) + p.points
+        })
+      })
+      const standings = getStandings(runningPoints)
+      list.push({
+        index: list.length,
+        name: 'Final Standings',
+        startIdx: prevLimit,
+        endIdx: sequence.length,
+        comps,
+        standings,
+        milestoneLimit: sequence.length
+      })
+    }
+
+    return list
+  }, [sequence, revealMilestones, baselinePoints, teams])
+
+  function optimizeMilestone(startIdx, endIdx, milestoneIndex) {
+    const milestoneComps = sequence.slice(startIdx, endIdx)
+    const targetTeamId = milestoneTargets[milestoneIndex]
+
+    if (targetTeamId) {
+      // Sort to maximize targetTeam's points in this milestone
+      milestoneComps.sort((a, b) => {
+        const ptsA = a.simulatedPoints?.find(p => p.teamId === targetTeamId)?.points || 0
+        const ptsB = b.simulatedPoints?.find(p => p.teamId === targetTeamId)?.points || 0
+        return ptsB - ptsA
+      })
+    } else {
+      // Random drama shuffle
+      milestoneComps.sort(() => Math.random() - 0.5)
+    }
+
+    const nextSeq = [...sequence]
+    nextSeq.splice(startIdx, milestoneComps.length, ...milestoneComps)
+    setSequence(nextSeq)
   }
+
+  const sortedReadyComps = useMemo(() => {
+    let list = [...readyComps]
+    if (sortReadyByTeam) {
+      list.sort((a, b) => {
+        const ptsA = a.simulatedPoints?.find(p => p.teamId === sortReadyByTeam)?.points || 0
+        const ptsB = b.simulatedPoints?.find(p => p.teamId === sortReadyByTeam)?.points || 0
+        return ptsB - ptsA
+      })
+    }
+    return list
+  }, [readyComps, sortReadyByTeam])
 
   // Move competition to sequence queue
   function addToSequence(comp) {
@@ -406,16 +460,15 @@ export default function AnnouncerFlowSection() {
     setSequence(bestOrder)
   }
 
-  async function togglePublicReveal() {
-    const nextVal = !revealedByAdmin
+  async function resetRevealedMilestone() {
     setLoading(true)
     try {
-      await supabase.from('app_settings').upsert({ key: 'leaderboard_revealed_by_admin', value: nextVal ? 'true' : 'false' })
-      setRevealedByAdmin(nextVal)
-      setSuccess(nextVal ? 'Leaderboard successfully PUBLISHED & REVEALED to Public!' : 'Leaderboard is now HIDDEN.')
+      await supabase.from('app_settings').upsert({ key: 'leaderboard_revealed_milestone', value: '0' }, { onConflict: 'key' })
+      setRevealedMilestone(0)
+      setSuccess('All milestones successfully hidden/reset!')
       setTimeout(() => setSuccess(''), 3500)
     } catch (err) {
-      console.error("Error updating reveal status:", err)
+      console.error("Error resetting reveal status:", err)
     } finally {
       setLoading(false)
     }
@@ -427,12 +480,20 @@ export default function AnnouncerFlowSection() {
     try {
       const seqIds = sequence.map(c => c.id)
 
+      // Parse milestonesInput
+      const parsedMilestones = milestonesInput
+        .split(',')
+        .map(s => parseInt(s.trim()))
+        .filter(n => !isNaN(n) && n > 0)
+        .sort((a, b) => a - b)
+
       await Promise.all([
-        supabase.from('app_settings').upsert({ key: 'leaderboard_suspense_active', value: suspenseActive ? 'true' : 'false' }),
-        supabase.from('app_settings').upsert({ key: 'leaderboard_reveal_threshold', value: threshold.toString() }),
-        supabase.from('app_settings').upsert({ key: 'announcer_sequence', value: JSON.stringify(seqIds) }),
-        supabase.from('app_settings').upsert({ key: 'leaderboard_revealed_by_admin', value: revealedByAdmin ? 'true' : 'false' })
+        supabase.from('app_settings').upsert({ key: 'leaderboard_suspense_active', value: suspenseActive ? 'true' : 'false' }, { onConflict: 'key' }),
+        supabase.from('app_settings').upsert({ key: 'leaderboard_reveal_milestones', value: JSON.stringify(parsedMilestones) }, { onConflict: 'key' }),
+        supabase.from('app_settings').upsert({ key: 'announcer_sequence', value: JSON.stringify(seqIds) }, { onConflict: 'key' })
       ])
+
+      setRevealMilestones(parsedMilestones)
 
       // Recompute baseline points based on new sequence
       const basePoints = {}
@@ -478,17 +539,39 @@ export default function AnnouncerFlowSection() {
       <div className="list-header" style={{ marginBottom: 20 }}>
         <div>
           <h1 className="list-title">Announcer Flow Manager</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>Sequence ready competitions and simulate suspense outcomes.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>Sequence ready competitions and configure suspense flow.</p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          {success && <span style={{ color: '#2ed573', fontSize: 13, display: 'flex', alignItems: 'center', fontWeight: 600 }}>✓ {success}</span>}
+          {success && <span style={{ color: '#2ed573', fontSize: 13, display: 'flex', alignItems: 'center', fontWeight: 600 }}>{success}</span>}
           <button className="btn-submit" onClick={handleSave} disabled={loading} style={{ background: 'var(--accent-light)', color: '#0e0b07', padding: '0 20px', height: 36, fontSize: 13, fontWeight: 700 }}>
             {loading ? <div className="spin" style={{ width: 14, height: 14 }} /> : 'Save Sequence'}
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', marginTop: 20 }}>
+      {/* Top summary widgets showing how many results are published etc */}
+      <div style={{ display: 'flex', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
+        {[
+          { label: 'Total Competitions', val: allComps.length, color: 'var(--text-secondary)' },
+          { label: 'Judged & Ready', val: readyComps.length, color: 'var(--accent-light)' },
+          { label: 'In Queue', val: sequence.length, color: '#7baede' },
+          { label: 'Published to Public', val: allComps.filter(c => c.published).length, color: '#2ed573' }
+        ].map((item, idx) => (
+          <div key={idx} style={{
+            flex: '1 1 120px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 8,
+            padding: '10px 14px',
+            minWidth: 120
+          }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>{item.label}</span>
+            <div style={{ fontSize: 20, fontWeight: 800, color: item.color, marginTop: 4 }}>{item.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', marginTop: 10 }}>
         
         {/* ── LEFT COLUMN: SEQUENCE BUILDER ── */}
         <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -519,64 +602,96 @@ export default function AnnouncerFlowSection() {
 
             {suspenseActive && (
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>Leaderboard Reveal Threshold:</span>
-                  <span style={{ fontSize: 15, color: 'var(--accent-light)', fontWeight: 800 }}>{threshold} Announcements</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>Leaderboard Reveal Milestones:</span>
+                  <input
+                    type="text"
+                    value={milestonesInput}
+                    onChange={e => setMilestonesInput(e.target.value)}
+                    placeholder="e.g. 15, 30, 45"
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 6,
+                      color: '#fff',
+                      fontSize: 13,
+                      padding: '8px 12px',
+                      outline: 'none',
+                      marginTop: 4
+                    }}
+                  />
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0 0', lineHeight: 1.4 }}>
+                    Specify comma-separated result counts where the leaderboard reveals. (e.g., enter <code>15, 30</code> to reveal after the 15th and 30th announcements).
+                  </p>
                 </div>
-                <input
-                  type="range" min="1" max={Math.max(sequence.length, 10)}
-                  value={threshold} onChange={e => setThreshold(parseInt(e.target.value))}
-                  style={{ width: '100%', accentColor: 'var(--accent-light)', marginTop: 8 }}
-                />
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>The leaderboard will reveal only after the Announcer publishes at least {threshold} results AND admin publishes to public.</p>
 
-                {/* Admin Explicit Public Reveal Action Box */}
-                <div style={{
-                  marginTop: 16,
-                  padding: 14,
-                  borderRadius: 8,
-                  background: revealedByAdmin ? 'rgba(46, 213, 115, 0.1)' : (publishedSeqCount >= threshold ? 'rgba(247, 201, 72, 0.12)' : 'rgba(255, 255, 255, 0.03)'),
-                  border: `1px solid ${revealedByAdmin ? 'rgba(46, 213, 115, 0.3)' : (publishedSeqCount >= threshold ? 'rgba(247, 201, 72, 0.4)' : 'rgba(255, 255, 255, 0.08)')}`
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                    <div>
-                      <span style={{
-                        fontSize: 10,
-                        fontWeight: 800,
-                        color: revealedByAdmin ? '#2ed573' : (publishedSeqCount >= threshold ? '#f7c948' : 'var(--text-muted)'),
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.8
-                      }}>
-                        {revealedByAdmin ? '✓ REVEALED TO PUBLIC' : (publishedSeqCount >= threshold ? `⚡ THRESHOLD REACHED (${publishedSeqCount}/${threshold})` : `PROGRESS: ${publishedSeqCount}/${threshold} PUBLISHED`)}
-                      </span>
-                      <p style={{ margin: '3px 0 0 0', fontSize: 12, color: '#fff', fontWeight: 600 }}>
-                        {revealedByAdmin
-                          ? 'The live leaderboard is currently unlocked & visible on public site.'
-                          : publishedSeqCount >= threshold
-                          ? `Target of ${threshold} published results reached! Click button to reveal to public.`
-                          : `Suspense active. ${publishedSeqCount} of ${threshold} sequence items published.`}
-                      </p>
+                {/* Milestone status override and display box */}
+                {(() => {
+                  const nextMilestone = revealMilestones.find(m => m > revealedMilestone) || null
+                  const isReady = nextMilestone && publishedSeqCount >= nextMilestone
+                  const allDone = revealMilestones.length > 0 && revealedMilestone >= Math.max(...revealMilestones)
+
+                  return (
+                    <div style={{
+                      marginTop: 16,
+                      padding: 14,
+                      borderRadius: 8,
+                      background: allDone ? 'rgba(46, 213, 115, 0.08)' : (isReady ? 'rgba(247, 201, 72, 0.1)' : 'rgba(255, 255, 255, 0.02)'),
+                      border: `1px solid ${allDone ? 'rgba(46, 213, 115, 0.2)' : (isReady ? 'rgba(247, 201, 72, 0.3)' : 'rgba(255, 255, 255, 0.06)')}`
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 800,
+                            color: allDone ? '#2ed573' : (isReady ? '#f7c948' : 'var(--text-muted)'),
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.8
+                          }}>
+                            {allDone ? 'ALL MILESTONES COMPLETED' : (isReady ? `MILESTONE ${nextMilestone} REACHED` : `SUSPENSE ACTIVE (PROGRESS: ${publishedSeqCount} PUBLISHED)`)}
+                          </span>
+                          
+                          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#fff', fontWeight: 600 }}>
+                            {allDone 
+                              ? 'All configured leaderboard milestones have been revealed.'
+                              : isReady
+                              ? `Milestone of ${nextMilestone} results reached! Unlocked for Announcer to reveal.`
+                              : nextMilestone
+                              ? `Next milestone reveal is at ${nextMilestone} announcements. Current published: ${publishedSeqCount}.`
+                              : 'No reveal milestones configured.'
+                            }
+                          </p>
+                          
+                          {revealedMilestone > 0 && (
+                            <p style={{ margin: '4px 0 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                              Currently revealed to public up to: <strong>{revealedMilestone} results</strong>.
+                            </p>
+                          )}
+                        </div>
+
+                        {revealedMilestone > 0 && (
+                          <button
+                            type="button"
+                            onClick={resetRevealedMilestone}
+                            disabled={loading}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              color: '#f87171',
+                              border: '1px solid rgba(239, 68, 68, 0.25)',
+                              padding: '8px 12px',
+                              borderRadius: 6,
+                              fontWeight: 800,
+                              fontSize: 11,
+                              cursor: loading ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            Hide/Reset All
+                          </button>
+                        )}
+                      </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={togglePublicReveal}
-                      disabled={loading || (!revealedByAdmin && publishedSeqCount < threshold)}
-                      style={{
-                        background: revealedByAdmin ? 'rgba(239, 68, 68, 0.15)' : (publishedSeqCount >= threshold ? '#f7c948' : 'rgba(255,255,255,0.05)'),
-                        color: revealedByAdmin ? '#f87171' : (publishedSeqCount >= threshold ? '#000' : 'rgba(255,255,255,0.3)'),
-                        border: revealedByAdmin ? '1px solid rgba(239, 68, 68, 0.3)' : 'none',
-                        padding: '9px 16px',
-                        borderRadius: 6,
-                        fontWeight: 800,
-                        fontSize: 12,
-                        cursor: (loading || (!revealedByAdmin && publishedSeqCount < threshold)) ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {revealedByAdmin ? '🔒 Re-Hide Leaderboard' : (publishedSeqCount >= threshold ? '🚀 Publish Leaderboard to Public' : `Requires ${threshold} Published`)}
-                    </button>
-                  </div>
-                </div>
+                  )
+                })()}
 
               </div>
             )}
@@ -609,157 +724,327 @@ export default function AnnouncerFlowSection() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {sequence.map((c, idx) => (
-                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{
-                      width: 22, height: 22, borderRadius: 4, background: 'rgba(255,255,255,0.04)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)'
-                    }}>
-                      {idx + 1}
+                {sequence.map((c, idx) => {
+                  const scoreBadge = c.simulatedPoints && c.simulatedPoints.length > 0 ? (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '50%' }}>
+                      {c.simulatedPoints.map(p => {
+                        const tName = teams.find(t => t.id === p.teamId)?.name || '—'
+                        const isSorted = p.teamId === sortReadyByTeam
+                        return (
+                          <span
+                            key={p.teamId}
+                            style={{
+                              fontSize: 10,
+                              fontWeight: isSorted ? 800 : 500,
+                              color: isSorted ? 'var(--accent-light)' : 'var(--text-secondary)',
+                              background: isSorted ? 'rgba(79, 156, 249, 0.12)' : 'rgba(255,255,255,0.03)',
+                              border: isSorted ? '1px solid rgba(79, 156, 249, 0.25)' : '1px solid rgba(255,255,255,0.04)',
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {tName}: +{p.points}
+                          </span>
+                        )
+                      })}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.name}</p>
-                      <p style={{ margin: '1px 0 0 0', fontSize: 10, color: 'var(--text-muted)' }}>{c.categories?.name} · {c.competition_type === 'stage' ? 'Stage' : 'Off-Stage'}</p>
+                  ) : null
+
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '10px 14px' }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 4, background: 'rgba(255,255,255,0.04)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)'
+                      }}>
+                        {idx + 1}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.name}</p>
+                        <p style={{ margin: '1px 0 0 0', fontSize: 10, color: 'var(--text-muted)' }}>{c.categories?.name} · {c.competition_type === 'stage' ? 'Stage' : 'Off-Stage'}</p>
+                      </div>
+                      
+                      {scoreBadge}
+
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn-icon" onClick={() => moveInSequence(idx, 'up')} disabled={idx === 0} style={{ padding: 4 }}>
+                          <IconArrowUp />
+                        </button>
+                        <button className="btn-icon" onClick={() => moveInSequence(idx, 'down')} disabled={idx === sequence.length - 1} style={{ padding: 4 }}>
+                          <IconArrowDown />
+                        </button>
+                        <button className="btn-icon" onClick={() => removeFromSequence(c)} style={{ color: '#ef4444', padding: 4, marginLeft: 4 }}>
+                          <IconTrash />
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn-icon" onClick={() => moveInSequence(idx, 'up')} disabled={idx === 0} style={{ padding: 4 }}>
-                        <IconArrowUp />
-                      </button>
-                      <button className="btn-icon" onClick={() => moveInSequence(idx, 'down')} disabled={idx === sequence.length - 1} style={{ padding: 4 }}>
-                        <IconArrowDown />
-                      </button>
-                      <button className="btn-icon" onClick={() => removeFromSequence(c)} style={{ color: '#ef4444', padding: 4, marginLeft: 4 }}>
-                        <IconTrash />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
 
           {/* Pending Competitions */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 18 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px 0' }}>Judged Competitions (Ready to Sequence)</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Judged Competitions (Ready to Sequence)</h3>
+              
+              {/* Sort selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sort by:</span>
+                <select
+                  value={sortReadyByTeam}
+                  onChange={e => setSortReadyByTeam(e.target.value)}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 4,
+                    color: '#fff',
+                    fontSize: 11,
+                    padding: '2px 6px',
+                    outline: 'none',
+                    maxWidth: 130
+                  }}
+                >
+                  <option value="">Default (Name)</option>
+                  {teams.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} Pts</option>
+                  ))}
+                </select>
+              </div>
+            </div>
             
-            {readyComps.length === 0 ? (
+            {sortedReadyComps.length === 0 ? (
               <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0, textAlign: 'center', padding: '16px 0' }}>
                 No pending judged competitions found.
               </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '350px', overflowY: 'auto' }}>
-                {readyComps.map(c => (
-                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 6 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.name}</p>
-                      <p style={{ margin: '1px 0 0 0', fontSize: 10, color: 'var(--text-muted)' }}>{c.categories?.name}</p>
+                {sortedReadyComps.map(c => {
+                  const scoreBadge = c.simulatedPoints && c.simulatedPoints.length > 0 ? (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '50%' }}>
+                      {c.simulatedPoints.map(p => {
+                        const tName = teams.find(t => t.id === p.teamId)?.name || '—'
+                        const isSorted = p.teamId === sortReadyByTeam
+                        return (
+                          <span
+                            key={p.teamId}
+                            style={{
+                              fontSize: 10,
+                              fontWeight: isSorted ? 800 : 500,
+                              color: isSorted ? 'var(--accent-light)' : 'var(--text-secondary)',
+                              background: isSorted ? 'rgba(79, 156, 249, 0.12)' : 'rgba(255,255,255,0.03)',
+                              border: isSorted ? '1px solid rgba(79, 156, 249, 0.25)' : '1px solid rgba(255,255,255,0.04)',
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {tName}: +{p.points}
+                          </span>
+                        )
+                      })}
                     </div>
-                    <button className="btn-cancel-edit" onClick={() => addToSequence(c)} style={{ height: 26, fontSize: 11, background: 'rgba(79,156,249,0.08)', color: 'var(--accent-light)', border: '1px solid rgba(79,156,249,0.15)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <IconPlus /> Add
-                    </button>
-                  </div>
-                ))}
+                  ) : null
+
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 6, gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.name}</p>
+                        <p style={{ margin: '1px 0 0 0', fontSize: 10, color: 'var(--text-muted)' }}>{c.categories?.name}</p>
+                      </div>
+                      
+                      {scoreBadge}
+
+                      <button className="btn-cancel-edit" onClick={() => addToSequence(c)} style={{ height: 26, fontSize: 11, background: 'rgba(79,156,249,0.08)', color: 'var(--accent-light)', border: '1px solid rgba(79,156,249,0.15)', display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                        <IconPlus /> Add
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
 
         </div>
 
-        {/* ── RIGHT COLUMN: POINT TALLY SIMULATOR ── */}
+        {/* ── RIGHT COLUMN: MILESTONE STANDINGS PREVIEW ── */}
         <div style={{ flex: '1 1 350px', minWidth: 320, display: 'flex', flexDirection: 'column', gap: 20 }}>
           
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <IconTrophy />
-              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Tally Suspense Simulator</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Milestone Standings Preview</h3>
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 16px 0', lineHeight: 1.4 }}>
-              Preview how team scores will change step-by-step as each announcement is made. A high-drama order keeps margins close and features frequent lead changes.
-            </p>
-
+            
             {sequence.length === 0 ? (
               <div style={{ padding: '30px 20px', border: '1px solid var(--border-subtle)', borderRadius: 8, textAlign: 'center', background: 'rgba(255,255,255,0.005)' }}>
-                <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0 }}>Add competitions to the sequence queue to generate a simulated timeline.</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0 }}>Add competitions to the sequence queue to generate milestone standings.</p>
               </div>
             ) : (
-              <div className="sim-timeline" style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative', paddingLeft: 12 }}>
-                
-                {/* Simulated baseline state */}
-                <div style={{ position: 'relative', paddingBottom: 10, borderBottom: '1px dashed rgba(255,255,255,0.08)' }}>
-                  <div style={{ position: 'absolute', left: -16, top: 2, width: 8, height: 8, borderRadius: '50%', background: 'var(--text-muted)' }} />
-                  <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--text-muted)', fontWeight: 700 }}>Baseline Standings</span>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                    {Object.entries(baselinePoints)
-                      .map(([id, pts]) => ({ name: teams.find(t => t.id === id)?.name || '—', points: pts }))
-                      .sort((a, b) => b.points - a.points)
-                      .slice(0, 3)
-                      .map((t, i) => (
-                        <span key={i} style={{ fontSize: 11, background: 'rgba(255,255,255,0.03)', padding: '2px 8px', borderRadius: 4, color: 'var(--text-secondary)' }}>
-                          {t.name}: <strong>{t.points}</strong>
-                        </span>
-                      ))}
-                  </div>
-                </div>
-
-                {/* Simulation Steps */}
-                {simSteps.map((step, idx) => (
-                  <div key={idx} style={{ position: 'relative', paddingLeft: 6 }}>
-                    {/* Vertical connecting line */}
-                    {idx < simSteps.length - 1 && (
-                      <div style={{ position: 'absolute', left: -13, top: 12, width: 2, bottom: -22, background: 'rgba(255,255,255,0.06)' }} />
-                    )}
-                    {/* Timeline bullet */}
-                    <div style={{
-                      position: 'absolute', left: -17, top: 4, width: 10, height: 10, borderRadius: '50%',
-                      background: step.overtake ? '#ff4757' : 'rgba(79, 156, 249, 0.4)',
-                      border: `2px solid ${step.overtake ? '#ff475750' : 'rgba(79, 156, 249, 0.2)'}`
-                    }} />
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-muted)' }}>
-                          Announcement #{idx + 1}
-                        </span>
-                        <p style={{ margin: '1px 0 4px 0', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                          {step.compName}
-                        </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {milestones.map((m) => {
+                  const isExpanded = !!expandedMilestones[m.index]
+                  const targetTeamId = milestoneTargets[m.index] || ''
+                  
+                  return (
+                    <div
+                      key={m.index}
+                      style={{
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        background: 'rgba(255,255,255,0.01)',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {/* Milestone Collapsible Header */}
+                      <div
+                        onClick={() => setExpandedMilestones(prev => ({ ...prev, [m.index]: !prev[m.index] }))}
+                        style={{
+                          padding: '10px 14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          background: isExpanded ? 'rgba(255,255,255,0.03)' : 'transparent',
+                          borderBottom: isExpanded ? '1px solid var(--border-subtle)' : 'none'
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {m.name}
+                          </span>
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 8 }}>
+                            ({m.startIdx + 1} - {m.endIdx} of {sequence.length})
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {m.standings.length > 0 && (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-light)' }}>
+                              #{1} {m.standings[0].name}
+                            </span>
+                          )}
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12, transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', opacity: 0.6 }}>
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </div>
                       </div>
-                      {step.overtake && (
-                        <span style={{ fontSize: 9, background: 'rgba(255, 71, 87, 0.15)', color: '#ff4757', border: '1px solid rgba(255, 71, 87, 0.3)', padding: '1px 6px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
-                          ⚡ Lead Change!
-                        </span>
+
+                      {/* Milestone Body */}
+                      {isExpanded && (
+                        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {/* Competitions in this Milestone */}
+                          <div>
+                            <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                              Included Competitions
+                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                              {m.comps.map((comp, cIdx) => (
+                                <div key={comp.id} style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '2px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                  {m.startIdx + cIdx + 1}. {comp.name}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Standings Preview */}
+                          <div>
+                            <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                              Standings Tally after Milestone
+                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                              {m.standings.map((t, rankIdx) => {
+                                const isTarget = t.id === targetTeamId
+                                const isTop = rankIdx === 0
+                                return (
+                                  <div
+                                    key={t.id}
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      padding: '4px 8px',
+                                      borderRadius: 6,
+                                      background: isTarget ? 'rgba(247, 201, 72, 0.12)' : isTop ? 'rgba(79, 156, 249, 0.06)' : 'rgba(255,255,255,0.01)',
+                                      border: `1px solid ${isTarget ? 'rgba(247, 201, 72, 0.35)' : isTop ? 'rgba(79, 156, 249, 0.15)' : 'transparent'}`
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                                      <span style={{ fontWeight: 800, color: isTarget ? '#f7c948' : isTop ? 'var(--accent-light)' : 'var(--text-muted)' }}>
+                                        #{rankIdx + 1}
+                                      </span>
+                                      <span style={{ fontWeight: 600, color: isTarget ? '#f7c948' : '#fff' }}>{t.name}</span>
+                                    </div>
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: isTarget ? '#f7c948' : 'var(--text-secondary)' }}>
+                                      {t.points.toFixed(1)} <span style={{ fontSize: 8, fontWeight: 600, opacity: 0.6 }}>pts</span>
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Strategy / Action Box */}
+                          <div style={{
+                            marginTop: 4,
+                            paddingTop: 10,
+                            borderTop: '1px solid var(--border-subtle)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 8
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Target:</span>
+                              <select
+                                value={targetTeamId}
+                                onChange={e => setMilestoneTargets(prev => ({ ...prev, [m.index]: e.target.value }))}
+                                style={{
+                                  background: 'rgba(255,255,255,0.05)',
+                                  border: '1px solid var(--border-subtle)',
+                                  borderRadius: 4,
+                                  color: '#fff',
+                                  fontSize: 10,
+                                  padding: '2px 4px',
+                                  outline: 'none',
+                                  maxWidth: 120
+                                }}
+                              >
+                                <option value="">None</option>
+                                {teams.map(t => (
+                                  <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => optimizeMilestone(m.startIdx, m.endIdx, m.index)}
+                              style={{
+                                background: 'rgba(79, 156, 249, 0.08)',
+                                border: '1px solid rgba(79, 156, 249, 0.2)',
+                                color: 'var(--accent-light)',
+                                padding: '3px 8px',
+                                borderRadius: 4,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Optimize Batch
+                            </button>
+                          </div>
+
+                        </div>
                       )}
                     </div>
-
-                    {/* Step Standing preview */}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                      {step.standings.slice(0, 3).map((t, rank) => {
-                        const isLeader = rank === 0
-                        return (
-                          <span key={rank} style={{
-                            fontSize: 11,
-                            background: isLeader ? 'rgba(79, 156, 249, 0.08)' : 'rgba(255,255,255,0.02)',
-                            border: `1px solid ${isLeader ? 'rgba(79,156,249,0.2)' : 'transparent'}`,
-                            padding: '2px 8px', borderRadius: 4,
-                            color: isLeader ? 'var(--accent-light)' : 'var(--text-secondary)'
-                          }}>
-                            #{rank+1} {t.name}: <strong>{t.points}</strong>
-                          </span>
-                        )
-                      })}
-                    </div>
-
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Margin to #2: <strong style={{ color: step.margin <= 5 ? '#ff9f43' : 'var(--text-secondary)' }}>{step.margin} pts</strong>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
-
+          
         </div>
-
       </div>
     </div>
   )

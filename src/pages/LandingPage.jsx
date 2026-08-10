@@ -104,6 +104,34 @@ const IconDownload = () => (
     <line x1="12" y1="15" x2="12" y2="3" />
   </svg>
 )
+const DownloadSpinner = ({ size = 16, color = '#fff' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+    <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="3" strokeDasharray="45 25" strokeLinecap="round" opacity="0.9" />
+  </svg>
+)
+
+async function triggerFileDownload(targetUrl, filename) {
+  if (!targetUrl) return
+  if (targetUrl.startsWith('data:')) {
+    const a = document.createElement('a')
+    a.href = targetUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    return
+  }
+  const response = await fetch(targetUrl)
+  const blob = await response.blob()
+  const blobUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(blobUrl)
+}
 const IconUser = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
     strokeLinecap="round" strokeLinejoin="round">
@@ -254,27 +282,14 @@ function MinimalCountdown() {
 
 /* ══════════ HOME TAB ══════════ */
 function HomeTab({ onLoginClick, setTab, liveStream }) {
-  const [photos, setPhotos] = useState(() => {
-    try {
-      const cached = localStorage.getItem('inspico_gallery_cache')
-      if (cached) {
-        const feed = JSON.parse(cached)
-        return feed.filter(item => item.type === 'photo')
-      }
-    } catch {}
-    return []
-  })
-  const [posters, setPosters] = useState(() => {
-    try {
-      const cached = localStorage.getItem('inspico_gallery_cache')
-      if (cached) {
-        const feed = JSON.parse(cached)
-        return feed.filter(item => item.type === 'poster')
-      }
-    } catch {}
-    return []
-  })
+  const [photos, setPhotos] = useState([])
+  const [posters, setPosters] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [downloadingPosterId, setDownloadingPosterId] = useState(null)
+
+  useEffect(() => {
+    try { localStorage.removeItem('inspico_gallery_cache') } catch {}
+  }, [])
 
   useEffect(() => {
     async function loadPhotos() {
@@ -417,52 +432,55 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
           <div className="lp-home-posters-section lp-scroll-reveal">
             <h3 className="lp-home-gallery-title" style={{ marginBottom: 16 }}>Event Posters</h3>
             <div className="lp-posters-grid">
-              {posters.map(poster => (
-                <div key={poster.id} className="lp-poster-card" onClick={() => setTab('gallery')}>
-                  <img src={poster.thumb_url || poster.thumbUrl || poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" loading="lazy" decoding="async" />
-                  <button
-                    className="lp-poster-download-btn"
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      try {
-                        let downloadUrl = poster.hd_url
-                        if (!downloadUrl) {
-                          const { data } = await supabase.from('gallery_media').select('hd_url').eq('id', poster.id).single()
-                          downloadUrl = data?.hd_url || poster.thumb_url || poster.thumbUrl
+              {posters.map(poster => {
+                const isItemDownloading = downloadingPosterId === poster.id
+                return (
+                  <div key={poster.id} className="lp-poster-card" onClick={() => setTab('gallery')}>
+                    <img src={poster.thumb_url || poster.thumbUrl || poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" loading="lazy" decoding="async" />
+                    <button
+                      className="lp-poster-download-btn"
+                      disabled={isItemDownloading}
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (downloadingPosterId) return
+                        setDownloadingPosterId(poster.id)
+                        try {
+                          let downloadUrl = poster.hd_url
+                          if (!downloadUrl) {
+                            const { data } = await supabase.from('gallery_media').select('hd_url').eq('id', poster.id).single()
+                            downloadUrl = data?.hd_url || poster.thumb_url || poster.thumbUrl
+                          }
+                          await triggerFileDownload(downloadUrl, `poster-${poster.id}.jpg`)
+                        } catch (err) {
+                          console.error('Download error:', err)
+                        } finally {
+                          setDownloadingPosterId(null)
                         }
-                        const a = document.createElement('a')
-                        a.href = downloadUrl
-                        a.download = `poster-${poster.id}.jpg`
-                        document.body.appendChild(a)
-                        a.click()
-                        document.body.removeChild(a)
-                      } catch (err) {
-                        console.error('Download error:', err)
-                      }
-                    }}
-                    title="Download HD Poster"
-                    style={{
-                      position: 'absolute',
-                      bottom: '10px',
-                      right: '10px',
-                      background: 'rgba(0, 0, 0, 0.75)',
-                      backdropFilter: 'blur(8px)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      color: '#fff',
-                      borderRadius: '50%',
-                      width: '34px',
-                      height: '34px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      zIndex: 2
-                    }}
-                  >
-                    <IconDownload />
-                  </button>
-                </div>
-              ))}
+                      }}
+                      title="Download HD Poster"
+                      style={{
+                        position: 'absolute',
+                        bottom: '10px',
+                        right: '10px',
+                        background: 'rgba(0, 0, 0, 0.75)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        color: '#fff',
+                        borderRadius: '50%',
+                        width: '34px',
+                        height: '34px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: isItemDownloading ? 'default' : 'pointer',
+                        zIndex: 2
+                      }}
+                    >
+                      {isItemDownloading ? <DownloadSpinner size={16} /> : <IconDownload />}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -699,45 +717,24 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
       { data: settings }
     ] = await Promise.all([
       supabase.from('teams').select('id, name').order('name'),
-      supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'leaderboard_revealed_by_admin'])
+      supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence'])
     ])
 
     const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
-    const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
+    const milestonesSetting = settings?.find(s => s.key === 'leaderboard_reveal_milestones')
+    const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
     const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
-    const revealSetting = settings?.find(s => s.key === 'leaderboard_revealed_by_admin')
 
     const suspenseActive = activeSetting?.value === 'true'
-    const revealedByAdmin = revealSetting?.value === 'true'
-    const revealThreshold = parseInt(threshSetting?.value || '10')
+    const revealedMilestone = parseInt(revealedMilestoneSetting?.value || '0')
     
     let seqIds = []
     try {
       if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
     } catch (e) {}
 
-    // Check how many items in sequence are published
-    let publishedSeqCount = 0
-    if (seqIds.length > 0) {
-      const { data: publishedInSeq } = await supabase
-        .from('competition_results')
-        .select('competition_id')
-        .in('competition_id', seqIds)
-        .eq('published', true)
-      
-      const uniquePublished = new Set((publishedInSeq || []).map(r => r.competition_id))
-      publishedSeqCount = uniquePublished.size
-    }
-
-    const isSuspense = suspenseActive && !revealedByAdmin && (seqIds.length > 0)
-
-    setSuspenseInfo({
-      active: isSuspense,
-      current: publishedSeqCount,
-      threshold: revealThreshold
-    })
-
-    const excludeComps = isSuspense ? seqIds : []
+    const isSuspense = suspenseActive && (seqIds.length > 0)
+    const excludeComps = isSuspense ? seqIds.slice(revealedMilestone) : []
 
     // Fetch aggregated standings from RPC
     const { data: standingsData } = await supabase.rpc('get_team_standings', { 
@@ -1518,29 +1515,25 @@ function ScheduleTab() {
 
 /* ══════════ GALLERY TAB ══════════ */
 function GalleryTab() {
-  const [media, setMedia] = useState(() => {
-    try {
-      const cached = localStorage.getItem('inspico_gallery_cache')
-      return cached ? JSON.parse(cached) : []
-    } catch {
-      return []
-    }
-  })
-  const [loading, setLoading] = useState(() => {
-    try {
-      const cached = localStorage.getItem('inspico_gallery_cache')
-      return !cached
-    } catch {
-      return true
-    }
-  })
+  const [media, setMedia] = useState([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all') // 'all' | 'photo' | 'video' | 'live'
   const [lightboxItem, setLightboxItem] = useState(null)
+  const [hdImage, setHdImage] = useState(null)
+  const [isDownloadingHd, setIsDownloadingHd] = useState(false)
   const [activeVideo, setActiveVideo] = useState(null)
 
   const openItemModal = (item, isPhoto) => {
-    if (isPhoto) setLightboxItem(item)
-    else setActiveVideo(item)
+    if (isPhoto) {
+      setLightboxItem(item)
+      setHdImage(null)
+      // Lazily fetch HD in background for full crisp quality
+      supabase.from('gallery_media').select('hd_url').eq('id', item.id).maybeSingle().then(({ data }) => {
+        if (data?.hd_url) setHdImage(data.hd_url)
+      })
+    } else {
+      setActiveVideo(item)
+    }
     window.history.pushState({ modal: 'gallery-lightbox' }, '')
   }
 
@@ -1790,16 +1783,30 @@ function GalleryTab() {
           {/* Top Right Controls (Download & Close) */}
           <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 16, zIndex: 10 }}>
             <button
+              disabled={isDownloadingHd}
               onClick={async (e) => {
                 e.stopPropagation()
-                document.body.removeChild(a)
+                if (isDownloadingHd || !lightboxItem) return
+                setIsDownloadingHd(true)
+                try {
+                  let downloadUrl = hdImage || lightboxItem.hd_url
+                  if (!downloadUrl) {
+                    const { data } = await supabase.from('gallery_media').select('hd_url').eq('id', lightboxItem.id).single()
+                    downloadUrl = data?.hd_url || lightboxItem.thumb_url || lightboxItem.thumbUrl || lightboxItem.url
+                  }
+                  await triggerFileDownload(downloadUrl, `${lightboxItem.type || 'photo'}-${lightboxItem.id}.jpg`)
+                } catch (err) {
+                  console.error('Download error:', err)
+                } finally {
+                  setIsDownloadingHd(false)
+                }
               }}
               style={{
                 background: 'rgba(255, 255, 255, 0.1)',
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 color: '#fff', width: 44, height: 44, borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', backdropFilter: 'blur(8px)',
+                cursor: isDownloadingHd ? 'default' : 'pointer', backdropFilter: 'blur(8px)',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                 transition: 'background 0.2s'
               }}
@@ -1807,10 +1814,10 @@ function GalleryTab() {
               onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
               title="Download HD Image"
             >
-              <IconDownload />
+              {isDownloadingHd ? <DownloadSpinner size={18} /> : <IconDownload />}
             </button>
             <button
-              onClick={() => setLightboxItem(null)}
+              onClick={() => { setLightboxItem(null); setHdImage(null) }}
               style={{
                 background: 'rgba(255, 255, 255, 0.1)',
                 border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -1829,7 +1836,7 @@ function GalleryTab() {
           </div>
 
           <img 
-            src={lightboxItem.url} 
+            src={hdImage || lightboxItem.thumb_url || lightboxItem.thumbUrl || lightboxItem.url} 
             alt="" 
             onClick={e => e.stopPropagation()}
             style={{ 

@@ -61,6 +61,28 @@ const IcoSpeaker = () => (
     <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
   </svg>
 )
+const IcoTrophy = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
+    <path d="M12 2a7 7 0 0 0-7 7v4a7 7 0 0 0 14 0V9a7 7 0 0 0-7-7z" />
+  </svg>
+)
+const IcoFlash = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+)
+const IcoRocket = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <path d="M4.5 16.5c-1.5 1.26-2 3-2 3s1.74-.5 3-2" />
+    <path d="M12 2C6 2 2 6 2 12c0 1.26.26 2.5.76 3.63L8 10h4v4l-5.63 5.24C7.5 19.74 8.74 20 10 20c6 0 10-4 10-10V2H12z" />
+    <path d="M9 15l-3-3" />
+    <path d="M15 9h.01" />
+  </svg>
+)
 
 export default function AnnouncerDashboard() {
   const { user, logout } = useAuth()
@@ -85,14 +107,23 @@ export default function AnnouncerDashboard() {
   const [published, setPublished] = useState(false)
   const [anncTab, setAnncTab] = useState('pending') // 'pending' or 'completed'
   const [suspenseActive, setSuspenseActive] = useState(false)
-  const [revealThreshold, setRevealThreshold] = useState(10)
+  const [revealMilestones, setRevealMilestones] = useState([])
+  const [revealedMilestone, setRevealedMilestone] = useState(0)
   const [sequenceIds, setSequenceIds] = useState([])
   const [revealedByAdmin, setRevealedByAdmin] = useState(false)
+
+  const [leaderboard, setLeaderboard] = useState([])
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false)
 
   const selectedRef = useRef(selected)
   useEffect(() => {
     selectedRef.current = selected
   }, [selected])
+
+  const anncTabRef = useRef(anncTab)
+  useEffect(() => {
+    anncTabRef.current = anncTab
+  }, [anncTab])
 
   useEffect(() => {
     fetchCompetitions(competitions.length === 0)
@@ -102,6 +133,9 @@ export default function AnnouncerDashboard() {
       fetchCompetitions(false)
       if (selectedRef.current) {
         openCompetition(selectedRef.current, false)
+      }
+      if (anncTabRef.current === 'leaderboard') {
+        fetchLeaderboardData()
       }
     }
 
@@ -137,6 +171,69 @@ export default function AnnouncerDashboard() {
     };
   }, [selected]);
 
+  useEffect(() => {
+    if (anncTab === 'leaderboard') {
+      fetchLeaderboardData()
+    }
+  }, [anncTab])
+
+  async function fetchLeaderboardData() {
+    setLoadingLeaderboard(true)
+    try {
+      const [
+        { data: teamsData },
+        { data: settings }
+      ] = await Promise.all([
+        supabase.from('teams').select('id, name').order('name'),
+        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence'])
+      ])
+
+      const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
+      const milestonesSetting = settings?.find(s => s.key === 'leaderboard_reveal_milestones')
+      const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
+      const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
+
+      const suspenseActiveVal = activeSetting?.value === 'true'
+      const revealedMilestoneVal = parseInt(revealedMilestoneSetting?.value || '0')
+      
+      let seqIds = []
+      try {
+        if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
+      } catch (e) {}
+
+      const isSuspense = suspenseActiveVal && (seqIds.length > 0)
+      const excludeComps = isSuspense ? seqIds.slice(revealedMilestoneVal) : []
+
+      const { data: standingsData } = await supabase.rpc('get_team_standings', { 
+        exclude_comps: excludeComps
+      })
+
+      const colorSetting = settings?.find(s => s.key === 'team_colors')
+      let colorMap = {}
+      if (colorSetting?.value) {
+        try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+      }
+
+      const teamMap = {}
+      ;(teamsData || []).forEach(t => { 
+        teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0 } 
+      })
+      
+      ;(standingsData || []).forEach(r => {
+        if (teamMap[r.team_id]) {
+          teamMap[r.team_id].points = Number(r.points) || 0
+        }
+      })
+
+      const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
+      setLeaderboard(sorted)
+    } catch (err) {
+      console.error("Error loading leaderboard:", err)
+    } finally {
+      setLoadingLeaderboard(false)
+    }
+  }
+
   async function togglePublicReveal() {
     const nextVal = !revealedByAdmin
     try {
@@ -160,14 +257,22 @@ export default function AnnouncerDashboard() {
         const settingsMap = data.settings || {}
 
         const active = settingsMap['leaderboard_suspense_active'] === 'true'
-        const thresh = parseInt(settingsMap['leaderboard_reveal_threshold'] || '10')
+        const revealMilestonesVal = settingsMap['leaderboard_reveal_milestones']
+        const revealedMilestoneVal = settingsMap['leaderboard_revealed_milestone']
+        
+        let milList = []
+        try {
+          if (revealMilestonesVal) milList = JSON.parse(revealMilestonesVal)
+        } catch(e) {}
+
         let seqIds = []
         try {
           if (settingsMap['announcer_sequence']) seqIds = JSON.parse(settingsMap['announcer_sequence'])
         } catch (e) {}
 
         setSuspenseActive(active)
-        setRevealThreshold(thresh)
+        setRevealMilestones(milList)
+        setRevealedMilestone(parseInt(revealedMilestoneVal || '0'))
         setSequenceIds(seqIds)
         setRevealedByAdmin(settingsMap['leaderboard_revealed_by_admin'] === 'true')
 
@@ -214,8 +319,59 @@ export default function AnnouncerDashboard() {
     if (isInitial) setLoadingDetail(true)
 
     try {
-      const { data } = await supabase.rpc('get_announcer_competition_detail', { p_comp_id: comp.id })
-      setResults(data || [])
+      if (comp.isVirtual) {
+        const [
+          { data: teamsData },
+          { data: settings }
+        ] = await Promise.all([
+          supabase.from('teams').select('id, name').order('name'),
+          supabase.from('app_settings').select('key, value').in('key', ['team_colors'])
+        ])
+
+        const colorSetting = settings?.find(s => s.key === 'team_colors')
+        let colorMap = {}
+        if (colorSetting?.value) {
+          try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+        }
+
+        const excludeComps = comp.milestone ? sequenceIds.slice(comp.milestone) : []
+        const { data: standingsData } = await supabase.rpc('get_team_standings', { 
+          exclude_comps: excludeComps
+        })
+
+        const teamMap = {}
+        ;(teamsData || []).forEach(t => { 
+          teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0 } 
+        })
+        
+        ;(standingsData || []).forEach(r => {
+          if (teamMap[r.team_id]) {
+            teamMap[r.team_id].points = Number(r.points) || 0
+          }
+        })
+
+        const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
+        const mappedResults = sorted.map((t, idx) => {
+          const rank = sorted.findIndex(team => team.points === t.points) + 1
+          return {
+            code_letter: t.name,
+            position: rank,
+            participant: {
+              name: t.name,
+              teams: {
+                name: t.name,
+              }
+            },
+            placement_points: t.points,
+            grade_points: 0,
+            grade: null
+          }
+        })
+        setResults(mappedResults)
+      } else {
+        const { data } = await supabase.rpc('get_announcer_competition_detail', { p_comp_id: comp.id })
+        setResults(data || [])
+      }
     } catch (err) {
       console.error("Error loading announcer detail:", err)
     } finally {
@@ -227,30 +383,88 @@ export default function AnnouncerDashboard() {
     if (!selected || !results.length) return
     setPublishing(true)
 
-    const rows = results.map(r => {
-      return {
-        competition_id: selected.id,
-        participant_id: r.participant?.id || null,
-        position: r.position,
-        grade: r.grade,
-        avg_points: r.avg_points,
-        placement_points: r.placement_points,
-        grade_points: r.grade_points,
-        published: true,
-        published_at: new Date().toISOString(),
-        published_by: announcerId,
+    try {
+      if (selected.isVirtual) {
+        const mVal = selected.milestone || 0
+        await supabase.from('app_settings').upsert({ key: 'leaderboard_revealed_milestone', value: mVal.toString() })
+        setRevealedMilestone(mVal)
+        setPublished(true)
+      } else {
+        const rows = results.map(r => {
+          return {
+            competition_id: selected.id,
+            participant_id: r.participant?.id || null,
+            position: r.position,
+            grade: r.grade,
+            avg_points: r.avg_points,
+            placement_points: r.placement_points,
+            grade_points: r.grade_points,
+            published: true,
+            published_at: new Date().toISOString(),
+            published_by: announcerId,
+          }
+        })
+
+        await supabase.from('competition_results').upsert(rows, { onConflict: 'competition_id,participant_id' })
+        setPublished(true)
       }
-    })
-
-    await supabase.from('competition_results').upsert(rows, { onConflict: 'competition_id,participant_id' })
-
-    setPublishing(false)
-    setPublished(true)
-    await fetchCompetitions()
+      await fetchCompetitions()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setPublishing(false)
+    }
   }
 
   const pendingComps = competitions.filter(c => !c.published)
   const completedComps = competitions.filter(c => c.published)
+
+  if (!suspenseActive) {
+    if (revealedMilestone > 0 || revealedByAdmin) {
+      completedComps.push({
+        id: 'overall_leaderboard',
+        name: 'Overall Leaderboard',
+        hasJudgeResults: true,
+        published: true,
+        isVirtual: true,
+      })
+    } else {
+      pendingComps.push({
+        id: 'overall_leaderboard',
+        name: 'Overall Leaderboard',
+        hasJudgeResults: true,
+        published: false,
+        isVirtual: true,
+      })
+    }
+  } else {
+    const C = completedComps.length
+    const revealedList = revealMilestones.filter(m => revealedMilestone >= m)
+    revealedList.forEach(m => {
+      completedComps.push({
+        id: `overall_leaderboard_${m}`,
+        name: `Overall Leaderboard (Milestone ${m})`,
+        hasJudgeResults: true,
+        published: true,
+        isVirtual: true,
+        milestone: m,
+      })
+    })
+
+    const pendingMilestones = revealMilestones.filter(m => C >= m && m > revealedMilestone)
+    if (pendingMilestones.length > 0) {
+      const nextM = Math.min(...pendingMilestones)
+      pendingComps.push({
+        id: 'overall_leaderboard',
+        name: `Overall Leaderboard (Milestone ${nextM})`,
+        hasJudgeResults: true,
+        published: false,
+        isVirtual: true,
+        milestone: nextM,
+      })
+    }
+  }
+
   const displayedComps = anncTab === 'pending' ? pendingComps : completedComps
 
   return (
@@ -320,49 +534,6 @@ export default function AnnouncerDashboard() {
               })}
             </div>
 
-            {suspenseActive && (
-              <div style={{
-                background: revealedByAdmin ? 'rgba(46, 213, 115, 0.08)' : (completedComps.length >= revealThreshold ? 'rgba(247, 201, 72, 0.1)' : 'rgba(255, 255, 255, 0.03)'),
-                border: `1px solid ${revealedByAdmin ? 'rgba(46, 213, 115, 0.25)' : (completedComps.length >= revealThreshold ? 'rgba(247, 201, 72, 0.35)' : 'rgba(255, 255, 255, 0.08)')}`,
-                borderRadius: 8,
-                padding: '8px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-                margin: '8px 0 4px 0'
-              }}>
-                <span style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: revealedByAdmin ? '#2ed573' : (completedComps.length >= revealThreshold ? '#f7c948' : 'var(--text-muted)'),
-                  whiteSpace: 'nowrap'
-                }}>
-                  {revealedByAdmin ? '✓ Public Live' : (completedComps.length >= revealThreshold ? `⚡ ${completedComps.length}/${revealThreshold} Published` : `Suspense: ${completedComps.length}/${revealThreshold}`)}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={togglePublicReveal}
-                  disabled={!revealedByAdmin && completedComps.length < revealThreshold}
-                  style={{
-                    background: revealedByAdmin ? 'rgba(239, 68, 68, 0.15)' : (completedComps.length >= revealThreshold ? '#f7c948' : 'rgba(255,255,255,0.05)'),
-                    color: revealedByAdmin ? '#f87171' : (completedComps.length >= revealThreshold ? '#000' : 'rgba(255,255,255,0.3)'),
-                    border: revealedByAdmin ? '1px solid rgba(239, 68, 68, 0.3)' : 'none',
-                    padding: '5px 12px',
-                    borderRadius: 6,
-                    fontWeight: 800,
-                    fontSize: 11,
-                    cursor: (!revealedByAdmin && completedComps.length < revealThreshold) ? 'not-allowed' : 'pointer',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}
-                >
-                  {revealedByAdmin ? '🔒 Hide' : (completedComps.length >= revealThreshold ? '🚀 Publish Leaderboard' : `${completedComps.length}/${revealThreshold}`)}
-                </button>
-              </div>
-            )}
-
             <p className="ann-section-label" style={{ margin: '6px 0 0 0' }}>
               {anncTab === 'pending' ? 'Ready for Announcement' : 'Published Results'}
             </p>
@@ -371,75 +542,84 @@ export default function AnnouncerDashboard() {
               <div className="ann-center"><div className="spin" style={{ borderTopColor: 'var(--accent-light)', width: 22, height: 22 }} /></div>
             ) : displayedComps.length === 0 ? (
               <div className="ann-center">
-                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No {anncTab} competitions.</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No {anncTab === 'pending' ? 'pending' : 'completed'} competitions.</p>
               </div>
-            ) : (() => {
-              return (
-                <div className="ann-group-box">
-                  {displayedComps.map(c => {
-                    const s = Array.isArray(c.competition_schedule) ? c.competition_schedule[0] : c.competition_schedule
-                    const isLocked = !c.hasJudgeResults
-                    const isSequenceLocked = suspenseActive && sequenceIds.length > 0 && sequenceIds.includes(c.id) && sequenceIds[0] !== c.id && !c.published
-                    return (
-                      <div key={c.id}
-                        className={`ann-comp-card ${c.published ? 'done' : ''} ${isLocked ? 'locked' : ''}`}
-                        onClick={() => openCompetition(c)}
-                        style={{
-                          opacity: isLocked ? 0.45 : 1,
-                          cursor: isLocked ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        <div className={`ann-comp-icon ${c.published ? 'done-icon' : ''}`}>
-                          {c.published ? <IcoDone /> : (c.competition_type === 'stage' ? <IcoStage /> : <IcoOffStage />)}
+            ) : (
+              <div className="ann-group-box">
+                {displayedComps.map(c => {
+                  const s = Array.isArray(c.competition_schedule) ? c.competition_schedule[0] : c.competition_schedule
+                  const isLocked = !c.hasJudgeResults
+                  const isSequenceLocked = suspenseActive && sequenceIds.length > 0 && sequenceIds.includes(c.id) && sequenceIds[0] !== c.id && !c.published
+                  return (
+                    <div key={c.id}
+                      className={`ann-comp-card ${c.published ? 'done' : ''} ${isLocked ? 'locked' : ''}`}
+                      onClick={() => openCompetition(c)}
+                      style={{
+                        opacity: isLocked ? 0.45 : 1,
+                        cursor: isLocked ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      <div className={`ann-comp-icon ${c.published ? 'done-icon' : ''}`}>
+                        {c.published ? <IcoDone /> : (c.isVirtual ? <IcoTrophy /> : (c.competition_type === 'stage' ? <IcoStage /> : <IcoOffStage />))}
+                      </div>
+                      <div className="ann-comp-body" style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <p className="ann-comp-name" style={{ margin: 0 }}>{c.name}</p>
+                          {c.announcementNumber && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 800, color: '#f7c948',
+                              background: 'rgba(247,201,72,0.12)', border: '1px solid rgba(247,201,72,0.35)',
+                              padding: '1px 7px', borderRadius: 20, flexShrink: 0
+                            }}>#{c.announcementNumber}</span>
+                          )}
                         </div>
-                        <div className="ann-comp-body" style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <p className="ann-comp-name" style={{ margin: 0 }}>{c.name}</p>
-                            {c.announcementNumber && (
-                              <span style={{
-                                fontSize: 10, fontWeight: 800, color: '#f7c948',
-                                background: 'rgba(247,201,72,0.12)', border: '1px solid rgba(247,201,72,0.35)',
-                                padding: '1px 7px', borderRadius: 20, flexShrink: 0
-                              }}>#{c.announcementNumber}</span>
-                            )}
-                          </div>
-                          <div className="ann-comp-meta">
-                            {c.categories?.name && <span>{c.categories.name}</span>}
-                            <span style={{ color: c.competition_type === 'stage' ? 'var(--accent-light)' : '#7baede' }}>
-                              {c.competition_type === 'stage' ? 'Stage' : 'Off-Stage'}
-                            </span>
-                            {s?.scheduled_date && <span>{new Date(s.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                          <span className={`ann-status-badge ${c.published ? 'done' : isLocked ? 'locked' : 'ready'}`}>
-                            {c.published ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <IcoDone />
-                                <span>Published</span>
+                        <div className="ann-comp-meta">
+                          {c.isVirtual ? (
+                            <>
+                              <span>Standings</span>
+                              <span style={{ color: 'var(--accent-light)' }}>Leaderboard</span>
+                            </>
+                          ) : (
+                            <>
+                              {c.categories?.name && <span>{c.categories.name}</span>}
+                              <span style={{ color: c.competition_type === 'stage' ? 'var(--accent-light)' : '#7baede' }}>
+                                {c.competition_type === 'stage' ? 'Stage' : 'Off-Stage'}
                               </span>
-                            ) : isSequenceLocked ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <IcoLock />
-                                <span>Locked in Queue</span>
-                              </span>
-                            ) : !c.hasJudgeResults ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <IcoLock />
-                                <span>Awaiting Scores</span>
-                              </span>
-                            ) : (
-                              <span>Ready to Publish</span>
-                            )}
-                          </span>
-                          {!isLocked && <IcoChevron />}
+                              {s?.scheduled_date && <span>{new Date(s.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
+                            </>
+                          )}
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              )
-            })()}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        <span className={`ann-status-badge ${c.published ? 'done' : isLocked ? 'locked' : 'ready'}`}>
+                          {c.published ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <IcoDone />
+                              <span>Published</span>
+                            </span>
+                          ) : c.isVirtual ? (
+                            <span>Ready to Reveal</span>
+                          ) : isSequenceLocked ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <IcoLock />
+                              <span>Locked in Queue</span>
+                            </span>
+                          ) : !c.hasJudgeResults ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <IcoLock />
+                              <span>Awaiting Scores</span>
+                            </span>
+                          ) : (
+                            <span>Ready to Publish</span>
+                          )}
+                        </span>
+                        {!isLocked && <IcoChevron />}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         ) : (
           <div className="ann-result-wrap" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -494,15 +674,15 @@ export default function AnnouncerDashboard() {
 
                         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
                           <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                            {r.participant?.name || `Code ${r.code_letter}`}
+                            {selected?.isVirtual ? r.participant?.name : (r.participant?.name || `Code ${r.code_letter}`)}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                            {r.participant?.teams?.name && (
+                            {r.participant?.teams?.name && !selected?.isVirtual && (
                               <span style={{ fontSize: '10px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', padding: '1px 6px', borderRadius: 4 }}>
                                 {r.participant.teams.name}
                               </span>
                             )}
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Code {r.code_letter}</span>
+                            {!selected?.isVirtual && <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Code {r.code_letter}</span>}
                           </div>
                         </div>
                       </div>

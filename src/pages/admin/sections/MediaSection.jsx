@@ -67,12 +67,12 @@ export default function MediaSection() {
   async function fetchMedia() {
     try {
       const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'event_media')
-        .maybeSingle()
-      if (data?.value) {
-        setMediaItems(JSON.parse(data.value))
+        .from('gallery_media')
+        .select('id, type, caption, thumb_url, hd_url, competition_id, uploader_name, created_at')
+        .order('created_at', { ascending: false })
+
+      if (data) {
+        setMediaItems(data.map(i => ({ ...i, thumbUrl: i.thumb_url, url: i.hd_url || i.thumb_url })))
       } else {
         setMediaItems([])
       }
@@ -167,24 +167,36 @@ export default function MediaSection() {
     if (!window.confirm('Are you sure you want to delete this media item?')) return
 
     try {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'event_media')
-        .maybeSingle()
-
-      if (!data?.value) return
-
-      const currentFeed = JSON.parse(data.value)
-      const filteredFeed = currentFeed.filter(item => item.id !== itemId)
+      const targetItem = mediaItems.find(m => m.id === itemId)
 
       const { error } = await supabase
-        .from('app_settings')
-        .upsert({ key: 'event_media', value: JSON.stringify(filteredFeed) })
+        .from('gallery_media')
+        .delete()
+        .eq('id', itemId)
 
       if (error) throw error
 
-      setMediaItems(filteredFeed)
+      // Clean up files from Supabase Storage bucket
+      const storagePaths = []
+      if (targetItem?.hd_url?.includes('/event-media/')) {
+        const hdPath = targetItem.hd_url.split('/event-media/')[1]?.split('?')[0]
+        if (hdPath) storagePaths.push(hdPath)
+      } else {
+        storagePaths.push(`hd/${itemId}.jpg`)
+      }
+
+      if (targetItem?.thumb_url?.includes('/event-media/')) {
+        const thumbPath = targetItem.thumb_url.split('/event-media/')[1]?.split('?')[0]
+        if (thumbPath) storagePaths.push(thumbPath)
+      } else {
+        storagePaths.push(`thumbs/${itemId}.jpg`)
+      }
+
+      if (storagePaths.length > 0) {
+        supabase.storage.from('event-media').remove(storagePaths).catch(e => console.warn('Storage delete error:', e))
+      }
+
+      setMediaItems(prev => prev.filter(item => item.id !== itemId))
       showToast('Media item deleted.')
     } catch (err) {
       console.error(err)
