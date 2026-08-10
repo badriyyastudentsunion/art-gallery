@@ -478,19 +478,18 @@ export default function MediaDashboard() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="med-form">
 
-            {/* Competition tag — only for non-photo types */}
-            {mediaType !== 'photo' && competitions.length > 0 && (
-              <div className="med-field">
-                <label className="med-label">Competition</label>
-                <select className="med-input med-select" value={compTag} onChange={e => setCompTag(e.target.value)}>
-                  <option value="">None</option>
-                  {competitions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-            )}
-
             {isImg && (
               <>
+                <div className="med-field">
+                  <label className="med-label">Caption</label>
+                  <input
+                    type="text"
+                    className="med-input"
+                    placeholder="Caption / description for this media..."
+                    value={caption}
+                    onChange={e => setCaption(e.target.value)}
+                  />
+                </div>
                 {mediaType === 'photo' && (overlays.overlay34 || overlays.overlay43) && (
                   <label className="med-check-row">
                     <input type="checkbox" checked={applyOverlay} onChange={e => setApplyOverlay(e.target.checked)} />

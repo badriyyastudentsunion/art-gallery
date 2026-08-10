@@ -976,7 +976,7 @@ export default function AnnouncerFlowSection() {
                                       <span style={{ fontWeight: 600, color: isTarget ? '#f7c948' : '#fff' }}>{t.name}</span>
                                     </div>
                                     <span style={{ fontSize: 11, fontWeight: 800, color: isTarget ? '#f7c948' : 'var(--text-secondary)' }}>
-                                      {t.points.toFixed(1)} <span style={{ fontSize: 8, fontWeight: 600, opacity: 0.6 }}>pts</span>
+                                      {parseFloat(t.points.toFixed(1))} <span style={{ fontSize: 8, fontWeight: 600, opacity: 0.6 }}>pts</span>
                                     </span>
                                   </div>
                                 )

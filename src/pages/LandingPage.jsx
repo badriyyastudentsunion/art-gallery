@@ -806,7 +806,7 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
                 </span>
                 {t.color && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: t.color }} />}
                 <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>{t.name}</span>
-                <span style={{ fontSize: '12px', fontWeight: 800, color: teamColor, marginLeft: '4px' }}>{t.points.toFixed(1)}</span>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: teamColor, marginLeft: '4px' }}>{parseFloat(t.points.toFixed(1))}</span>
               </div>
             )
           })}
@@ -860,7 +860,7 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
                       {team.name.slice(0, 2).toUpperCase()}
                     </div>
                     <p className="lp-podium-name" style={{ color: team.color || undefined }}>{team.name}</p>
-                    <p className="lp-podium-pts" style={{ color: teamColor }}>{team.points.toFixed(1)}</p>
+                    <p className="lp-podium-pts" style={{ color: teamColor }}>{parseFloat(team.points.toFixed(1))}</p>
                     <p className="lp-podium-rank">
                       {isTied ? `TIED #${rank}` : rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}
                     </p>
@@ -900,7 +900,7 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
                     </div>
                   </div>
                   <div className="lp-team-score-wrap">
-                    <span className="lp-team-pts" style={{ color: team.color || undefined }}>{team.points.toFixed(1)}</span>
+                    <span className="lp-team-pts" style={{ color: team.color || undefined }}>{parseFloat(team.points.toFixed(1))}</span>
                     <span className="lp-team-count">{team.count} comps</span>
                   </div>
                 </div>
