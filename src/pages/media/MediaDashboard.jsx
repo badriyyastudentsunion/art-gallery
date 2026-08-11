@@ -1,7 +1,8 @@
 // src/pages/media/MediaDashboard.jsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
+import Cropper from 'react-easy-crop'
 import './MediaDashboard.css'
 
 /* ── SVG Icons ─────────────────────────────────────────── */
@@ -39,7 +40,6 @@ const IconRefresh  = ({ s = 14 }) => <Ico w={s} h={s} d={[['polyline',{points:'2
 const IconGrid     = ({ s = 15 }) => <Ico w={s} h={s} d={[['rect',{x:'3',y:'3',width:'7',height:'7'}],['rect',{x:'14',y:'3',width:'7',height:'7'}],['rect',{x:'3',y:'14',width:'7',height:'7'}],['rect',{x:'14',y:'14',width:'7',height:'7'}]]} />
 const IconWarn     = ({ s = 20 }) => <Ico w={s} h={s} d={[['path',{d:'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'}],['line',{x1:'12',y1:'9',x2:'12',y2:'13'}],['line',{x1:'12',y1:'17',x2:'12.01',y2:'17'}]]} />
 const IconPlay     = ({ s = 18 }) => <Ico w={s} h={s} fill="currentColor" d={[['polygon',{points:'5 3 19 12 5 21 5 3'}]]} />
-const IconTag      = ({ s = 10 }) => <Ico w={s} h={s} d={[['path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}],['line',{x1:'7',y1:'7',x2:'7.01',y2:'7'}]]} />
 const IconSelAll   = ({ s = 13 }) => <Ico w={s} h={s} d={[['rect',{x:'3',y:'3',width:'18',height:'18',rx:'2'}],['polyline',{points:'9 11 12 14 22 4'}]]} />
 
 const PAGE_SIZE = 24
@@ -69,74 +69,69 @@ function relTime(iso) {
   return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-function detectRatio(w, h) {
-  const r = w / h
-  if (r >= 1.15) return '4:3'
-  if (r <= 0.87) return '3:4'
-  return 'original'
-}
-
-function ratioPaddingTop(ratio, tw, th) {
-  if (ratio === '3:4')     return '133.33%'
-  if (ratio === '4:3')     return '75%'
-  if (tw && th)            return (th / tw * 100).toFixed(2) + '%'
-  return '75%'
-}
-
 export default function MediaDashboard() {
   const { user, logout } = useAuth()
 
-  // Upload state
-  const [mediaType,     setMediaType]     = useState('photo')
-  const [caption,       setCaption]       = useState('')
-  const [link,          setLink]          = useState('')
-  const [compTag,       setCompTag]       = useState('')
-  const [selectedFiles, setSelectedFiles] = useState([])
-  const [imagePreviews, setImagePreviews] = useState([])
-  const [aspectRatio,   setAspectRatio]   = useState('auto')
-  const [uploading,     setUploading]     = useState(false)
+  // General State
+  const [activePanel, setActivePanel] = useState('upload') // 'upload' | 'library' for mobile
+  const [toast, setToast] = useState(null)
+  
+  // Library State
+  const [mediaFeed, setMediaFeed] = useState([])
+  const [competitions, setCompetitions] = useState([])
+  const [libFilter, setLibFilter] = useState('all')
+  const [libSearch, setLibSearch] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [selectedItems, setSelectedItems] = useState(new Set())
+  const [bulkMode, setBulkMode] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(null)
+  const [presetModal, setPresetModal] = useState(false)
+  const [presetName, setPresetName] = useState('')
+  const [confirmPresetDel, setConfirmPresetDel] = useState(null)
 
-  // Overlay
-  const [overlays,         setOverlays]         = useState({ overlay43: '', overlay34: '' })
-  const [applyOverlay,     setApplyOverlay]      = useState(true)
-  const [showOverlayPanel, setShowOverlayPanel]  = useState(false)
+  // Editor State
+  const [mediaType, setMediaType] = useState('photo')
+  const [caption, setCaption] = useState('')
+  const [link, setLink] = useState('')
+  const [compTag, setCompTag] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [overlays, setOverlays] = useState({ overlay43: '', overlay34: '' })
+  const [applyOverlay, setApplyOverlay] = useState(true)
 
-  // Library
-  const [mediaFeed,      setMediaFeed]      = useState([])
-  const [competitions,   setCompetitions]   = useState([])
-  const [libFilter,      setLibFilter]      = useState('all')
-  const [libSearch,      setLibSearch]      = useState('')
-  const [currentPage,    setCurrentPage]    = useState(1)
-  const [selectedItems,  setSelectedItems]  = useState(new Set())
-  const [bulkMode,       setBulkMode]       = useState(false)
-  const [confirmDel,     setConfirmDel]     = useState(null)
-
-  // UI
-  const [activePanel, setActivePanel] = useState('upload')
-  const [toast,       setToast]       = useState(null)
+  // Cropper State
+  const [editFiles, setEditFiles] = useState([]) // Array of objects containing file & edit state
+  const [activeEditId, setActiveEditId] = useState(null)
+  const [presets, setPresets] = useState([])
+  
   const fileInputRef = useRef(null)
-
-  useEffect(() => {
-    fetchMedia(); fetchCompetitions(); fetchOverlays()
-    const ch = supabase.channel('media-db-v2')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, fetchMedia)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.gallery_overlays' }, fetchOverlays)
-      .subscribe()
-    return () => supabase.removeChannel(ch)
-  }, [])
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3200)
   }
 
+  useEffect(() => {
+    fetchMedia(); fetchCompetitions(); fetchOverlays(); fetchPresets()
+    
+    const ch = supabase.channel('media-db-v2')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, fetchMedia)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.gallery_overlays' }, fetchOverlays)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'media_presets' }, fetchPresets)
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [])
+
+  async function fetchPresets() {
+    try {
+      const { data } = await supabase.from('media_presets').select('*').order('created_at', { ascending: true })
+      if (data) setPresets(data)
+    } catch {}
+  }
+
   async function fetchMedia() {
     try {
-      const { data } = await supabase
-        .from('gallery_media')
-        .select('id,type,caption,thumb_url,hd_url,competition_id,uploader_name,created_at')
-        .order('created_at', { ascending: false })
-      setMediaFeed(data ? data.map(i => ({ ...i, thumbUrl: i.thumb_url, url: i.hd_url || i.thumb_url })) : [])
+      const { data } = await supabase.from('gallery_media').select('*').order('created_at', { ascending: false })
+      setMediaFeed(data || [])
     } catch {}
   }
 
@@ -154,134 +149,164 @@ export default function MediaDashboard() {
     } catch {}
   }
 
-  // Overlay handlers
-  const handleOverlayUpload = async (key, file) => {
-    if (!file?.type.startsWith('image/')) return
-    try {
-      const path = `overlays/${key}_${Date.now()}.png`
-      const { error } = await supabase.storage.from('event-media').upload(path, file, { upsert: true })
-      if (error) throw error
-      const url = supabase.storage.from('event-media').getPublicUrl(path).data.publicUrl
-      const next = { ...overlays, [key]: url }
-      setOverlays(next)
-      await supabase.from('app_settings').upsert({ key: 'gallery_overlays', value: JSON.stringify(next) })
-      showToast('Overlay uploaded.')
-    } catch (e) { showToast('Upload failed: ' + e.message, 'error') }
-  }
-  const handleRemoveOverlay = async (key) => {
-    const next = { ...overlays, [key]: '' }
-    setOverlays(next)
-    try { await supabase.from('app_settings').upsert({ key: 'gallery_overlays', value: JSON.stringify(next) }) } catch {}
-    showToast('Overlay removed.')
-  }
-
-  // Image processing
-  const processSingleFile = (file, ratio) => new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const img = new Image()
-      img.onerror = reject
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        let sx = 0, sy = 0, sw = img.width, sh = img.height, tw, th
-
-        if (ratio === '4:3') {
-          const ir = img.width / img.height
-          if (ir > 4/3) { sw = img.height * 4/3; sx = (img.width - sw) / 2 }
-          else { sh = img.width / (4/3); sy = (img.height - sh) / 2 }
-          tw = 1600; th = 1200
-        } else if (ratio === '3:4') {
-          const ir = img.width / img.height
-          if (ir > 3/4) { sw = img.height * 3/4; sx = (img.width - sw) / 2 }
-          else { sh = img.width / (3/4); sy = (img.height - sh) / 2 }
-          tw = 1200; th = 1600
-        } else {
-          const mx = 1920
-          let w = img.width, h = img.height
-          if (w > h) { if (w > mx) { h = Math.round(h * mx / w); w = mx } }
-          else { if (h > mx) { w = Math.round(w * mx / h); h = mx } }
-          tw = w; th = h
-        }
-
-        canvas.width = tw; canvas.height = th
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, tw, th)
-
-        let overlaySrc = null
-        if (applyOverlay && mediaType === 'photo') {
-          // Only apply overlay if the EXACT matching ratio overlay exists — no cross-ratio fallback
-          if (ratio === '4:3' || tw > th) {
-            overlaySrc = overlays.overlay43 || null
-          } else {
-            overlaySrc = overlays.overlay34 || null
-          }
-        }
-
-        const buildResult = cvs => {
-          const fullUrl = cvs.toDataURL('image/jpeg', 0.92)
-          const tC = document.createElement('canvas')
-          const mx = 800
-          let tW = cvs.width, tH = cvs.height
-          if (tW > tH) { if (tW > mx) { tH = Math.round(tH * mx / tW); tW = mx } }
-          else { if (tH > mx) { tW = Math.round(tW * mx / tH); tH = mx } }
-          tC.width = tW; tC.height = tH
-          const ctxT = tC.getContext('2d')
-          ctxT.imageSmoothingEnabled = true
-          ctxT.imageSmoothingQuality = 'high'
-          ctxT.drawImage(cvs, 0, 0, tW, tH)
-          const thumbUrl = tC.toDataURL('image/jpeg', 0.85)
-          const outRatio = ratio === 'original' ? detectRatio(tw, th) : ratio
-          const overlayApplied = !!overlaySrc
-          return { fullUrl, thumbUrl, outRatio, tw, th, overlayApplied }
-        }
-
-        if (overlaySrc) {
-          const ov = new Image(); ov.crossOrigin = 'anonymous'
-          ov.onload = () => { ctx.drawImage(ov, 0, 0, tw, th); resolve(buildResult(canvas)) }
-          ov.onerror = () => resolve(buildResult(canvas))
-          ov.src = overlaySrc
-        } else resolve(buildResult(canvas))
-      }
-      img.src = ev.target.result
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-
-  const detectFileRatio = file => new Promise(res => {
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.onload = () => { res(detectRatio(img.width, img.height)); URL.revokeObjectURL(url) }
-    img.onerror = () => { res('original'); URL.revokeObjectURL(url) }
-    img.src = url
-  })
-
-  const handleImageChange = async e => {
+  // File Handling
+  const handleImageChange = (e) => {
     const files = Array.from(e.target.files || []).filter(f => {
       if (!f.type.startsWith('image/')) { showToast(f.name + ' is not an image.', 'error'); return false }
       return true
     })
-    const withRatio = await Promise.all(files.map(async f => {
-      f.detectedRatio = await detectFileRatio(f); return f
+    
+    const newFiles = files.map(f => ({
+      id: Math.random().toString(36).slice(2),
+      file: f,
+      url: URL.createObjectURL(f),
+      crop: { x: 0, y: 0 },
+      zoom: 1,
+      cropPx: null,
+      ratio: mediaType === 'poster' ? 'original' : 'auto',
+      brightness: 100,
+      contrast: 100,
+      saturate: 100,
+      naturalAspect: null // populated on load
     }))
-    setSelectedFiles(prev => [...prev, ...withRatio])
+
+    setEditFiles(prev => [...prev, ...newFiles])
+    if (!activeEditId && newFiles.length > 0) setActiveEditId(newFiles[0].id)
     if (e.target) e.target.value = ''
   }
 
-  useEffect(() => {
-    if (!selectedFiles.length) { setImagePreviews([]); return }
-    let alive = true; const out = [];
-    (async () => {
-      for (const f of selectedFiles) {
-        const ratio = aspectRatio === 'auto' ? (f.detectedRatio || 'original') : aspectRatio
-        try { const r = await processSingleFile(f, ratio); if (alive) out.push(r) } catch {}
-      }
-      if (alive) setImagePreviews([...out])
-    })()
-    return () => { alive = false }
-  }, [selectedFiles, aspectRatio, mediaType, applyOverlay, overlays])
+  const removeFile = (id) => {
+    setEditFiles(prev => prev.filter(f => f.id !== id))
+    if (activeEditId === id) setActiveEditId(null)
+  }
 
-  const removeFile = idx => setSelectedFiles(p => p.filter((_, i) => i !== idx))
+  const activeFile = editFiles.find(f => f.id === activeEditId)
+
+  const updateActiveFile = (updates) => {
+    if (!activeEditId) return
+    setEditFiles(prev => prev.map(f => f.id === activeEditId ? { ...f, ...updates } : f))
+  }
+
+  const applyBulkSettings = () => {
+    if (!activeFile) return
+    setEditFiles(prev => prev.map(f => ({
+      ...f,
+      ratio: activeFile.ratio,
+      brightness: activeFile.brightness,
+      contrast: activeFile.contrast,
+      saturate: activeFile.saturate,
+    })))
+    showToast('Applied settings to all items')
+  }
+
+  const handleSavePreset = async (e) => {
+    if (e) e.preventDefault()
+    if (!activeFile || !presetName.trim()) return
+    try {
+      const { error } = await supabase.from('media_presets').insert({
+        name: presetName.trim(),
+        brightness: activeFile.brightness,
+        contrast: activeFile.contrast,
+        saturate: activeFile.saturate
+      })
+      if (error) throw error
+      showToast('Preset saved')
+      setPresetModal(false)
+      setPresetName('')
+      fetchPresets()
+    } catch (err) {
+      showToast('Failed to save preset: ' + err.message, 'error')
+    }
+  }
+
+  const handleConfirmPresetDelete = async () => {
+    if (!confirmPresetDel) return
+    const id = confirmPresetDel
+    setConfirmPresetDel(null)
+    try {
+      const { error } = await supabase.from('media_presets').delete().eq('id', id)
+      if (error) throw error
+      showToast('Preset deleted')
+      fetchPresets()
+    } catch (err) {
+      showToast('Delete failed: ' + err.message, 'error')
+    }
+  }
+
+  const loadPreset = (p) => {
+    updateActiveFile({ brightness: p.brightness, contrast: p.contrast, saturate: p.saturate })
+  }
+
+  // Rendering the final canvas
+  const processEditedFile = (fileObj) => new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const { cropPx, brightness, contrast, saturate, ratio } = fileObj
+      
+      // Calculate actual draw dimensions
+      let tw, th, sx, sy, sw, sh
+
+      if (cropPx && ratio !== 'original') {
+        tw = cropPx.width
+        th = cropPx.height
+        sx = cropPx.x
+        sy = cropPx.y
+        sw = cropPx.width
+        sh = cropPx.height
+      } else {
+        tw = img.width
+        th = img.height
+        sx = 0; sy = 0; sw = tw; sh = th
+      }
+
+      // Limit max dimensions for HD
+      const mx = 1920
+      if (tw > th) { if (tw > mx) { th = Math.round(th * mx / tw); tw = mx } }
+      else { if (th > mx) { tw = Math.round(tw * mx / th); th = mx } }
+
+      const canvas = document.createElement('canvas')
+      canvas.width = tw
+      canvas.height = th
+      const ctx = canvas.getContext('2d')
+      
+      // Apply color corrections
+      ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturate}%)`
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, tw, th)
+
+      // Apply overlay
+      let overlaySrc = null
+      if (applyOverlay && mediaType === 'photo') {
+        const ar = tw / th
+        if (ratio === '4:3' || ar > 1.1) overlaySrc = overlays.overlay43 || null
+        else overlaySrc = overlays.overlay34 || null
+      }
+
+      const buildResult = (cvs) => {
+        const fullUrl = cvs.toDataURL('image/jpeg', 0.92)
+        const tC = document.createElement('canvas')
+        const tMx = 800
+        let tW = cvs.width, tH = cvs.height
+        if (tW > tH) { if (tW > tMx) { tH = Math.round(tH * tMx / tW); tW = tMx } }
+        else { if (tH > tMx) { tW = Math.round(tW * tMx / tH); tH = tMx } }
+        tC.width = tW; tC.height = tH
+        const ctxT = tC.getContext('2d')
+        ctxT.imageSmoothingEnabled = true
+        ctxT.imageSmoothingQuality = 'high'
+        ctxT.drawImage(cvs, 0, 0, tW, tH)
+        return { fullUrl, thumbUrl: tC.toDataURL('image/jpeg', 0.85) }
+      }
+
+      if (overlaySrc) {
+        ctx.filter = 'none' // Reset filter so overlay isn't affected
+        const ov = new Image(); ov.crossOrigin = 'anonymous'
+        ov.onload = () => { ctx.drawImage(ov, 0, 0, tw, th); resolve(buildResult(canvas)) }
+        ov.onerror = () => resolve(buildResult(canvas))
+        ov.src = overlaySrc
+      } else resolve(buildResult(canvas))
+    }
+    img.onerror = reject
+    img.src = fileObj.url
+  })
 
   const dataURLtoBlob = url => {
     const [h, d] = url.split(','); const mime = h.match(/:(.*?);/)[1]
@@ -292,42 +317,43 @@ export default function MediaDashboard() {
   const handleSubmit = async e => {
     e.preventDefault()
     const isImg = mediaType === 'photo' || mediaType === 'poster'
-    if (isImg && !imagePreviews.length) { showToast('Select at least one image.', 'error'); return }
+    if (isImg && !editFiles.length) { showToast('Select at least one image.', 'error'); return }
     if (!isImg && !link.trim()) { showToast('Enter a YouTube URL.', 'error'); return }
     setUploading(true)
+    
     try {
       let rows = []
       if (isImg) {
-        for (let i = 0; i < imagePreviews.length; i++) {
-          const p = imagePreviews[i]
+        for (let i = 0; i < editFiles.length; i++) {
+          const fileObj = editFiles[i]
+          const p = await processEditedFile(fileObj)
+          
           const fid = Math.random().toString(36).slice(2, 9) + '-' + Date.now() + '-' + i
           let hdUrl = p.fullUrl, thUrl = p.thumbUrl
-          if (p.fullUrl?.startsWith('data:')) {
-            try {
-              const blob = dataURLtoBlob(p.fullUrl)
-              const fp = `hd/${fid}.jpg`
-              const { error } = await supabase.storage.from('event-media').upload(fp, blob, { contentType: 'image/jpeg' })
-              if (!error) hdUrl = supabase.storage.from('event-media').getPublicUrl(fp).data.publicUrl
-            } catch {}
-          }
-          if (p.thumbUrl?.startsWith('data:')) {
-            try {
-              const blob = dataURLtoBlob(p.thumbUrl)
-              const tp = `thumbs/${fid}.jpg`
-              const { error } = await supabase.storage.from('event-media').upload(tp, blob, { contentType: 'image/jpeg' })
-              if (!error) thUrl = supabase.storage.from('event-media').getPublicUrl(tp).data.publicUrl
-            } catch {}
-          }
+          
+          const blobHd = dataURLtoBlob(p.fullUrl)
+          const fpHd = `hd/${fid}.jpg`
+          const resHd = await supabase.storage.from('event-media').upload(fpHd, blobHd, { contentType: 'image/jpeg' })
+          if (!resHd.error) hdUrl = supabase.storage.from('event-media').getPublicUrl(fpHd).data.publicUrl
+          
+          const blobTh = dataURLtoBlob(p.thumbUrl)
+          const fpTh = `thumbs/${fid}.jpg`
+          const resTh = await supabase.storage.from('event-media').upload(fpTh, blobTh, { contentType: 'image/jpeg' })
+          if (!resTh.error) thUrl = supabase.storage.from('event-media').getPublicUrl(fpTh).data.publicUrl
+          
           rows.push({ id: fid, type: mediaType, caption: caption.trim(), thumb_url: thUrl, hd_url: hdUrl, competition_id: compTag || null, uploader_name: user?.name || user?.username || 'Media' })
         }
       } else {
         rows = [{ id: Math.random().toString(36).slice(2, 9) + '-' + Date.now(), type: mediaType, caption: caption.trim(), thumb_url: link.trim(), hd_url: link.trim(), competition_id: compTag || null, uploader_name: user?.name || user?.username || 'Media' }]
       }
+      
       const { error } = await supabase.from('gallery_media').insert(rows)
       if (error) throw error
-      setCaption(''); setLink(''); setSelectedFiles([]); setImagePreviews([]); setCompTag('')
+      setCaption(''); setLink(''); setEditFiles([]); setCompTag(''); setActiveEditId(null)
       fetchMedia()
       showToast(`${rows.length} item${rows.length > 1 ? 's' : ''} published.`)
+      
+      // Auto switch to library on mobile
       if (window.innerWidth < 900) setActivePanel('library')
     } catch (err) { showToast('Failed: ' + err.message, 'error') }
     finally { setUploading(false) }
@@ -364,21 +390,34 @@ export default function MediaDashboard() {
     } catch (err) { showToast('Delete failed: ' + err.message, 'error') }
   }
 
-  // Library computed
+  // Cropper calculation
+  const getAspect = (ratio, natAspect) => {
+    if (ratio === '4:3') return 4/3
+    if (ratio === '3:4') return 3/4
+    if (ratio === 'auto') {
+      if (!natAspect) return 4/3
+      return natAspect > 1.1 ? 4/3 : 3/4
+    }
+    return natAspect || 1 // if 'original' or not loaded yet
+  }
+
+  const onMediaLoaded = (mediaSize) => {
+    updateActiveFile({ naturalAspect: mediaSize.width / mediaSize.height })
+  }
+
+  const isImg = mediaType === 'photo' || mediaType === 'poster'
+
+  // Filter computations
   const filtered = mediaFeed.filter(it => {
     const typeOk = libFilter === 'all' || it.type === libFilter
     const q = libSearch.trim().toLowerCase()
-    const searchOk = !q || it.caption?.toLowerCase().includes(q) ||
-      competitions.find(c => c.id === it.competition_id)?.name?.toLowerCase().includes(q)
+    const searchOk = !q || it.caption?.toLowerCase().includes(q) || competitions.find(c => c.id === it.competition_id)?.name?.toLowerCase().includes(q)
     return typeOk && searchOk
   })
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const page = Math.min(currentPage, totalPages)
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
   const toggleSel = id => setSelectedItems(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const selectAll  = () => setSelectedItems(new Set(filtered.map(i => i.id)))
-  const clearSel   = () => setSelectedItems(new Set())
 
   const getYtId = url => {
     if (!url) return null
@@ -386,16 +425,13 @@ export default function MediaDashboard() {
     return m ? m[1] : null
   }
 
-  const isImg = mediaType === 'photo' || mediaType === 'poster'
-
   return (
     <div className="med-root">
-
-      {/* Topbar */}
+      {/* Topbar exactly as it was originally */}
       <header className="med-topbar">
         <div className="med-topbar-left">
           <img src="/inspico-logo.svg" alt="" className="med-logo-mark" />
-          <img src="/inspico.svg"      alt="Inspico" className="med-logo-text" />
+          <img src="/inspico.svg" alt="Inspico" className="med-logo-text" />
           <div className="med-topbar-div" />
           <span className="med-topbar-name">{user?.name || user?.username || 'Media Team'}</span>
         </div>
@@ -404,7 +440,7 @@ export default function MediaDashboard() {
         </button>
       </header>
 
-      {/* Mobile tab switcher */}
+      {/* Mobile tab switcher (Restored) */}
       <div className="med-mob-tabs">
         <button className={'med-mob-tab' + (activePanel === 'upload' ? ' active' : '')} onClick={() => setActivePanel('upload')}>
           <IconUpload s={15} /> Upload
@@ -415,176 +451,163 @@ export default function MediaDashboard() {
         </button>
       </div>
 
-      {/* Two-panel layout */}
       <main className="med-main">
-
-        {/* ── Upload Panel ────────────────────────── */}
-        <section className={'med-panel med-upload-panel' + (activePanel === 'upload' ? ' mob-visible' : '')}>
-
-          <div className="med-panel-head">
-            <h2 className="med-panel-title">Upload</h2>
-            {mediaType === 'photo' && (
-              <button type="button" className="med-pill" onClick={() => setShowOverlayPanel(p => !p)}>
-                <IconLayers />
-                PNG Frames
-                {(overlays.overlay34 || overlays.overlay43) && <span className="med-dot" />}
-              </button>
-            )}
-          </div>
-
-          {/* Overlay config */}
-          {mediaType === 'photo' && showOverlayPanel && (
-            <div className="med-overlay-box">
-              <p className="med-overlay-desc">Transparent PNG frames applied to all photos automatically.</p>
-              <div className="med-overlay-slots">
-                {[
-                  { key: 'overlay34', label: 'Portrait 3:4',  dim: '1200×1600' },
-                  { key: 'overlay43', label: 'Landscape 4:3', dim: '1600×1200' },
-                ].map(({ key, label, dim }) => (
-                  <div key={key} className="med-overlay-slot">
-                    <div className="med-overlay-slot-hd">
-                      <span>{label}</span><code>{dim}</code>
-                    </div>
-                    {overlays[key]
-                      ? <div className="med-overlay-img-wrap">
-                          <img src={overlays[key]} alt={label} />
-                          <button type="button" className="med-overlay-rm" onClick={() => handleRemoveOverlay(key)}>
-                            <IconX s={10} /> Remove
-                          </button>
-                        </div>
-                      : <label className="med-overlay-drop">
-                          <IconUpload s={16} />
-                          <span>Upload PNG</span>
-                          <input type="file" accept="image/png" style={{ display: 'none' }} onChange={e => handleOverlayUpload(key, e.target.files[0])} />
-                        </label>
-                    }
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Type tabs */}
-          <div className="med-type-tabs">
-            {TYPES.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                className={'med-type-btn' + (mediaType === id ? ' active' : '')}
-                onClick={() => { setMediaType(id); setLink(''); setSelectedFiles([]); setImagePreviews([]) }}
-              >
-                <Icon s={15} /><span>{label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="med-form">
-
-            {isImg && (
-              <>
-                <div className="med-field">
-                  <label className="med-label">Caption</label>
-                  <input
-                    type="text"
-                    className="med-input"
-                    placeholder="Caption / description for this media..."
-                    value={caption}
-                    onChange={e => setCaption(e.target.value)}
-                  />
+        {/* Editor Area (Contains Sidebar + Canvas) */}
+        <section className={`med-panel med-upload-panel ${activePanel === 'upload' ? 'mob-visible' : ''}`}>
+          
+          <div className="med-editor-layout">
+            {/* Editor Sidebar */}
+            <aside className="med-sidebar">
+              <div className="med-sidebar-inner">
+                <div className="med-panel-head">
+                  <h2 className="med-panel-title">Upload & Edit</h2>
                 </div>
-                {mediaType === 'photo' && (overlays.overlay34 || overlays.overlay43) && (
-                  <label className="med-check-row">
-                    <input type="checkbox" checked={applyOverlay} onChange={e => setApplyOverlay(e.target.checked)} />
-                    <IconLayers s={13} />
-                    Apply PNG frame overlay
-                  </label>
-                )}
-
-                {mediaType === 'photo' && (
-                  <div className="med-field">
-                    <label className="med-label">Aspect ratio</label>
-                    <div className="med-ratio-row">
-                      {[
-                        { id: 'auto',     txt: 'Auto' },
-                        { id: '4:3',      txt: '4:3' },
-                        { id: '3:4',      txt: '3:4' },
-                        { id: 'original', txt: 'Original' },
-                      ].map(r => (
-                        <button key={r.id} type="button"
-                          className={'med-ratio-btn' + (aspectRatio === r.id ? ' active' : '')}
-                          onClick={() => setAspectRatio(r.id)}>
-                          {r.txt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Drop zone */}
-                <div className="med-drop" onClick={() => fileInputRef.current?.click()}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); handleImageChange({ target: { files: Array.from(e.dataTransfer.files), value: '' } }) }}>
-                  <IconUpload s={22} />
-                  <span className="med-drop-title">Click or drag images here</span>
-                  <span className="med-drop-sub">JPEG, PNG — multiple files allowed</span>
-                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} style={{ display: 'none' }} />
+                
+                {/* Type Selection */}
+                <div className="med-type-tabs">
+                  {TYPES.map(({ id, label, Icon }) => (
+                    <button key={id} type="button" className={`med-type-btn ${mediaType === id ? 'active' : ''}`}
+                      onClick={() => { setMediaType(id); setLink(''); setEditFiles([]); setActiveEditId(null) }}>
+                      <Icon s={15} /><span>{label}</span>
+                    </button>
+                  ))}
                 </div>
 
-                {/* Preview grid */}
-                {imagePreviews.length > 0 && (
-                  <div className="med-field">
-                    <div className="med-field-hd">
-                      <label className="med-label">{imagePreviews.length} file{imagePreviews.length > 1 ? 's' : ''} ready</label>
-                      <button type="button" className="med-text-btn" onClick={() => setSelectedFiles([])}>Clear all</button>
-                    </div>
-                    <div className="med-preview-grid">
-                      {imagePreviews.map((p, i) => (
-                        <div key={i} className="med-preview-card">
-                          <div className="med-preview-ratio" style={{ paddingTop: ratioPaddingTop(p.outRatio, p.tw, p.th) }}>
-                            <img src={p.thumbUrl || p.fullUrl} alt="" />
-                            <button type="button" className="med-preview-rm" onClick={() => removeFile(i)} title="Remove">
-                              <IconX s={10} />
-                            </button>
-                            <span className="med-preview-chip">{p.outRatio}</span>
-                            {applyOverlay && mediaType === 'photo' && (
-                              <span className={'med-preview-overlay-chip' + (p.overlayApplied ? ' on' : ' off')}>
-                                {p.overlayApplied ? 'Frame' : 'No frame'}
-                              </span>
-                            )}
+                <form onSubmit={handleSubmit} className="med-form">
+                  {isImg && (
+                    <>
+                      <div className="med-field">
+                        <label className="med-label">Queue ({editFiles.length})</label>
+                        <div className="med-queue-grid">
+                          <div className="med-queue-add" onClick={() => fileInputRef.current?.click()}>
+                            <IconUpload s={18} />
+                            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} style={{ display: 'none' }} />
                           </div>
+                          {editFiles.map(f => (
+                            <div key={f.id} className={`med-queue-item ${activeEditId === f.id ? 'active' : ''}`} onClick={() => setActiveEditId(f.id)}>
+                              <img src={f.url} alt="" />
+                              <button type="button" className="med-queue-rm" onClick={(e) => { e.stopPropagation(); removeFile(f.id) }}><IconX s={10} /></button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+
+                      {activeFile && (
+                        <>
+                          <div className="med-field">
+                            <label className="med-label">Aspect Ratio</label>
+                            <div className="med-ratio-row">
+                              {['auto', '4:3', '3:4', 'original'].map(r => (
+                                <button key={r} type="button" className={`med-ratio-btn ${activeFile.ratio === r ? 'active' : ''}`}
+                                  onClick={() => updateActiveFile({ ratio: r })}>
+                                  {r}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="med-field med-adjustments">
+                            <div className="med-field-hd">
+                              <label className="med-label">Adjustments</label>
+                              <div style={{display:'flex', gap:'8px'}}>
+                                {(activeFile.brightness !== 100 || activeFile.contrast !== 100 || activeFile.saturate !== 100) && (
+                                  <button type="button" className="med-text-btn" onClick={() => updateActiveFile({ brightness: 100, contrast: 100, saturate: 100 })}>Reset</button>
+                                )}
+                                <button type="button" className="med-text-btn" onClick={() => setPresetModal(true)}>+ Save</button>
+                              </div>
+                            </div>
+                            
+                            {presets.length > 0 && (
+                              <div className="med-preset-chips">
+                                {presets.map((p) => (
+                                  <div key={p.id} className="med-preset-chip">
+                                    <button type="button" className="med-preset-chip-btn" onClick={() => loadPreset(p)}>{p.name}</button>
+                                    <button type="button" className="med-preset-chip-del" onClick={() => setConfirmPresetDel(p.id)}><IconX s={10} /></button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            <div className="med-slider-row">
+                              <span className="med-slider-lbl"><span>Brightness</span><span>{activeFile.brightness}%</span></span>
+                              <input type="range" className="med-slider" min="50" max="150" value={activeFile.brightness} onChange={e => updateActiveFile({ brightness: Number(e.target.value) })} />
+                            </div>
+                            <div className="med-slider-row">
+                              <span className="med-slider-lbl"><span>Contrast</span><span>{activeFile.contrast}%</span></span>
+                              <input type="range" className="med-slider" min="50" max="150" value={activeFile.contrast} onChange={e => updateActiveFile({ contrast: Number(e.target.value) })} />
+                            </div>
+                            <div className="med-slider-row">
+                              <span className="med-slider-lbl"><span>Saturation</span><span>{activeFile.saturate}%</span></span>
+                              <input type="range" className="med-slider" min="0" max="200" value={activeFile.saturate} onChange={e => updateActiveFile({ saturate: Number(e.target.value) })} />
+                            </div>
+                          </div>
+
+                          {editFiles.length > 1 && (
+                            <button type="button" className="med-pill" onClick={applyBulkSettings} style={{width:'100%', justifyContent:'center'}}>
+                              <IconLayers s={13} /> Sync adjustments to all
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {!isImg && (
+                    <div className="med-field">
+                      <label className="med-label">YouTube URL</label>
+                      <input type="url" className="med-input" placeholder="https://youtube.com/…" value={link} onChange={e => setLink(e.target.value)} required />
                     </div>
+                  )}
+
+                  <div className="med-field">
+                    <label className="med-label">Caption</label>
+                    <textarea className="med-textarea" placeholder="Add a caption..." value={caption} onChange={e => setCaption(e.target.value)} />
                   </div>
-                )}
-              </>
-            )}
 
-            {!isImg && (
-              <div className="med-field">
-                <label className="med-label">
-                  {mediaType === 'live' ? 'YouTube Live URL' : mediaType === 'shorts' ? 'YouTube Shorts URL' : 'YouTube URL'}
-                </label>
-                <input type="url" className="med-input" placeholder="https://youtube.com/…"
-                  value={link} onChange={e => setLink(e.target.value)} required />
-                {link && !getYtId(link) && (
-                  <span className="med-warn-row"><IconWarn s={14} /> Invalid YouTube URL</span>
-                )}
+                  <button type="submit" className="med-submit" disabled={uploading}>
+                    {uploading ? <><div className="med-spin" /> Publishing...</> : <><IconUpload s={15} /> Publish</>}
+                  </button>
+                </form>
               </div>
-            )}
+            </aside>
 
-            <button type="submit" className="med-submit" disabled={uploading}>
-              {uploading
-                ? <><div className="med-spin" /> Processing…</>
-                : <><IconUpload s={15} /> Publish</>}
-            </button>
-          </form>
+            {/* Main Crop Area */}
+            <div className="med-editor-canvas">
+              {isImg ? (
+                activeFile ? (
+                  <div className="med-crop-container">
+                    <Cropper
+                      image={activeFile.url}
+                      crop={activeFile.crop}
+                      zoom={activeFile.zoom}
+                      aspect={getAspect(activeFile.ratio, activeFile.naturalAspect)}
+                      onCropChange={crop => updateActiveFile({ crop })}
+                      onZoomChange={zoom => updateActiveFile({ zoom })}
+                      onCropComplete={(cp, cropPx) => updateActiveFile({ cropPx })}
+                      onMediaLoaded={onMediaLoaded}
+                      objectFit={activeFile.ratio === 'original' ? "contain" : "contain"} 
+                      showGrid={activeFile.ratio !== 'original'}
+                      style={{ mediaStyle: { filter: `brightness(${activeFile.brightness}%) contrast(${activeFile.contrast}%) saturate(${activeFile.saturate}%)` } }}
+                    />
+                  </div>
+                ) : (
+                  <div className="med-empty">
+                    <IconImage s={32} />
+                    <p>Select images to edit</p>
+                  </div>
+                )
+              ) : (
+                <div className="med-empty">
+                  <IconYoutube s={32} />
+                  <p>YouTube Link Mode</p>
+                </div>
+              )}
+            </div>
+          </div>
         </section>
 
-        {/* ── Library Panel ────────────────────────── */}
-        <section className={'med-panel med-library-panel' + (activePanel === 'library' ? ' mob-visible' : '')}>
-
+        {/* Library Area */}
+        <section className={`med-panel med-library-panel ${activePanel === 'library' ? 'mob-visible' : ''}`}>
           <div className="med-panel-head">
             <div className="med-panel-head-left">
               <h2 className="med-panel-title">Library</h2>
@@ -593,97 +616,57 @@ export default function MediaDashboard() {
             <div className="med-panel-head-right">
               {bulkMode ? (
                 <>
-                  <button type="button" className="med-pill"
-                    onClick={selectedItems.size === filtered.length ? clearSel : selectAll}>
-                    <IconSelAll s={12} />
-                    {selectedItems.size === filtered.length ? 'Deselect all' : 'Select all'}
+                  <button type="button" className="med-pill" onClick={selectedItems.size === filtered.length ? () => setSelectedItems(new Set()) : () => setSelectedItems(new Set(filtered.map(i => i.id)))}>
+                    <IconSelAll s={12} /> {selectedItems.size === filtered.length ? 'Deselect all' : 'Select all'}
                   </button>
-                  <button type="button" className="med-pill med-pill--danger"
-                    disabled={!selectedItems.size}
-                    onClick={() => setConfirmDel('bulk')}>
-                    <IconTrash s={12} />
-                    Delete {selectedItems.size > 0 ? '(' + selectedItems.size + ')' : ''}
+                  <button type="button" className="med-pill med-pill--danger" disabled={!selectedItems.size} onClick={() => setConfirmDel('bulk')}>
+                    <IconTrash s={12} /> Delete {selectedItems.size > 0 ? '(' + selectedItems.size + ')' : ''}
                   </button>
-                  <button type="button" className="med-icon-btn" onClick={() => { setBulkMode(false); clearSel() }} title="Cancel">
-                    <IconX s={14} />
-                  </button>
+                  <button type="button" className="med-icon-btn" onClick={() => { setBulkMode(false); setSelectedItems(new Set()) }}><IconX s={14} /></button>
                 </>
               ) : (
                 <>
-                  <button type="button" className="med-icon-btn" onClick={fetchMedia} title="Refresh"><IconRefresh /></button>
+                  <button type="button" className="med-icon-btn" onClick={fetchMedia}><IconRefresh /></button>
                   <button type="button" className="med-pill" onClick={() => setBulkMode(true)}><IconSelAll s={12} /> Select</button>
                 </>
               )}
             </div>
           </div>
 
-          {/* Search */}
           <div className="med-search-wrap">
             <IconSearch s={14} />
-            <input className="med-search" type="text" placeholder="Search captions…"
-              value={libSearch} onChange={e => { setLibSearch(e.target.value); setCurrentPage(1) }} />
-            {libSearch && (
-              <button type="button" className="med-search-clr" onClick={() => setLibSearch('')}><IconX s={11} /></button>
-            )}
+            <input className="med-search" type="text" placeholder="Search captions…" value={libSearch} onChange={e => { setLibSearch(e.target.value); setCurrentPage(1) }} />
           </div>
 
-          {/* Filter tabs */}
           <div className="med-filter-tabs">
-            {FILTERS.map(f => {
-              const cnt = f.id === 'all' ? mediaFeed.length : mediaFeed.filter(i => i.type === f.id).length
-              return (
-                <button key={f.id} type="button"
-                  className={'med-filter-tab' + (libFilter === f.id ? ' active' : '')}
-                  onClick={() => { setLibFilter(f.id); setCurrentPage(1) }}>
-                  {f.label}
-                  {cnt > 0 && <span className="med-filter-num">{cnt}</span>}
-                </button>
-              )
-            })}
+            {FILTERS.map(f => (
+              <button key={f.id} type="button" className={`med-filter-tab ${libFilter === f.id ? 'active' : ''}`} onClick={() => { setLibFilter(f.id); setCurrentPage(1) }}>
+                {f.label}
+              </button>
+            ))}
           </div>
 
-          {/* Grid */}
           {paged.length === 0 ? (
-            <div className="med-empty">
-              <IconImage s={28} />
-              <p>{libSearch ? 'No results.' : 'No media here yet.'}</p>
-            </div>
+            <div className="med-empty"><IconImage s={28} /><p>No media found.</p></div>
           ) : (
             <div className="med-lib-grid">
               {paged.map(item => {
-                const isPhoto = item.type === 'photo' || item.type === 'poster'
-                const ytId = !isPhoto ? getYtId(item.url) : null
-                const comp = competitions.find(c => c.id === item.competition_id)
+                const isP = item.type === 'photo' || item.type === 'poster'
+                const ytId = !isP ? getYtId(item.url) : null
                 const sel = selectedItems.has(item.id)
                 return (
-                  <div key={item.id}
-                    className={'med-lib-card' + (sel ? ' selected' : '') + (bulkMode ? ' bulk' : '')}
-                    onClick={bulkMode ? () => toggleSel(item.id) : undefined}>
+                  <div key={item.id} className={`med-lib-card ${sel ? 'selected' : ''} ${bulkMode ? 'bulk' : ''}`} onClick={bulkMode ? () => toggleSel(item.id) : undefined}>
                     <div className="med-lib-thumb-box">
-                      {isPhoto
-                        ? <img src={item.thumb_url} alt="" className="med-lib-thumb" loading="lazy" />
-                        : ytId
-                          ? <><img src={'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg'} alt="" className="med-lib-thumb" loading="lazy" />
-                              <div className="med-lib-play"><IconPlay s={16} /></div></>
-                          : <div className="med-lib-thumb-fallback"><IconVideo s={22} /></div>
-                      }
-                      <span className={'med-lib-badge type-' + item.type}>{item.type}</span>
-                      {bulkMode && (
-                        <div className={'med-lib-check' + (sel ? ' on' : '')}>{sel && <IconCheck s={10} />}</div>
-                      )}
-                      {!bulkMode && (
-                        <button type="button" className="med-lib-del"
-                          onClick={e => { e.stopPropagation(); setConfirmDel(item.id) }} title="Delete">
-                          <IconTrash s={12} />
-                        </button>
-                      )}
+                      {isP ? <img src={item.thumb_url} alt="" className="med-lib-thumb" loading="lazy" />
+                         : ytId ? <><img src={'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg'} alt="" className="med-lib-thumb" loading="lazy" /><div className="med-lib-play"><IconPlay s={16} /></div></>
+                         : <div className="med-lib-thumb-fallback"><IconVideo s={22} /></div>}
+                      <span className={`med-lib-badge type-${item.type}`}>{item.type}</span>
+                      {bulkMode && <div className={`med-lib-check ${sel ? 'on' : ''}`}>{sel && <IconCheck s={10} />}</div>}
+                      {!bulkMode && <button type="button" className="med-lib-del" onClick={e => { e.stopPropagation(); setConfirmDel(item.id) }}><IconTrash s={12} /></button>}
                     </div>
                     <div className="med-lib-info">
                       <p className="med-lib-caption">{item.caption || <em>No caption</em>}</p>
-                      <div className="med-lib-meta">
-                        {comp && <span className="med-lib-comp"><IconTag s={9} /> {comp.name}</span>}
-                        <span className="med-lib-time">{relTime(item.created_at)}</span>
-                      </div>
+                      <div className="med-lib-meta"><span className="med-lib-time">{relTime(item.created_at)}</span></div>
                     </div>
                   </div>
                 )
@@ -691,38 +674,55 @@ export default function MediaDashboard() {
             </div>
           )}
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="med-pager">
-              <button type="button" className="med-page-btn" disabled={page <= 1} onClick={() => setCurrentPage(p => p - 1)}>
-                <IconChevL />
-              </button>
+              <button type="button" className="med-page-btn" disabled={page <= 1} onClick={() => setCurrentPage(p => p - 1)}><IconChevL /></button>
               <span className="med-page-info">Page {page} of {totalPages}</span>
-              <button type="button" className="med-page-btn" disabled={page >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
-                <IconChevR />
-              </button>
+              <button type="button" className="med-page-btn" disabled={page >= totalPages} onClick={() => setCurrentPage(p => p + 1)}><IconChevR /></button>
             </div>
           )}
         </section>
       </main>
 
-      {/* Toast */}
-      {toast && <div className={'med-toast ' + toast.type}>{toast.msg}</div>}
+      {toast && <div className={`med-toast ${toast.type}`}>{toast.msg}</div>}
 
-      {/* Delete confirm */}
       {confirmDel && (
         <div className="med-modal-bg">
           <div className="med-modal">
             <div className="med-modal-icon"><IconWarn s={24} /></div>
-            <h3 className="med-modal-title">
-              {confirmDel === 'bulk' ? 'Delete ' + selectedItems.size + ' items?' : 'Delete this item?'}
-            </h3>
-            <p className="med-modal-desc">Files will be permanently removed from storage. This cannot be undone.</p>
+            <h3 className="med-modal-title">{confirmDel === 'bulk' ? 'Delete ' + selectedItems.size + ' items?' : 'Delete this item?'}</h3>
+            <p className="med-modal-desc">Files will be permanently removed. This cannot be undone.</p>
             <div className="med-modal-btns">
               <button type="button" className="med-modal-cancel" onClick={() => setConfirmDel(null)}>Cancel</button>
-              <button type="button" className="med-modal-del" onClick={handleConfirmDelete}>
-                <IconTrash s={13} /> Delete
-              </button>
+              <button type="button" className="med-modal-del" onClick={handleConfirmDelete}><IconTrash s={13} /> Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {presetModal && (
+        <div className="med-modal-bg">
+          <form className="med-modal" onSubmit={handleSavePreset}>
+            <h3 className="med-modal-title">Save Preset</h3>
+            <p className="med-modal-desc" style={{marginBottom: '16px'}}>Name your custom color settings.</p>
+            <input type="text" className="med-input" placeholder="e.g. Cinematic Dark" value={presetName} onChange={e => setPresetName(e.target.value)} autoFocus required style={{marginBottom: '20px'}} />
+            <div className="med-modal-btns">
+              <button type="button" className="med-modal-cancel" onClick={() => setPresetModal(false)}>Cancel</button>
+              <button type="submit" className="med-submit" style={{marginTop:0, flex:1}}>Save</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {confirmPresetDel && (
+        <div className="med-modal-bg">
+          <div className="med-modal">
+            <div className="med-modal-icon"><IconWarn s={24} /></div>
+            <h3 className="med-modal-title">Delete preset?</h3>
+            <p className="med-modal-desc">This custom lighting preset will be removed.</p>
+            <div className="med-modal-btns">
+              <button type="button" className="med-modal-cancel" onClick={() => setConfirmPresetDel(null)}>Cancel</button>
+              <button type="button" className="med-modal-del" onClick={handleConfirmPresetDelete}><IconTrash s={13} /> Delete</button>
             </div>
           </div>
         </div>

@@ -21,86 +21,85 @@
   position:sticky; top:0; z-index:200;
   backdrop-filter:blur(12px);
 }
-.med-topbar-left  { display:flex; align-items:center; gap:10px }
+.med-topbar-left  { display:flex; align-items:center; gap:10px; width: 220px; }
 .med-logo-mark    { height:18px; width:18px; filter:brightness(0) invert(1) }
 .med-logo-text    { height:13px; max-width:76px }
 .med-topbar-div   { width:1px; height:14px; background:rgba(255,255,255,.1) }
 .med-topbar-name  { font-size:12px; font-weight:600; color:rgba(255,255,255,.75); letter-spacing:.2px }
-.med-signout-btn  {
+
+/* Top Tab Switcher (Glass style) */
+.med-top-tabs {
   display:flex; align-items:center; gap:6px;
-  background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2);
+  background:rgba(255,255,255,.03); padding:4px; border-radius:12px;
+  border:1px solid rgba(255,255,255,.05);
+}
+.med-top-tab {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  padding:6px 16px; border-radius:8px; border:none; background:transparent;
+  color:rgba(255,255,255,.45); font-size:12px; font-weight:600; cursor:pointer;
+  transition:all .2s; font-family:inherit;
+}
+.med-top-tab:hover { color:rgba(255,255,255,.8); background:rgba(255,255,255,.02) }
+.med-top-tab.active { background:rgba(184,25,60,.15); color:#ff6b8a; box-shadow:0 2px 8px rgba(184,25,60,.2) }
+.med-badge {
+  background:rgba(184,25,60,.3); color:#ff6b8a;
+  font-size:10px; font-weight:800; padding:2px 6px; border-radius:999px;
+}
+
+.med-signout-btn  {
+  display:flex; align-items:center; justify-content:flex-end; gap:6px;
+  background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); width: auto;
   color:#f87171; padding:6px 13px; border-radius:999px;
   font-size:11px; font-weight:600; letter-spacing:.3px; cursor:pointer;
   font-family:inherit; transition:all .2s;
 }
 .med-signout-btn:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.4) }
 
-/* ── Mobile tabs ─────────────────────────────────────── */
-.med-mob-tabs {
-  display:none; position:sticky; top:52px; z-index:150;
-  background:rgba(14,12,12,.98);
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
-.med-mob-tab {
-  flex:1; display:flex; align-items:center; justify-content:center;
-  gap:6px; padding:11px 8px;
-  font-size:12px; font-weight:600; color:rgba(255,255,255,.45);
-  background:transparent; border:none; border-bottom:2px solid transparent;
-  cursor:pointer; font-family:inherit; transition:all .2s;
-}
-.med-mob-tab.active { color:#ff6b8a; border-bottom-color:#B8193C }
-.med-mob-count {
-  background:rgba(184,25,60,.2); color:#ff6b8a;
-  font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px;
-}
 
 /* ── Main layout ─────────────────────────────────────── */
 .med-main {
-  display:grid; grid-template-columns:380px 1fr;
-  gap:0; flex:1; min-height:0;
+  display:flex; flex:1; min-height:0;
+  overflow: hidden;
 }
-.med-panel { display:flex; flex-direction:column; gap:16px; padding:20px; overflow-y:auto }
-.med-upload-panel  { border-right:1px solid rgba(255,255,255,.06); position:sticky; top:52px; max-height:calc(100vh - 52px); overflow-y:auto }
-.med-library-panel { background:rgba(0,0,0,.15) }
+.med-panel {
+  display:flex; flex-direction:column; min-height:0;
+}
+.med-upload-panel {
+  flex:1; min-width:0;
+}
 
-.med-panel-head {
-  display:flex; align-items:center; justify-content:space-between;
-  flex-wrap:wrap; gap:8px; flex-shrink:0;
+.med-editor-layout {
+  display:flex; flex:1; width:100%; min-height:0;
 }
-.med-panel-head-left  { display:flex; align-items:center; gap:8px }
-.med-panel-head-right { display:flex; align-items:center; gap:6px }
-.med-panel-title      { font-size:14px; font-weight:700; color:#fff; margin:0 }
 
-/* ── Shared pill / icon buttons ─────────────────────── */
-.med-pill {
-  display:flex; align-items:center; gap:5px;
-  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
-  color:rgba(255,255,255,.75); padding:5px 11px; border-radius:999px;
-  font-size:11px; font-weight:600; cursor:pointer; font-family:inherit;
-  transition:all .15s; white-space:nowrap;
+/* ── Editor Canvas Area ──────────────────────────────── */
+.med-editor-canvas {
+  flex:1; background:rgba(0,0,0,.2);
+  display:flex; align-items:center; justify-content:center;
+  position:relative;
 }
-.med-pill:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2) }
-.med-pill:disabled { opacity:.4; cursor:not-allowed }
-.med-pill--danger  { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.25); color:#f87171 }
-.med-pill--danger:hover:not(:disabled) { background:rgba(239,68,68,.2) }
-.med-dot { width:6px; height:6px; border-radius:50%; background:#10b981; flex-shrink:0 }
 
-.med-icon-btn {
-  width:30px; height:30px; display:flex; align-items:center; justify-content:center;
-  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
-  color:rgba(255,255,255,.6); border-radius:8px; cursor:pointer;
-  font-family:inherit; transition:all .15s;
+.med-crop-container {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
 }
-.med-icon-btn:hover { background:rgba(255,255,255,.09); color:#fff }
-.med-count-badge {
-  background:rgba(184,25,60,.15); border:1px solid rgba(184,25,60,.25);
-  color:#ff6b8a; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px;
+/* override react-easy-crop styles for minimal look */
+.reactEasyCrop_Container { background: transparent !important; }
+
+/* ── Editor Sidebar ──────────────────────────────────── */
+.med-sidebar {
+  width:360px; background:rgba(15,13,14,.95);
+  border-left:1px solid rgba(255,255,255,.06);
+  display:flex; flex-direction:column;
+  overflow-y:auto;
+}
+.med-sidebar-inner {
+  padding:20px; display:flex; flex-direction:column; gap:20px;
 }
 
 /* ── Type tabs ──────────────────────────────────────── */
 .med-type-tabs {
-  display:grid; grid-template-columns:repeat(5,1fr);
-  gap:5px; flex-shrink:0;
+  display:grid; grid-template-columns:repeat(5,1fr); gap:5px;
 }
 .med-type-btn {
   display:flex; flex-direction:column; align-items:center; gap:5px;
@@ -112,15 +111,64 @@
 .med-type-btn:hover  { background:rgba(255,255,255,.07); color:rgba(255,255,255,.8) }
 .med-type-btn.active { background:rgba(184,25,60,.15); border-color:#B8193C; color:#ff6b8a }
 
-/* ── Form ───────────────────────────────────────────── */
-.med-form  { display:flex; flex-direction:column; gap:13px }
-.med-field { display:flex; flex-direction:column; gap:5px }
+/* ── Form & Fields ───────────────────────────────────── */
+.med-form  { display:flex; flex-direction:column; gap:16px }
+.med-field { display:flex; flex-direction:column; gap:6px }
 .med-field-hd { display:flex; align-items:center; justify-content:space-between }
 .med-label {
   font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1.1px;
   color:rgba(255,255,255,.38);
 }
-.med-label-opt { font-weight:500; opacity:.7 }
+
+/* Queue Grid */
+.med-queue-grid {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:6px;
+}
+.med-queue-add {
+  aspect-ratio:1; border:2px dashed rgba(255,255,255,.1); border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  color:rgba(255,255,255,.35); cursor:pointer; transition:all .2s;
+}
+.med-queue-add:hover { border-color:rgba(184,25,60,.5); background:rgba(184,25,60,.03); color:rgba(255,255,255,.6) }
+
+.med-queue-item {
+  aspect-ratio:1; border-radius:8px; background:#111; position:relative;
+  cursor:pointer; border:2px solid transparent; overflow:hidden;
+  transition:all .15s;
+}
+.med-queue-item img { width:100%; height:100%; object-fit:cover; display:block }
+.med-queue-item.active { border-color:#B8193C; box-shadow:0 0 0 2px rgba(184,25,60,.3) }
+.med-queue-rm {
+  position:absolute; top:4px; right:4px; width:18px; height:18px; border-radius:50%;
+  background:rgba(0,0,0,.75); border:1px solid rgba(255,255,255,.2); color:#fff; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; opacity:0; transition:all .15s;
+}
+.med-queue-item:hover .med-queue-rm { opacity:1 }
+.med-queue-rm:hover { background:rgba(239,68,68,.9) }
+
+/* Adjustments */
+.med-adjustments {
+  background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06);
+  border-radius:10px; padding:12px; gap:12px;
+}
+
+.med-preset-actions { display:flex; align-items:center; gap:8px }
+.med-preset-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; width:100% }
+.med-preset-chip {
+  display:flex; align-items:center; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+  border-radius:12px; overflow:hidden; transition:all .2s;
+}
+.med-preset-chip-btn {
+  background:none; border:none; color:rgba(255,255,255,.8); font-size:10px; font-weight:600;
+  padding:4px 8px; cursor:pointer; font-family:inherit;
+}
+.med-preset-chip-btn:hover { background:rgba(255,255,255,.1) }
+.med-preset-chip-del {
+  background:none; border:none; border-left:1px solid rgba(255,255,255,.1); color:rgba(239,68,68,.7);
+  display:flex; align-items:center; justify-content:center; width:22px; cursor:pointer; transition:all .2s;
+}
+.med-preset-chip-del:hover { background:rgba(239,68,68,.2); color:#ef4444; }
+
 .med-text-btn {
   background:none; border:none; color:rgba(255,255,255,.35);
   font-size:10px; font-weight:600; cursor:pointer; font-family:inherit;
@@ -128,6 +176,33 @@
 }
 .med-text-btn:hover { color:rgba(255,255,255,.7) }
 
+.med-slider-row { display:flex; flex-direction:column; gap:6px }
+.med-slider-lbl { font-size:11px; color:rgba(255,255,255,.6); font-weight:500; display:flex; justify-content:space-between }
+.med-slider {
+  -webkit-appearance: none; width:100%; background:transparent; height:12px; margin:0; outline:none;
+}
+.med-slider::-webkit-slider-runnable-track {
+  width:100%; height:4px; background:rgba(255,255,255,.1); border-radius:2px;
+}
+.med-slider::-webkit-slider-thumb {
+  -webkit-appearance:none; height:14px; width:14px; border-radius:50%;
+  background:#fff; margin-top:-5px; cursor:pointer; border:2px solid #111;
+  box-shadow:0 0 0 1px rgba(255,255,255,.2); transition:all .15s;
+}
+.med-slider:focus::-webkit-slider-thumb { border-color:#B8193C; box-shadow:0 0 0 3px rgba(184,25,60,.3); }
+.med-slider:hover::-webkit-slider-thumb { transform:scale(1.1) }
+
+/* Ratios */
+.med-ratio-row { display:grid; grid-template-columns:repeat(4,1fr); gap:5px }
+.med-ratio-btn {
+  padding:8px 4px; border-radius:8px; font-size:10px; font-weight:700;
+  border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.03);
+  color:rgba(255,255,255,.5); cursor:pointer; font-family:inherit; transition:all .15s;
+}
+.med-ratio-btn:hover  { background:rgba(255,255,255,.07) }
+.med-ratio-btn.active { border-color:#B8193C; background:rgba(184,25,60,.15); color:#ff6b8a }
+
+/* Inputs */
 .med-input,.med-textarea,.med-select {
   width:100%; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
   border-radius:9px; padding:9px 13px; color:#fff; font-size:13px;
@@ -138,114 +213,53 @@
 }
 .med-input::placeholder,.med-textarea::placeholder { color:rgba(255,255,255,.2) }
 .med-textarea { resize:vertical; min-height:68px; line-height:1.5 }
-.med-select option { background:#1a1015 }
 
-.med-check-row {
-  display:flex; align-items:center; gap:8px;
-  font-size:12px; font-weight:500; color:rgba(255,255,255,.7); cursor:pointer;
-  background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06);
-  border-radius:8px; padding:9px 12px;
+.med-pill {
+  display:flex; align-items:center; gap:5px;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.75); padding:5px 11px; border-radius:999px;
+  font-size:11px; font-weight:600; cursor:pointer; font-family:inherit;
+  transition:all .15s; white-space:nowrap;
 }
-.med-check-row input { accent-color:#B8193C; width:14px; height:14px }
+.med-pill:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2) }
+.med-pill:disabled { opacity:.4; cursor:not-allowed }
+.med-pill--danger  { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.25); color:#f87171 }
+.med-pill--danger:hover:not(:disabled) { background:rgba(239,68,68,.2) }
 
-.med-ratio-row { display:grid; grid-template-columns:repeat(4,1fr); gap:5px }
-.med-ratio-btn {
-  padding:8px 4px; border-radius:8px; font-size:10px; font-weight:700;
-  border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.03);
-  color:rgba(255,255,255,.5); cursor:pointer; font-family:inherit; transition:all .15s;
-}
-.med-ratio-btn:hover  { background:rgba(255,255,255,.07) }
-.med-ratio-btn.active { border-color:#B8193C; background:rgba(184,25,60,.15); color:#ff6b8a }
-
-/* ── Drop zone ──────────────────────────────────────── */
-.med-drop {
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:7px; padding:24px 16px;
-  border:2px dashed rgba(255,255,255,.1); border-radius:10px;
-  color:rgba(255,255,255,.35); cursor:pointer; transition:all .2s;
-}
-.med-drop:hover { border-color:rgba(184,25,60,.5); background:rgba(184,25,60,.03); color:rgba(255,255,255,.6) }
-.med-drop-title { font-size:12px; font-weight:600; color:rgba(255,255,255,.65) }
-.med-drop-sub   { font-size:11px; color:rgba(255,255,255,.25) }
-
-/* ── Preview grid ───────────────────────────────────── */
-.med-preview-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:7px }
-.med-preview-card { border-radius:7px; overflow:hidden }
-.med-preview-ratio { position:relative; width:100% }
-.med-preview-ratio img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block }
-.med-preview-rm {
-  position:absolute; top:4px; right:4px; width:18px; height:18px;
-  border-radius:50%; background:rgba(0,0,0,.75); border:1px solid rgba(255,255,255,.2);
-  color:#fff; display:flex; align-items:center; justify-content:center;
-  cursor:pointer; font-family:inherit; transition:background .15s;
-}
-.med-preview-rm:hover { background:rgba(239,68,68,.9) }
-.med-preview-chip {
-  position:absolute; bottom:4px; left:4px;
-  background:rgba(0,0,0,.72); color:rgba(255,255,255,.8);
-  font-size:8px; font-weight:700; padding:2px 5px; border-radius:3px; letter-spacing:.5px;
-}
-.med-preview-overlay-chip {
-  position:absolute; bottom:4px; right:4px;
-  font-size:8px; font-weight:700; padding:2px 6px; border-radius:3px; letter-spacing:.4px;
-}
-.med-preview-overlay-chip.on  { background:rgba(16,185,129,.8); color:#fff }
-.med-preview-overlay-chip.off { background:rgba(0,0,0,.6); color:rgba(255,255,255,.35) }
-
-/* ── Overlay box ─────────────────────────────────────── */
-.med-overlay-box {
-  background:rgba(0,0,0,.25); border:1px dashed rgba(255,255,255,.12);
-  border-radius:11px; padding:14px;
-}
-.med-overlay-desc { font-size:11px; color:rgba(255,255,255,.4); margin:0 0 12px 0; line-height:1.5 }
-.med-overlay-slots { display:grid; grid-template-columns:1fr 1fr; gap:10px }
-.med-overlay-slot { background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06); border-radius:8px; padding:9px }
-.med-overlay-slot-hd { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px }
-.med-overlay-slot-hd span { font-size:10px; font-weight:700; color:rgba(255,255,255,.75) }
-.med-overlay-slot-hd code { font-size:8px; color:rgba(255,255,255,.35); background:rgba(255,255,255,.05); padding:2px 5px; border-radius:3px }
-.med-overlay-img-wrap { position:relative }
-.med-overlay-img-wrap img { width:100%; height:72px; object-fit:contain; background:#000; border-radius:5px; display:block }
-.med-overlay-rm {
-  position:absolute; top:4px; right:4px;
-  display:flex; align-items:center; gap:3px;
-  background:rgba(239,68,68,.85); border:none; color:#fff;
-  border-radius:4px; padding:2px 7px; font-size:10px; font-weight:600; cursor:pointer; font-family:inherit;
-}
-.med-overlay-drop {
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:5px; padding:16px 6px; border:1px dashed rgba(255,255,255,.14);
-  border-radius:6px; cursor:pointer; color:rgba(255,255,255,.38); font-size:10px; font-weight:600;
-  transition:all .15s;
-}
-.med-overlay-drop:hover { border-color:rgba(184,25,60,.4); color:rgba(255,255,255,.7) }
-
-/* ── Submit ──────────────────────────────────────────── */
+/* Submit */
 .med-submit {
   width:100%; background:#B8193C; border:none; color:#fff;
   border-radius:9px; padding:11px 16px; font-size:13px; font-weight:700;
   cursor:pointer; font-family:inherit; display:flex; align-items:center;
-  justify-content:center; gap:7px; transition:all .2s;
+  justify-content:center; gap:7px; transition:all .2s; margin-top:8px;
 }
 .med-submit:hover:not(:disabled) { background:#cf1e44; transform:translateY(-1px); box-shadow:0 6px 20px rgba(184,25,60,.4) }
 .med-submit:disabled { opacity:.5; cursor:not-allowed; transform:none }
 .med-spin { width:13px; height:13px; border:2px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite }
 
-/* ── Warn row ────────────────────────────────────────── */
-.med-warn-row { display:flex; align-items:center; gap:5px; font-size:11px; color:#f59e0b; margin-top:2px }
+/* ── Library Panel ───────────────────────────────────── */
+.med-library-panel {
+  width:360px; flex-shrink:0; display:flex; flex-direction:column; gap:16px; padding:20px;
+  background:rgba(0,0,0,.15); overflow-y:auto; border-left:1px solid rgba(255,255,255,.05);
+}
+.med-panel-head {
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:8px; flex-shrink:0;
+}
+.med-panel-head-left  { display:flex; align-items:center; gap:8px }
+.med-panel-head-right { display:flex; align-items:center; gap:6px }
+.med-panel-title      { font-size:14px; font-weight:700; color:#fff; margin:0 }
+.med-count-badge      { background:rgba(255,255,255,.1); color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:10px; }
 
-/* ── Library: search ─────────────────────────────────── */
 .med-search-wrap {
   display:flex; align-items:center; gap:8px;
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
-  border-radius:9px; padding:8px 12px; flex-shrink:0;
+  border-radius:9px; padding:8px 12px; flex-shrink:0; max-width: 400px;
 }
 .med-search { flex:1; background:none; border:none; outline:none; color:#fff; font-size:12px; font-family:inherit }
 .med-search::placeholder { color:rgba(255,255,255,.25) }
-.med-search-clr { background:none; border:none; color:rgba(255,255,255,.4); cursor:pointer; display:flex; align-items:center; padding:0 }
-.med-search-clr:hover { color:#fff }
 
-/* ── Library: filter tabs ────────────────────────────── */
-.med-filter-tabs { display:flex; gap:5px; flex-wrap:wrap; flex-shrink:0 }
+.med-filter-tabs { display:flex; gap:5px; flex-wrap:wrap; flex-shrink:0; margin-bottom:8px }
 .med-filter-tab {
   display:flex; align-items:center; gap:5px;
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07);
@@ -254,12 +268,10 @@
 }
 .med-filter-tab:hover  { background:rgba(255,255,255,.08); color:rgba(255,255,255,.8) }
 .med-filter-tab.active { background:rgba(184,25,60,.15); border-color:#B8193C; color:#ff6b8a }
-.med-filter-num { background:rgba(255,255,255,.12); font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px }
 
-/* ── Library: grid ───────────────────────────────────── */
 .med-lib-grid {
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
   gap:10px;
 }
 .med-lib-card {
@@ -280,10 +292,6 @@
   text-transform:uppercase; letter-spacing:.5px;
   background:rgba(0,0,0,.6); color:rgba(255,255,255,.8); backdrop-filter:blur(4px);
 }
-.med-lib-badge.type-live   { color:#f87171 }
-.med-lib-badge.type-video  { color:#a5b4fc }
-.med-lib-badge.type-shorts { color:#fbbf24 }
-.med-lib-badge.type-poster { color:#38bdf8 }
 
 .med-lib-check {
   position:absolute; top:6px; right:6px; width:18px; height:18px;
@@ -306,13 +314,11 @@
   font-size:11px; font-weight:500; color:rgba(255,255,255,.75); margin:0 0 4px 0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.med-lib-caption em { color:rgba(255,255,255,.25); font-style:normal }
 .med-lib-meta { display:flex; align-items:center; gap:6px; justify-content:space-between }
-.med-lib-comp { font-size:9px; color:rgba(255,255,255,.35); display:flex; align-items:center; gap:3px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .med-lib-time { font-size:9px; color:rgba(255,255,255,.25); flex-shrink:0 }
 
 /* ── Empty state ─────────────────────────────────────── */
-.med-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:60px 20px; color:rgba(255,255,255,.2); text-align:center }
+.med-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:60px 20px; color:rgba(255,255,255,.2); text-align:center; flex:1 }
 .med-empty p { margin:0; font-size:13px }
 
 /* ── Pagination ──────────────────────────────────────── */
@@ -326,7 +332,16 @@
 .med-page-btn:disabled { opacity:.3; cursor:not-allowed }
 .med-page-info { font-size:11px; color:rgba(255,255,255,.45); font-weight:600 }
 
-/* ── Toast ───────────────────────────────────────────── */
+/* ── Utilities ───────────────────────────────────────── */
+.med-icon-btn {
+  width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
+  color:rgba(255,255,255,.6); border-radius:8px; cursor:pointer;
+  font-family:inherit; transition:all .15s;
+}
+.med-icon-btn:hover { background:rgba(255,255,255,.09); color:#fff }
+
+/* ── Toast & Modal ───────────────────────────────────── */
 .med-toast {
   position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
   background:#1c1820; border:1px solid rgba(255,255,255,.1); color:#fff;
@@ -337,7 +352,6 @@
 .med-toast.success { border-color:rgba(16,185,129,.35); background:rgba(16,185,129,.1); color:#6ee7b7 }
 .med-toast.error   { border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.1); color:#f87171 }
 
-/* ── Modal ───────────────────────────────────────────── */
 .med-modal-bg {
   position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(8px);
   display:flex; align-items:center; justify-content:center; z-index:9999; padding:20px;
@@ -365,22 +379,30 @@
 }
 .med-modal-del:hover { background:#f75454 }
 
-/* ── Responsive ─────────────────────────────────────── */
+/* ── Mobile Layout ──────────────────────────────────── */
+.med-mob-tabs { display:none; }
+
 @media (max-width: 900px) {
-  .med-mob-tabs { display:flex }
-  .med-main { grid-template-columns:1fr; grid-template-rows:1fr }
-  .med-upload-panel  { position:static; max-height:none; display:none }
-  .med-library-panel { display:none }
-  .med-upload-panel.mob-visible  { display:flex }
-  .med-library-panel.mob-visible { display:flex }
-}
+  .med-mob-tabs {
+    display:flex; align-items:center; background:rgba(15,13,14,.95);
+    border-bottom:1px solid rgba(255,255,255,.05);
+  }
+  .med-mob-tab {
+    flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:12px; background:none; border:none; border-bottom:2px solid transparent;
+    color:rgba(255,255,255,.4); font-size:12px; font-weight:600; cursor:pointer;
+  }
+  .med-mob-tab.active { color:#fff; border-bottom-color:#B8193C; }
+  .med-mob-count { background:rgba(255,255,255,.1); padding:2px 6px; border-radius:10px; font-size:10px; }
+  
+  .med-panel { display:none; }
+  .med-panel.mob-visible { display:flex; flex:1; width:100%; }
 
-@media (max-width: 1100px) and (min-width: 901px) {
-  .med-main { grid-template-columns:340px 1fr }
-}
-
-@media (max-width: 640px) {
+  .med-editor-layout { flex-direction:column; overflow-y:auto; }
+  .med-editor-canvas { min-height: 50vh; flex:none; }
+  .med-sidebar { width:100%; border-left:none; border-top:1px solid rgba(255,255,255,.05); flex:none; }
+  .med-library-panel { width:100%; border-left:none; padding:16px; }
+  .med-topbar-left { width:auto; }
+  .med-signout-btn { width:auto; }
   .med-lib-grid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)) }
-  .med-type-tabs { grid-template-columns:repeat(5,1fr) }
-  .med-ratio-row { grid-template-columns:repeat(2,1fr) }
 }
