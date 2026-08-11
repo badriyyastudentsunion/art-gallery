@@ -98,7 +98,7 @@ export default function PointSettingsSection() {
 
   async function saveAppSettings() {
     setSavingSection('settings')
-    const adminPassword = sessionStorage.getItem('ag_pass') || ''
+    const adminPassword = localStorage.getItem('ag_pass') || ''
     for (const [key, value] of Object.entries(settings)) {
       if (key === 'results_password') {
         const { error } = await supabase.rpc('update_sensitive_setting', {

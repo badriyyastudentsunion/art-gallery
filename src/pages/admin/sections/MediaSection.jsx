@@ -114,7 +114,7 @@ export default function MediaSection() {
 
       const updatedUploaders = [...currentUploaders, newUploader]
 
-      const adminPassword = sessionStorage.getItem('ag_pass') || ''
+      const adminPassword = localStorage.getItem('ag_pass') || ''
       const { error } = await supabase.rpc('update_sensitive_setting', {
         p_key: 'media_uploaders',
         p_value: JSON.stringify(updatedUploaders),
@@ -152,7 +152,7 @@ export default function MediaSection() {
       const currentUploaders = JSON.parse(data.value)
       const filteredUploaders = currentUploaders.filter(u => u.id !== uploaderId)
 
-      const adminPassword = sessionStorage.getItem('ag_pass') || ''
+      const adminPassword = localStorage.getItem('ag_pass') || ''
       const { error } = await supabase.rpc('update_sensitive_setting', {
         p_key: 'media_uploaders',
         p_value: JSON.stringify(filteredUploaders),

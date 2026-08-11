@@ -2299,7 +2299,15 @@ function QrScanner({ onScan, onClose }) {
       const { Html5QrcodeScanner } = await import('html5-qrcode')
       scanner = new Html5QrcodeScanner(
         'lp-qr-reader',
-        { fps: 10, qrbox: { width: 220, height: 220 }, rememberLastUsedCamera: true, supportedScanTypes: [0] },
+        {
+          fps: 10,
+          qrbox: { width: 220, height: 220 },
+          rememberLastUsedCamera: true,
+          supportedScanTypes: [0],
+          videoConstraints: {
+            facingMode: 'environment'
+          }
+        },
         false
       )
       scanner.render(
@@ -2328,7 +2336,10 @@ function QrScanner({ onScan, onClose }) {
     <div className="lp-scanner-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="lp-scanner-modal">
         <div className="lp-scanner-header">
-          <span className="lp-scanner-title">📷 Scan Chest Card QR</span>
+          <span className="lp-scanner-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <IconQr />
+            <span>Scan Chest Card QR</span>
+          </span>
           <button className="lp-profile-clear" style={{ position: 'static', width: 32, height: 32 }} onClick={onClose}><IconX /></button>
         </div>
         <div id="lp-qr-reader" style={{ width: '100%' }} />
@@ -2356,22 +2367,26 @@ function ParticipantProfileTab({ participant, registrations, loading, onClear, o
     <div className="lp-profile-tab">
 
       {/* ── Top action bar ── */}
-      <div className="lp-profile-topbar">
-        <button className="lp-scan-btn" onClick={() => setShowScanner(true)}>
-          <IconQr />
-          <span>Scan QR</span>
-        </button>
-        {user && (
-          <button className="lp-logout-btn" onClick={onLogout}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <span>Logout ({user.username})</span>
-          </button>
-        )}
-      </div>
+      {(participant || user) && (
+        <div className="lp-profile-topbar">
+          {participant && (
+            <button className="lp-scan-btn" onClick={() => setShowScanner(true)}>
+              <IconQr />
+              <span>Scan QR</span>
+            </button>
+          )}
+          {user && (
+            <button className="lp-logout-btn" onClick={onLogout}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <span>Logout ({user.username})</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {!participant ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 20, padding: 32, textAlign: 'center' }}>

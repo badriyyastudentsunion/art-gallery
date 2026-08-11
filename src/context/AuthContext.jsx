@@ -6,7 +6,7 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const saved = sessionStorage.getItem('ag_user')
+    const saved = localStorage.getItem('ag_user')
     return saved ? JSON.parse(saved) : null
   })
 
@@ -35,10 +35,10 @@ export function AuthProvider({ children }) {
           ...(data.uploaderId && { uploaderId: data.uploaderId }),
         }
         if (data.role === 'Admin') {
-          sessionStorage.setItem('ag_pass', password)
+          localStorage.setItem('ag_pass', password)
         }
         setUser(userData)
-        sessionStorage.setItem('ag_user', JSON.stringify(userData))
+        localStorage.setItem('ag_user', JSON.stringify(userData))
         sessionStorage.removeItem('pwa_prompt_dismissed')
         return { success: true, user: userData }
       }
@@ -52,8 +52,8 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     setUser(null)
-    sessionStorage.removeItem('ag_user')
-    sessionStorage.removeItem('ag_pass')
+    localStorage.removeItem('ag_user')
+    localStorage.removeItem('ag_pass')
     sessionStorage.removeItem('admin_section')
     sessionStorage.removeItem('pwa_prompt_dismissed')
   }
