@@ -41,6 +41,7 @@ const IconGrid     = ({ s = 15 }) => <Ico w={s} h={s} d={[['rect',{x:'3',y:'3',w
 const IconWarn     = ({ s = 20 }) => <Ico w={s} h={s} d={[['path',{d:'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'}],['line',{x1:'12',y1:'9',x2:'12',y2:'13'}],['line',{x1:'12',y1:'17',x2:'12.01',y2:'17'}]]} />
 const IconPlay     = ({ s = 18 }) => <Ico w={s} h={s} fill="currentColor" d={[['polygon',{points:'5 3 19 12 5 21 5 3'}]]} />
 const IconSelAll   = ({ s = 13 }) => <Ico w={s} h={s} d={[['rect',{x:'3',y:'3',width:'18',height:'18',rx:'2'}],['polyline',{points:'9 11 12 14 22 4'}]]} />
+const IconEye      = ({ s = 14 }) => <Ico w={s} h={s} d={[['path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}],['circle',{cx:'12',cy:'12',r:'3'}]]} />
 
 const PAGE_SIZE = 24
 
@@ -102,6 +103,65 @@ export default function MediaDashboard() {
   const [editFiles, setEditFiles] = useState([]) // Array of objects containing file & edit state
   const [activeEditId, setActiveEditId] = useState(null)
   const [presets, setPresets] = useState([])
+  const [isComparing, setIsComparing] = useState(false)
+  const [showArrowTip, setShowArrowTip] = useState(false)
+  
+  const hist = useRef({ past: [], pointer: -1 })
+  const editFilesRef = useRef([])
+
+  useEffect(() => {
+    editFilesRef.current = editFiles
+  }, [editFiles])
+
+  const pushHistory = (state = editFilesRef.current) => {
+    let { past, pointer } = hist.current
+    const sliced = past.slice(0, pointer + 1)
+    const clone = state.map(f => ({ ...f, crop: { ...f.crop }, cropPx: f.cropPx ? { ...f.cropPx } : null }))
+    sliced.push(clone)
+    if (sliced.length > 30) sliced.shift()
+    hist.current = { past: sliced, pointer: sliced.length - 1 }
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
+      
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault()
+        let { past, pointer } = hist.current
+        if (e.shiftKey) { // Redo
+          if (pointer < past.length - 1) {
+            hist.current.pointer = pointer + 1
+            setEditFiles(past[pointer + 1])
+          }
+        } else { // Undo
+          if (pointer > 0) {
+            hist.current.pointer = pointer - 1
+            setEditFiles(past[pointer - 1])
+          }
+        }
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const files = editFilesRef.current
+        if (files.length > 1) {
+          e.preventDefault()
+          if (!localStorage.getItem('ag_arrow_tip_dismissed')) {
+            localStorage.setItem('ag_arrow_tip_dismissed', 'true')
+            setShowArrowTip(false)
+          }
+          setActiveEditId(prev => {
+            const idx = files.findIndex(f => f.id === prev)
+            if (idx === -1) return prev
+            let nIdx = e.key === 'ArrowRight' ? idx + 1 : idx - 1
+            if (nIdx < 0) nIdx = files.length - 1
+            if (nIdx >= files.length) nIdx = 0
+            return files[nIdx].id
+          })
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
   
   const fileInputRef = useRef(null)
 
@@ -167,35 +227,53 @@ export default function MediaDashboard() {
       brightness: 100,
       contrast: 100,
       saturate: 100,
+      presetId: null,
       naturalAspect: null // populated on load
     }))
 
-    setEditFiles(prev => [...prev, ...newFiles])
+    setEditFiles(prev => {
+      const next = [...prev, ...newFiles]
+      pushHistory(next)
+      return next
+    })
     if (!activeEditId && newFiles.length > 0) setActiveEditId(newFiles[0].id)
     if (e.target) e.target.value = ''
   }
 
   const removeFile = (id) => {
-    setEditFiles(prev => prev.filter(f => f.id !== id))
+    setEditFiles(prev => {
+      const next = prev.filter(f => f.id !== id)
+      pushHistory(next)
+      return next
+    })
     if (activeEditId === id) setActiveEditId(null)
   }
 
   const activeFile = editFiles.find(f => f.id === activeEditId)
 
-  const updateActiveFile = (updates) => {
+  const updateActiveFile = (updates, doPush = false) => {
     if (!activeEditId) return
-    setEditFiles(prev => prev.map(f => f.id === activeEditId ? { ...f, ...updates } : f))
+    setEditFiles(prev => {
+      const next = prev.map(f => f.id === activeEditId ? { ...f, ...updates } : f)
+      if (doPush) pushHistory(next)
+      return next
+    })
   }
 
   const applyBulkSettings = () => {
     if (!activeFile) return
-    setEditFiles(prev => prev.map(f => ({
-      ...f,
-      ratio: activeFile.ratio,
-      brightness: activeFile.brightness,
-      contrast: activeFile.contrast,
-      saturate: activeFile.saturate,
-    })))
+    setEditFiles(prev => {
+      const next = prev.map(f => ({
+        ...f,
+        ratio: activeFile.ratio,
+        brightness: activeFile.brightness,
+        contrast: activeFile.contrast,
+        saturate: activeFile.saturate,
+        presetId: activeFile.presetId,
+      }))
+      pushHistory(next)
+      return next
+    })
     showToast('Applied settings to all items')
   }
 
@@ -234,7 +312,11 @@ export default function MediaDashboard() {
   }
 
   const loadPreset = (p) => {
-    updateActiveFile({ brightness: p.brightness, contrast: p.contrast, saturate: p.saturate })
+    if (activeFile.presetId === p.id) {
+      updateActiveFile({ brightness: 100, contrast: 100, saturate: 100, presetId: null }, true)
+    } else {
+      updateActiveFile({ brightness: p.brightness, contrast: p.contrast, saturate: p.saturate, presetId: p.id }, true)
+    }
   }
 
   // Rendering the final canvas
@@ -483,12 +565,28 @@ export default function MediaDashboard() {
                             <IconUpload s={18} />
                             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} style={{ display: 'none' }} />
                           </div>
-                          {editFiles.map(f => (
-                            <div key={f.id} className={`med-queue-item ${activeEditId === f.id ? 'active' : ''}`} onClick={() => setActiveEditId(f.id)}>
-                              <img src={f.url} alt="" />
-                              <button type="button" className="med-queue-rm" onClick={(e) => { e.stopPropagation(); removeFile(f.id) }}><IconX s={10} /></button>
-                            </div>
-                          ))}
+                          {editFiles.map(f => {
+                            const hasFilters = f.brightness !== 100 || f.contrast !== 100 || f.saturate !== 100
+                            return (
+                              <div key={f.id} className={`med-queue-item ${activeEditId === f.id ? 'active' : ''}`} onClick={() => {
+                                setActiveEditId(f.id)
+                                if (editFiles.length > 1 && !localStorage.getItem('ag_arrow_tip_dismissed')) {
+                                  setShowArrowTip(true)
+                                  setTimeout(() => setShowArrowTip(false), 5000)
+                                }
+                              }}>
+                                <img src={f.url} alt="" />
+                                {hasFilters && (
+                                  <img src={f.url} alt="" style={{
+                                    position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+                                    clipPath: 'polygon(100% 0, 100% 100%, 0 100%)',
+                                    filter: `brightness(${f.brightness}%) contrast(${f.contrast}%) saturate(${f.saturate}%)`
+                                  }} />
+                                )}
+                                <button type="button" className="med-queue-rm" onClick={(e) => { e.stopPropagation(); removeFile(f.id) }}><IconX s={10} /></button>
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
 
@@ -499,7 +597,7 @@ export default function MediaDashboard() {
                             <div className="med-ratio-row">
                               {['auto', '4:3', '3:4', 'original'].map(r => (
                                 <button key={r} type="button" className={`med-ratio-btn ${activeFile.ratio === r ? 'active' : ''}`}
-                                  onClick={() => updateActiveFile({ ratio: r })}>
+                                  onClick={() => updateActiveFile({ ratio: r }, true)}>
                                   {r}
                                 </button>
                               ))}
@@ -511,7 +609,7 @@ export default function MediaDashboard() {
                               <label className="med-label">Adjustments</label>
                               <div style={{display:'flex', gap:'8px'}}>
                                 {(activeFile.brightness !== 100 || activeFile.contrast !== 100 || activeFile.saturate !== 100) && (
-                                  <button type="button" className="med-text-btn" onClick={() => updateActiveFile({ brightness: 100, contrast: 100, saturate: 100 })}>Reset</button>
+                                  <button type="button" className="med-text-btn" onClick={() => updateActiveFile({ brightness: 100, contrast: 100, saturate: 100, presetId: null }, true)}>Reset</button>
                                 )}
                                 <button type="button" className="med-text-btn" onClick={() => setPresetModal(true)}>+ Save</button>
                               </div>
@@ -520,7 +618,7 @@ export default function MediaDashboard() {
                             {presets.length > 0 && (
                               <div className="med-preset-chips">
                                 {presets.map((p) => (
-                                  <div key={p.id} className="med-preset-chip">
+                                  <div key={p.id} className={`med-preset-chip ${activeFile.presetId === p.id ? 'active' : ''}`}>
                                     <button type="button" className="med-preset-chip-btn" onClick={() => loadPreset(p)}>{p.name}</button>
                                     <button type="button" className="med-preset-chip-del" onClick={() => setConfirmPresetDel(p.id)}><IconX s={10} /></button>
                                   </div>
@@ -529,16 +627,16 @@ export default function MediaDashboard() {
                             )}
                             
                             <div className="med-slider-row">
-                              <span className="med-slider-lbl"><span>Brightness</span><span>{activeFile.brightness}%</span></span>
-                              <input type="range" className="med-slider" min="50" max="150" value={activeFile.brightness} onChange={e => updateActiveFile({ brightness: Number(e.target.value) })} />
+                              <span className="med-slider-lbl"><span>Brightness</span><div style={{display:'flex',alignItems:'center'}}><input type="number" className="med-val-input" value={activeFile.brightness} onChange={e => updateActiveFile({ brightness: Number(e.target.value), presetId: null })} onBlur={() => pushHistory()} onKeyDown={e => { if(e.key==='Enter') { e.preventDefault(); e.target.blur() } }} />%</div></span>
+                              <input type="range" className="med-slider" min="50" max="150" value={activeFile.brightness} onChange={e => updateActiveFile({ brightness: Number(e.target.value), presetId: null })} onPointerUp={() => pushHistory()} onTouchEnd={() => pushHistory()} />
                             </div>
                             <div className="med-slider-row">
-                              <span className="med-slider-lbl"><span>Contrast</span><span>{activeFile.contrast}%</span></span>
-                              <input type="range" className="med-slider" min="50" max="150" value={activeFile.contrast} onChange={e => updateActiveFile({ contrast: Number(e.target.value) })} />
+                              <span className="med-slider-lbl"><span>Contrast</span><div style={{display:'flex',alignItems:'center'}}><input type="number" className="med-val-input" value={activeFile.contrast} onChange={e => updateActiveFile({ contrast: Number(e.target.value), presetId: null })} onBlur={() => pushHistory()} onKeyDown={e => { if(e.key==='Enter') { e.preventDefault(); e.target.blur() } }} />%</div></span>
+                              <input type="range" className="med-slider" min="50" max="150" value={activeFile.contrast} onChange={e => updateActiveFile({ contrast: Number(e.target.value), presetId: null })} onPointerUp={() => pushHistory()} onTouchEnd={() => pushHistory()} />
                             </div>
                             <div className="med-slider-row">
-                              <span className="med-slider-lbl"><span>Saturation</span><span>{activeFile.saturate}%</span></span>
-                              <input type="range" className="med-slider" min="0" max="200" value={activeFile.saturate} onChange={e => updateActiveFile({ saturate: Number(e.target.value) })} />
+                              <span className="med-slider-lbl"><span>Saturation</span><div style={{display:'flex',alignItems:'center'}}><input type="number" className="med-val-input" value={activeFile.saturate} onChange={e => updateActiveFile({ saturate: Number(e.target.value), presetId: null })} onBlur={() => pushHistory()} onKeyDown={e => { if(e.key==='Enter') { e.preventDefault(); e.target.blur() } }} />%</div></span>
+                              <input type="range" className="med-slider" min="0" max="200" value={activeFile.saturate} onChange={e => updateActiveFile({ saturate: Number(e.target.value), presetId: null })} onPointerUp={() => pushHistory()} onTouchEnd={() => pushHistory()} />
                             </div>
                           </div>
 
@@ -571,25 +669,57 @@ export default function MediaDashboard() {
               </div>
             </aside>
 
-            {/* Main Crop Area */}
-            <div className="med-editor-canvas">
+            <div className="med-editor-canvas" style={{ position: 'relative' }}>
               {isImg ? (
                 activeFile ? (
-                  <div className="med-crop-container">
-                    <Cropper
-                      image={activeFile.url}
-                      crop={activeFile.crop}
-                      zoom={activeFile.zoom}
-                      aspect={getAspect(activeFile.ratio, activeFile.naturalAspect)}
-                      onCropChange={crop => updateActiveFile({ crop })}
-                      onZoomChange={zoom => updateActiveFile({ zoom })}
-                      onCropComplete={(cp, cropPx) => updateActiveFile({ cropPx })}
-                      onMediaLoaded={onMediaLoaded}
-                      objectFit={activeFile.ratio === 'original' ? "contain" : "contain"} 
-                      showGrid={activeFile.ratio !== 'original'}
-                      style={{ mediaStyle: { filter: `brightness(${activeFile.brightness}%) contrast(${activeFile.contrast}%) saturate(${activeFile.saturate}%)` } }}
-                    />
-                  </div>
+                  <>
+                    {showArrowTip && (
+                      <div style={{
+                        position:'absolute', top:'20px', left:'50%', transform:'translateX(-50%)',
+                        background:'rgba(255,255,255,0.95)', color:'#000', padding:'6px 12px',
+                        borderRadius:'20px', fontSize:'11px', fontWeight:600,
+                        boxShadow:'0 4px 12px rgba(0,0,0,0.3)', zIndex:20, pointerEvents:'none',
+                        animation:'toastIn 0.3s ease-out'
+                      }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                          <span>💡 Tip: Use</span>
+                          <span style={{ border:'1px solid #ccc', borderRadius:'4px', padding:'2px 4px', background:'#f5f5f5', display:'inline-flex', alignItems:'center', color:'#555' }}><IconChevL s={10} /></span>
+                          <span style={{ border:'1px solid #ccc', borderRadius:'4px', padding:'2px 4px', background:'#f5f5f5', display:'inline-flex', alignItems:'center', color:'#555' }}><IconChevR s={10} /></span>
+                          <span>keys to switch images</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="med-crop-container">
+                      <Cropper
+                        image={activeFile.url}
+                        crop={activeFile.crop}
+                        zoom={activeFile.zoom}
+                        aspect={getAspect(activeFile.ratio, activeFile.naturalAspect)}
+                        zoomSpeed={0.3}
+                        onCropChange={crop => updateActiveFile({ crop })}
+                        onZoomChange={zoom => updateActiveFile({ zoom })}
+                        onCropComplete={(cp, cropPx) => updateActiveFile({ cropPx }, true)}
+                        onInteractionEnd={() => pushHistory()}
+                        onMediaLoaded={onMediaLoaded}
+                        objectFit={activeFile.ratio === 'original' ? "contain" : "contain"} 
+                        showGrid={activeFile.ratio !== 'original'}
+                        style={{ mediaStyle: { filter: isComparing ? 'none' : `brightness(${activeFile.brightness}%) contrast(${activeFile.contrast}%) saturate(${activeFile.saturate}%)` } }}
+                      />
+                    </div>
+                    
+                    {(activeFile.brightness !== 100 || activeFile.contrast !== 100 || activeFile.saturate !== 100) && (
+                      <button className="med-pill med-compare-btn"
+                        style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}
+                        onPointerDown={() => setIsComparing(true)}
+                        onPointerUp={() => setIsComparing(false)}
+                        onPointerLeave={() => setIsComparing(false)}
+                        onTouchStart={() => setIsComparing(true)}
+                        onTouchEnd={() => setIsComparing(false)}
+                      >
+                        <IconEye s={14} /> Hold to view original
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className="med-empty">
                     <IconImage s={32} />
