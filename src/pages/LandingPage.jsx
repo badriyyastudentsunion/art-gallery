@@ -695,77 +695,90 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
 }
 
 /* ══════════ TEAM POINTS TAB ══════════ */
+/* ══════════ TEAM POINTS TAB ══════════ */
 function TeamPointsTab({ compact = false, showHeader = true }) {
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
-  const [suspenseInfo, setSuspenseInfo] = useState(null)
+  const [resultsCount, setResultsCount] = useState(0)
 
   useEffect(() => {
-    fetchTeamPoints()
+    fetchTeamPoints(true)
     // realtime
     const ch = supabase.channel('lp-team-points')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, fetchTeamPoints)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, fetchTeamPoints)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, () => fetchTeamPoints(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, () => fetchTeamPoints(false))
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [])
 
-  async function fetchTeamPoints() {
-    setLoading(true)
-    const [
-      { data: teamsData },
-      { data: settings }
-    ] = await Promise.all([
-      supabase.from('teams').select('id, name').order('name'),
-      supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence'])
-    ])
-
-    const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
-    const milestonesSetting = settings?.find(s => s.key === 'leaderboard_reveal_milestones')
-    const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
-    const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
-
-    const suspenseActive = activeSetting?.value === 'true'
-    const revealedMilestone = parseInt(revealedMilestoneSetting?.value || '0')
-    
-    let seqIds = []
-    try {
-      if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
-    } catch (e) {}
-
-    const isSuspense = suspenseActive && (seqIds.length > 0)
-    const excludeComps = isSuspense ? seqIds.slice(revealedMilestone) : []
-
-    // Fetch aggregated standings from RPC
-    const { data: standingsData } = await supabase.rpc('get_team_standings', { 
-      exclude_comps: excludeComps
-    })
-
-    const colorSetting = settings?.find(s => s.key === 'team_colors')
-    let colorMap = {}
-    if (colorSetting?.value) {
-      try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+  async function fetchTeamPoints(isInitial = false) {
+    if (isInitial && teams.length === 0) {
+      setLoading(true)
     }
+    try {
+      const [
+        { data: teamsData },
+        { data: settings },
+        { data: pubData }
+      ] = await Promise.all([
+        supabase.from('teams').select('id, name').order('name'),
+        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence']),
+        supabase.from('competition_results').select('competition_id').eq('published', true)
+      ])
 
-    const teamMap = {}
-    ;(teamsData || []).forEach(t => { 
-      teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0 } 
-    })
-    
-    ;(standingsData || []).forEach(r => {
-      if (teamMap[r.team_id]) {
-        teamMap[r.team_id].points = Number(r.points) || 0
+      const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
+      const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
+      const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
+
+      const suspenseActive = activeSetting?.value === 'true'
+      const revealedMilestone = parseInt(revealedMilestoneSetting?.value || '0')
+      
+      let seqIds = []
+      try {
+        if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
+      } catch (e) {}
+
+      const isSuspense = suspenseActive && (seqIds.length > 0)
+      const excludeComps = isSuspense ? seqIds.slice(revealedMilestone) : []
+
+      if (pubData) {
+        const uniqueComps = new Set(pubData.map(r => r.competition_id).filter(id => !excludeComps.includes(id)))
+        setResultsCount(uniqueComps.size)
       }
-    })
 
-    const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
-    setTeams(sorted)
-    setLoading(false)
+      // Fetch aggregated standings from RPC
+      const { data: standingsData } = await supabase.rpc('get_team_standings', { 
+        exclude_comps: excludeComps
+      })
+
+      const colorSetting = settings?.find(s => s.key === 'team_colors')
+      let colorMap = {}
+      if (colorSetting?.value) {
+        try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+      }
+
+      const teamMap = {}
+      ;(teamsData || []).forEach(t => { 
+        teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0 } 
+      })
+      
+      ;(standingsData || []).forEach(r => {
+        if (teamMap[r.team_id]) {
+          teamMap[r.team_id].points = Number(r.points) || 0
+        }
+      })
+
+      const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
+      setTeams(sorted)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const maxPoints = teams[0]?.points || 0
   const isAllTied = teams.length > 0 && teams.every(t => t.points === teams[0].points)
-  const isZeroPoints = isAllTied && maxPoints === 0
   const filtered = teams
 
   const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32']
@@ -783,11 +796,11 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
           <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-light)', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            🏆 Live Team Standings
+            🏆 Live Team Standings {resultsCount > 0 ? `(${resultsCount} Results)` : ''}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
-          {teams.map((t, idx) => {
+          {teams.map((t) => {
             const rank = teams.findIndex(team => team.points === t.points) + 1
             const teamColor = t.color || 'var(--accent-light)'
             return (
@@ -818,10 +831,21 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
   return (
     <div className="lp-tab-content" style={{ padding: showHeader ? undefined : 0, marginBottom: '24px' }}>
       {showHeader && (
-        <div className="lp-section-header">
-          <div>
-            <h2 className="lp-section-title">Team Points & Standings</h2>
-            <p className="lp-section-sub">Live leaderboard & rankings</p>
+        <div className="lp-section-header" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h2 className="lp-section-title" style={{ margin: 0 }}>Team Standings</h2>
+            <span style={{
+              background: 'rgba(79, 156, 249, 0.12)',
+              border: '1px solid rgba(79, 156, 249, 0.25)',
+              color: 'var(--accent, #4f9cf9)',
+              fontSize: 11,
+              fontWeight: 700,
+              padding: '3px 10px',
+              borderRadius: 12,
+              letterSpacing: 0.3
+            }}>
+              {resultsCount > 0 ? `Points after ${resultsCount} ${resultsCount === 1 ? 'Result' : 'Results'}` : 'Initial Standings'}
+            </span>
           </div>
           <div className="lp-live-badge">
             <span className="lp-live-dot" />
@@ -836,72 +860,43 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
         <div className="lp-empty"><IconTrophy /><p>No team data yet</p></div>
       ) : (
         <div className="lp-team-list">
-
-          {/* Top 3 Podium — Only show when there is an actual leader (not all tied) */}
-          {!isAllTied && filtered.length >= 3 && (
-            <div className="lp-podium">
-              {[1, 0, 2].map(idx => {
-                const team = teams[idx]
-                if (!team) return null
-                const rank = teams.findIndex(t => t.points === team.points) + 1
-                const isTied = teams.filter(t => t.points === team.points).length > 1
-                const teamColor = team.color || rankColors[rank - 1] || '#F97316'
-                return (
-                  <div key={team.id} className={`lp-podium-item lp-podium-${idx === 0 ? 'first' : idx === 1 ? 'second' : 'third'}`}>
-                    <div className="lp-podium-crown">
-                      <IconCrown color={rankColors[rank - 1] || 'rgba(255,255,255,0.5)'} />
-                    </div>
-                    <div className="lp-podium-avatar" style={{
-                      borderColor: teamColor,
-                      background: team.color ? `${team.color}25` : undefined,
-                      color: team.color || '#fff',
-                      boxShadow: team.color ? `0 0 20px ${team.color}40` : undefined
-                    }}>
-                      {team.name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <p className="lp-podium-name" style={{ color: team.color || undefined }}>{team.name}</p>
-                    <p className="lp-podium-pts" style={{ color: teamColor }}>{parseFloat(team.points.toFixed(1))}</p>
-                    <p className="lp-podium-rank">
-                      {isTied ? `TIED #${rank}` : rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
           {/* Full List */}
           <div className="lp-teams-table">
             {filtered.map((team) => {
               const rank = teams.findIndex(t => t.points === team.points) + 1
-              const isTied = teams.filter(t => t.points === team.points).length > 1
               const pct = maxPoints > 0 ? (team.points / maxPoints) * 100 : 0
-              const teamColor = team.color || 'var(--accent-light)'
+              const teamColor = team.color || 'var(--accent, #4f9cf9)'
+              const isTop3 = rank <= 3
+              const rankColor = isTop3 ? rankColors[rank - 1] : 'rgba(255, 255, 255, 0.4)'
 
               return (
-                <div key={team.id} className="lp-team-row" style={{
-                  background: team.color ? `${team.color}08` : undefined,
-                  borderColor: team.color ? `${team.color}30` : undefined
-                }}>
-                  <span className={`lp-team-rank ${rank <= 3 ? 'lp-rank-top' : ''}`}
-                    style={{ color: rank <= 3 ? rankColors[rank - 1] : 'rgba(255,255,255,0.4)' }}>
-                    {rank}
+                <div 
+                  key={team.id} 
+                  className="lp-team-row" 
+                  style={{
+                    borderLeft: `3.5px solid ${team.color || 'rgba(255,255,255,0.1)'}`,
+                    background: team.color ? `${team.color}0A` : 'rgba(255, 255, 255, 0.01)',
+                  }}
+                >
+                  <span className={`lp-team-rank ${isTop3 ? 'lp-rank-top' : ''}`} style={{ color: rankColor, fontWeight: 800, fontSize: 13 }}>
+                    #{rank}
                   </span>
                   <div className="lp-team-info">
                     <div className="lp-team-name-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {team.color && <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: team.color, boxShadow: `0 0 8px ${team.color}` }} />}
-                      <span className="lp-team-name" style={{ color: team.color || undefined }}>{team.name}</span>
+                      <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: teamColor, flexShrink: 0, boxShadow: `0 0 6px ${teamColor}80` }} />
+                      <span className="lp-team-name" style={{ color: '#ffffff', fontWeight: 600 }}>{team.name}</span>
                     </div>
                     <div className="lp-team-bar-wrap">
                       <div className="lp-team-bar" style={{
                         width: isAllTied ? '100%' : `${pct}%`,
-                        background: team.color ? `linear-gradient(90deg, ${team.color}, ${team.color}88)` : undefined
+                        background: team.color ? `linear-gradient(90deg, ${team.color}, ${team.color}BB)` : 'var(--accent, #4f9cf9)'
                       }} />
                     </div>
                   </div>
                   <div className="lp-team-score-wrap">
-                    <span className="lp-team-pts" style={{ color: team.color || undefined }}>{parseFloat(team.points.toFixed(1))}</span>
-                    <span className="lp-team-count">{team.count} comps</span>
+                    <span className="lp-team-pts" style={{ color: isTop3 ? rankColor : (team.color || '#fff'), fontSize: 17, fontWeight: 800 }}>
+                      {parseFloat(team.points.toFixed(1))}
+                    </span>
                   </div>
                 </div>
               )
@@ -999,9 +994,6 @@ function ResultsTab() {
   if (selected) {
     return (
       <div className="lp-tab-content">
-        {/* Compact Team Standings Bar at the top of individual results */}
-        <TeamPointsTab compact={true} showHeader={false} />
-
         <div className="lp-results-header">
           <button className="lp-back-btn" onClick={() => setSelected(null)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
@@ -1520,13 +1512,15 @@ function GalleryTab() {
   const [filter, setFilter] = useState('all') // 'all' | 'photo' | 'video' | 'live'
   const [lightboxItem, setLightboxItem] = useState(null)
   const [hdImage, setHdImage] = useState(null)
+  const [hdLoaded, setHdLoaded] = useState(false)
   const [isDownloadingHd, setIsDownloadingHd] = useState(false)
   const [activeVideo, setActiveVideo] = useState(null)
 
   const openItemModal = (item, isPhoto) => {
     if (isPhoto) {
       setLightboxItem(item)
-      setHdImage(null)
+      setHdImage(item.hd_url || null)
+      setHdLoaded(!!item.hd_url)
       // Lazily fetch HD in background for full crisp quality
       supabase.from('gallery_media').select('hd_url').eq('id', item.id).maybeSingle().then(({ data }) => {
         if (data?.hd_url) setHdImage(data.hd_url)
@@ -1539,11 +1533,23 @@ function GalleryTab() {
 
   useEffect(() => {
     const handlePopState = () => {
-      if (lightboxItem) setLightboxItem(null)
+      if (lightboxItem) {
+        setLightboxItem(null)
+        setHdLoaded(false)
+      }
       if (activeVideo) setActiveVideo(null)
     }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && (lightboxItem || activeVideo)) {
+        window.history.back()
+      }
+    }
     window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [lightboxItem, activeVideo])
 
   const fetchMedia = async (isInitial = false) => {
@@ -1551,7 +1557,7 @@ function GalleryTab() {
     try {
       const { data } = await supabase
         .from('gallery_media')
-        .select('id, type, caption, thumb_url, competition_id, uploader_name, created_at')
+        .select('id, type, caption, thumb_url, hd_url, competition_id, uploader_name, created_at')
         .order('created_at', { ascending: false })
 
       if (data) {
@@ -1771,7 +1777,7 @@ function GalleryTab() {
       {/* ── Photo Lightbox Modal ── */}
       {lightboxItem && (
         <div 
-          onClick={() => { setLightboxItem(null); setHdImage(null) }} 
+          onClick={() => { setLightboxItem(null); setHdImage(null); setHdLoaded(false); }} 
           style={{ 
             position: 'fixed', inset: 0, zIndex: 999999, 
             background: 'rgba(0, 0, 0, 0.95)', 
@@ -1817,7 +1823,7 @@ function GalleryTab() {
               {isDownloadingHd ? <DownloadSpinner size={18} /> : <IconDownload />}
             </button>
             <button
-              onClick={() => { setLightboxItem(null); setHdImage(null) }}
+              onClick={() => { setLightboxItem(null); setHdImage(null); setHdLoaded(false); }}
               style={{
                 background: 'rgba(255, 255, 255, 0.1)',
                 border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -1835,17 +1841,55 @@ function GalleryTab() {
             </button>
           </div>
 
-          <img 
-            src={hdImage || lightboxItem.thumb_url || lightboxItem.thumbUrl || lightboxItem.url} 
-            alt="" 
+          <div 
             onClick={e => e.stopPropagation()}
             style={{ 
-              maxWidth: '100%', maxHeight: '85vh', 
-              objectFit: 'contain', 
+              position: 'relative', 
+              width: '100%',
+              maxWidth: '100%', 
+              maxHeight: '85vh', 
               borderRadius: 8,
+              overflow: 'hidden',
               boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
-            }} 
-          />
+            }}
+          >
+            {/* The thumbnail image - always visible first to define size */}
+            <img 
+              src={lightboxItem.thumb_url || lightboxItem.thumbUrl || lightboxItem.url} 
+              alt="" 
+              style={{ 
+                display: 'block',
+                width: '100%',
+                height: 'auto',
+                maxWidth: '100%', 
+                maxHeight: '85vh', 
+                objectFit: 'contain', 
+                borderRadius: 8,
+                filter: hdLoaded ? 'blur(4px)' : 'none',
+                opacity: hdLoaded ? 0.5 : 1,
+                transition: 'filter 0.4s ease, opacity 0.4s ease'
+              }} 
+            />
+            {/* The HD image - loaded absolutely over the thumbnail */}
+            {hdImage && (
+              <img 
+                src={hdImage} 
+                alt="" 
+                onLoad={() => setHdLoaded(true)}
+                style={{ 
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  borderRadius: 8,
+                  opacity: hdLoaded ? 1 : 0,
+                  transition: 'opacity 0.4s ease'
+                }} 
+              />
+            )}
+          </div>
           
           {/* Caption overlay at the bottom */}
           {lightboxItem.caption && (
@@ -1943,13 +1987,19 @@ export default function LandingPage() {
   const [viewingRules, setViewingRules] = useState(null)
   const [rulesMap, setRulesMap] = useState({})
   const [liveStream, setLiveStream] = useState(null)
+  
+  const tabScrollPositions = useRef({})
+  const prevTabRef = useRef(tab)
 
   const VALID_TABS = ['home', 'gallery', 'points', 'results', 'schedule', 'profile']
 
   const changeTab = (newTab, push = true) => {
     if (!VALID_TABS.includes(newTab)) return
     setTab(newTab)
-    const targetHash = newTab === 'home' ? '' : `#${newTab}`
+    let targetHash = newTab === 'home' ? '' : `#${newTab}`
+    if (newTab === 'profile' && scannedParticipant) {
+      targetHash = `#${scannedParticipant.chess_number}`
+    }
     if (push && window.location.hash !== targetHash) {
       window.history.pushState({ tab: newTab }, '', targetHash || window.location.pathname)
     }
@@ -2001,7 +2051,7 @@ export default function LandingPage() {
       if (e.key === 'Escape') {
         if (viewingRules) setViewingRules(null)
         else if (showLogin) setShowLogin(false)
-        else if (scannedParticipant) { setScannedParticipant(null); setParticipantRegistrations([]); window.location.hash = '' }
+        else if (scannedParticipant) { setScannedParticipant(null); setParticipantRegistrations([]); window.location.hash = '#profile' }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -2016,6 +2066,31 @@ export default function LandingPage() {
       }
     }
     fetchRules()
+  }, [])
+
+  useEffect(() => {
+    async function initSavedProfile() {
+      const savedChest = localStorage.getItem('ag_scanned_chest')
+      const rawHash = window.location.hash.replace('#', '').trim()
+      if (!rawHash && savedChest) {
+        setLoadingScanned(true)
+        const { data: part } = await supabase
+          .from('participants')
+          .select('id, name, chess_number, teams(name), categories(name)')
+          .ilike('chess_number', savedChest)
+          .maybeSingle()
+        if (part) {
+          setScannedParticipant(part)
+          const { data: regs } = await supabase
+            .from('competition_participants')
+            .select('competition_id, competitions(id, name, competition_type, rules_description, rules_duration, mark_criteria, stages(name), competition_schedule(scheduled_date, estimated_duration_mins))')
+            .eq('participant_id', part.id)
+          setParticipantRegistrations(regs || [])
+        }
+        setLoadingScanned(false)
+      }
+    }
+    initSavedProfile()
   }, [])
 
   useEffect(() => {
@@ -2039,6 +2114,7 @@ export default function LandingPage() {
 
         if (part) {
           setScannedParticipant(part)
+          localStorage.setItem('ag_scanned_chest', part.chess_number)
           const { data: regs } = await supabase
             .from('competition_participants')
             .select('competition_id, competitions(id, name, competition_type, rules_description, rules_duration, mark_criteria, stages(name), competition_schedule(scheduled_date, estimated_duration_mins))')
@@ -2059,6 +2135,28 @@ export default function LandingPage() {
       window.removeEventListener('hashchange', handleRouteSync)
     }
   }, [])
+
+  useEffect(() => {
+    const prevTab = prevTabRef.current
+    if (prevTab !== tab) {
+      tabScrollPositions.current[prevTab] = window.scrollY
+    }
+
+    const targetScroll = tabScrollPositions.current[tab] || 0
+    
+    const handleScrollRestore = () => {
+      window.scrollTo({
+        top: targetScroll,
+        behavior: 'auto'
+      })
+    }
+    
+    requestAnimationFrame(() => {
+      requestAnimationFrame(handleScrollRestore)
+    })
+
+    prevTabRef.current = tab
+  }, [tab])
 
   const tabs = [
     { id: 'home',    icon: <IconHome />,     label: 'Home' },
@@ -2124,10 +2222,18 @@ export default function LandingPage() {
 
       {/* ── Main Content ── */}
       <main className="lp-main">
-        {tab === 'home'    && <HomeTab onLoginClick={openLoginModal} setTab={changeTab} liveStream={liveStream} />}
-        {tab === 'gallery' && <GalleryTab />}
-        {(tab === 'results' || tab === 'points') && <ResultsTab />}
-        {tab === 'schedule'&& <ScheduleTab />}
+        <div style={{ display: tab === 'home' ? 'block' : 'none' }}>
+          <HomeTab onLoginClick={openLoginModal} setTab={changeTab} liveStream={liveStream} />
+        </div>
+        <div style={{ display: tab === 'gallery' ? 'block' : 'none' }}>
+          <GalleryTab />
+        </div>
+        <div style={{ display: (tab === 'results' || tab === 'points') ? 'block' : 'none' }}>
+          <ResultsTab />
+        </div>
+        <div style={{ display: tab === 'schedule' ? 'block' : 'none' }}>
+          <ScheduleTab />
+        </div>
         {tab === 'profile' && (
           <ParticipantProfileTab
             participant={scannedParticipant}
@@ -2135,25 +2241,11 @@ export default function LandingPage() {
             loading={loadingScanned}
             user={user}
             onLogout={logout}
-            onClear={() => { setScannedParticipant(null); setParticipantRegistrations([]); window.location.hash = '' }}
+            onClear={() => { setScannedParticipant(null); setParticipantRegistrations([]); localStorage.removeItem('ag_scanned_chest'); window.location.hash = '#profile' }}
             onScanResult={async (chessNo) => {
               const hash = chessNo.replace(/.*#/, '').trim()
               if (!hash) return
-              setLoadingScanned(true)
-              const { data: part } = await supabase
-                .from('participants')
-                .select('id, name, chess_number, teams(name), categories(name)')
-                .ilike('chess_number', hash)
-                .maybeSingle()
-              if (part) {
-                setScannedParticipant(part)
-                const { data: regs } = await supabase
-                  .from('competition_participants')
-                  .select('competition_id, competitions(id, name, competition_type, rules_description, rules_duration, mark_criteria, stages(name), competition_schedule(scheduled_date, estimated_duration_mins))')
-                  .eq('participant_id', part.id)
-                setParticipantRegistrations(regs || [])
-              }
-              setLoadingScanned(false)
+              window.location.hash = hash
             }}
             setViewingRules={openRulesModal}
             rulesMap={rulesMap}

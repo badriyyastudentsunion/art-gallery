@@ -647,10 +647,18 @@
    SHARED TAB CONTENT STYLES
 ════════════════════════════════════════ */
 .lp-tab-content {
-  padding: 24px 20px 16px;
-  max-width: 900px;
+  padding: 20px 16px 16px;
+  max-width: 960px;
   margin: 0 auto;
   width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .lp-tab-content {
+    padding: 14px 8px;
+    width: 100%;
+  }
 }
 
 .lp-section-header {
@@ -1184,22 +1192,37 @@
 .lp-back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px;
-  color: rgba(255,255,255,0.6);
-  font-size: 12px;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(79, 156, 249, 0.1);
+  border: 1px solid rgba(79, 156, 249, 0.2);
+  border-radius: 20px;
+  color: var(--accent, #4f9cf9);
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
   flex-shrink: 0;
-  transition: all 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(79, 156, 249, 0.05);
 }
 
-.lp-back-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.lp-back-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.lp-back-btn:hover {
+  color: #fff;
+  background: var(--accent, #4f9cf9);
+  border-color: var(--accent, #4f9cf9);
+  box-shadow: 0 4px 15px rgba(79, 156, 249, 0.3);
+  transform: translateY(-1px);
+}
+
+.lp-back-btn:hover svg {
+  transform: translateX(-3px);
+}
 
 .lp-results-list {
   display: flex;
@@ -2178,7 +2201,10 @@
   font-size: 12px !important;
 }
 
-#lp-qr-reader select,
+#lp-qr-reader select {
+  display: none !important;
+}
+
 #lp-qr-reader button {
   background: rgba(249,115,22,0.12) !important;
   border: 1px solid rgba(249,115,22,0.3) !important;

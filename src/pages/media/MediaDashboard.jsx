@@ -220,13 +220,16 @@ export default function MediaDashboard() {
         const buildResult = cvs => {
           const fullUrl = cvs.toDataURL('image/jpeg', 0.92)
           const tC = document.createElement('canvas')
-          const mx = 400
+          const mx = 800
           let tW = cvs.width, tH = cvs.height
           if (tW > tH) { if (tW > mx) { tH = Math.round(tH * mx / tW); tW = mx } }
           else { if (tH > mx) { tW = Math.round(tW * mx / tH); tH = mx } }
           tC.width = tW; tC.height = tH
-          tC.getContext('2d').drawImage(cvs, 0, 0, tW, tH)
-          const thumbUrl = tC.toDataURL('image/jpeg', 0.5)
+          const ctxT = tC.getContext('2d')
+          ctxT.imageSmoothingEnabled = true
+          ctxT.imageSmoothingQuality = 'high'
+          ctxT.drawImage(cvs, 0, 0, tW, tH)
+          const thumbUrl = tC.toDataURL('image/jpeg', 0.85)
           const outRatio = ratio === 'original' ? detectRatio(tw, th) : ratio
           const overlayApplied = !!overlaySrc
           return { fullUrl, thumbUrl, outRatio, tw, th, overlayApplied }
