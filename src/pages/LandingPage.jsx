@@ -697,6 +697,7 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
 /* ══════════ TEAM POINTS TAB ══════════ */
 /* ══════════ TEAM POINTS TAB ══════════ */
 function TeamPointsTab({ compact = false, showHeader = true }) {
+  return null // Temporarily hidden as requested
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
   const [resultsCount, setResultsCount] = useState(0)
