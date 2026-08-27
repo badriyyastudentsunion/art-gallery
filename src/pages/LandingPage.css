@@ -2796,6 +2796,7 @@
 
 /* ── Creative Theme 1 (Eyes) ── */
 .lp-creative-theme-1 {
+  display: none;
   position: relative;
   width: 100%;
   max-width: 400px;
@@ -2805,6 +2806,11 @@
   transform: translateY(10px);
   transition: transform 0.6s ease;
   z-index: 0;
+}
+@media (min-width: 768px) {
+  .lp-creative-theme-1 {
+    display: block;
+  }
 }
 .lp-ml-section:hover .lp-creative-theme-1 {
   transform: translateY(0);
