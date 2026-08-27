@@ -61,6 +61,28 @@ const IconLock = () => (
   </svg>
 )
 
+const IconAnchor = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12, marginRight: 4, display: 'inline-block', verticalAlign: 'middle' }}>
+    <circle cx="12" cy="5" r="3" />
+    <line x1="12" y1="22" x2="12" y2="8" />
+    <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+  </svg>
+)
+
+const IconClock = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12, marginRight: 4, display: 'inline-block', verticalAlign: 'middle' }}>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+)
+
+const IconClose = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12, display: 'inline-block', verticalAlign: 'middle' }}>
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+
 const formatDateTab = (dateStr) => {
   if (!dateStr) return 'Unscheduled'
   return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' })
@@ -602,7 +624,9 @@ export default function ScheduleSection() {
                           <div className="sched-card-time-section">
                             {c.is_anchor ? (
                               <div className="sched-time-anchor-active">
-                                <span className="sched-time-badge anchor">?? {formatMinsTo12h(c.computed_start_mins)}</span>
+                                <span className="sched-time-badge anchor">
+                                  <IconAnchor /> {formatMinsTo12h(c.computed_start_mins)}
+                                </span>
                                 <input 
                                   type="time" 
                                   className="sched-time-input" 
@@ -614,13 +638,13 @@ export default function ScheduleSection() {
                                   title="Inherit from previous"
                                   onClick={() => updateScheduledTime(c.id, "")}
                                 >
-                                  ?
+                                  <IconClose />
                                 </button>
                               </div>
                             ) : (
                               <div className="sched-time-anchor-inactive">
                                 <span className="sched-time-badge calculated">
-                                  ?? {c.computed_start_mins !== null ? `~${formatMinsTo12h(c.computed_start_mins)}` : "TBD"}
+                                  <IconClock /> {c.computed_start_mins !== null ? `~${formatMinsTo12h(c.computed_start_mins)}` : "TBD"}
                                 </span>
                                 <button 
                                   className="sched-time-set-btn"

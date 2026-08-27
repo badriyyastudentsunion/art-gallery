@@ -450,10 +450,10 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
             <p className="lp-ml-question">
               <TypewriterText text={"What the\nNext?"} speed={90} delay={400} />
             </p>
+            <div className="lp-ml-left-accent" aria-hidden="true" />
             <div className="lp-creative-theme-1">
               <img src="/theme1.png" alt="Eyes" className="lp-theme-1-img" />
             </div>
-            <div className="lp-ml-left-accent" aria-hidden="true" />
           </div>
           <div className="lp-ml-right">
             <p className="lp-ml-body">
