@@ -277,6 +277,29 @@ export default function ScheduleSection() {
     }, 140)
   }
 
+  // Helper to format minutes from midnight to '10:30 AM' or '02:30 PM'
+  function formatMinsTo12h(totalMins) {
+    if (totalMins === null || totalMins === undefined) return 'TBD';
+    const h = Math.floor(totalMins / 60) % 24;
+    const m = totalMins % 60;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const displayH = h % 12 || 12;
+    return `${String(displayH).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+  }
+
+  // Update scheduled time (Optimistic)
+  async function updateScheduledTime(compId, timeVal) {
+    const sched = schedMap[compId];
+    const val = timeVal ? `${timeVal}:00` : null;
+
+    if (sched) {
+      skipRealtimeRef.current = true;
+      setSchedules(prev => prev.map(s => s.id === sched.id ? { ...s, scheduled_time: val } : s));
+      await supabase.from("competition_schedule").update({ scheduled_time: val }).eq("id", sched.id);
+      setTimeout(() => { skipRealtimeRef.current = false }, 800);
+    }
+  }
+
   // Update duration (Optimistic)
   async function updateDuration(compId, mins) {
     const sched = schedMap[compId]
@@ -501,10 +524,37 @@ export default function ScheduleSection() {
         <div className="sched-grid-container">
           {stages.map(stg => {
             // Find competitions assigned to this stage and selected date
-            const stageComps = filteredComps.filter(c => {
+            const stageCompsRaw = filteredComps.filter(c => {
               const s = schedMap[c.id]
               return c.stage_id === stg.id && s?.scheduled_date === selectedDate
             }).sort((a, b) => (schedMap[a.id]?.sequence_order || 0) - (schedMap[b.id]?.sequence_order || 0))
+
+            let currentMins = null;
+            const stageComps = stageCompsRaw.map(c => {
+              const s = schedMap[c.id] || {};
+              let startMins = null;
+              let isAnchor = false;
+              
+              if (s.scheduled_time) {
+                const [h, m] = s.scheduled_time.split(':').map(Number);
+                startMins = h * 60 + m;
+                currentMins = startMins;
+                isAnchor = true;
+              } else if (currentMins !== null) {
+                startMins = currentMins;
+              }
+              
+              if (currentMins !== null) {
+                const dur = parseInt(s.estimated_duration_mins) || 30;
+                currentMins = currentMins + dur;
+              }
+              
+              return {
+                ...c,
+                computed_start_mins: startMins,
+                is_anchor: isAnchor
+              };
+            });
 
             return (
               <div key={stg.id} className="sched-stage-col">
@@ -547,6 +597,45 @@ export default function ScheduleSection() {
                           </div>
 
                           <p className="sched-comp-title">{c.name}</p>
+
+                          {/* Time Anchor section */}
+                          <div className="sched-card-time-section">
+                            {c.is_anchor ? (
+                              <div className="sched-time-anchor-active">
+                                <span className="sched-time-badge anchor">?? {formatMinsTo12h(c.computed_start_mins)}</span>
+                                <input 
+                                  type="time" 
+                                  className="sched-time-input" 
+                                  value={s.scheduled_time ? s.scheduled_time.slice(0, 5) : ""}
+                                  onChange={e => updateScheduledTime(c.id, e.target.value)}
+                                />
+                                <button 
+                                  className="sched-time-clear" 
+                                  title="Inherit from previous"
+                                  onClick={() => updateScheduledTime(c.id, "")}
+                                >
+                                  ?
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="sched-time-anchor-inactive">
+                                <span className="sched-time-badge calculated">
+                                  ?? {c.computed_start_mins !== null ? `~${formatMinsTo12h(c.computed_start_mins)}` : "TBD"}
+                                </span>
+                                <button 
+                                  className="sched-time-set-btn"
+                                  onClick={() => {
+                                    const defaultTime = c.computed_start_mins !== null 
+                                      ? `${String(Math.floor(c.computed_start_mins / 60)).padStart(2, "0")}:${String(c.computed_start_mins % 60).padStart(2, "0")}`
+                                      : "09:00";
+                                    updateScheduledTime(c.id, defaultTime);
+                                  }}
+                                >
+                                  + Set Anchor
+                                </button>
+                              </div>
+                            )}
+                          </div>
 
                           <div className="sched-card-footer">
                             {/* Duration Input */}

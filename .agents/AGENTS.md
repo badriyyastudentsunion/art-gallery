@@ -19,3 +19,7 @@
 
 ## 5. NO `SELECT * FROM app_settings` ON DASHBOARDS
 - Dashboards (Announcer, Admin, Teams, Invigilators, Public Landing Page) must NEVER execute unconstrained `SELECT * FROM app_settings`. Always filter by specific keys with `.select('key, value').in('key', [...])` or dedicated RPC functions.
+
+## 6. STRICT GIT VERSION CONTROL & NON-DESTRUCTIVE WORKFLOW
+- **CRITICAL**: Never run destructive Git commands (e.g., `git checkout .`, `git restore .`, `git reset --hard`) without explicit user permission.
+- If you need to revert or discard changes, document the reasoning clearly in a markdown file or discuss it with the user beforehand.

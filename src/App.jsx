@@ -49,6 +49,12 @@ function AppRoutes() {
     }
   }, [])
 
+  useEffect(() => {
+    if (user && window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [user])
+
   if (isMaintenanceLoading) {
     return (
       <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', background: '#0a0a0a' }}>

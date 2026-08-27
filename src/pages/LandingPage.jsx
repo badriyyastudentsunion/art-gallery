@@ -286,6 +286,52 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
   const [posters, setPosters] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [downloadingPosterId, setDownloadingPosterId] = useState(null)
+  const [activePosterIdx, setActivePosterIdx] = useState(0)
+  const [posterPaused, setPosterPaused] = useState(false)
+  
+  const dragStartX = useRef(null)
+  const dragStartTime = useRef(0)
+  const isDragging = useRef(false)
+  const hasMoved = useRef(false)
+  const wasContextMenuOpened = useRef(false)
+  
+  useEffect(() => {
+    if (posters.length <= 1 || posterPaused) return
+    const timer = setInterval(() => {
+      setActivePosterIdx(prev => (prev + 1) % posters.length)
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [posters.length, posterPaused])
+
+  const handleDragStart = (clientX) => {
+    dragStartX.current = clientX
+    dragStartTime.current = Date.now()
+    isDragging.current = true
+    hasMoved.current = false
+    setPosterPaused(true)
+  }
+
+  const handleDragMove = (clientX) => {
+    if (!isDragging.current || dragStartX.current === null) return
+    const diffX = clientX - dragStartX.current
+    if (Math.abs(diffX) > 8) {
+      hasMoved.current = true
+    }
+    if (Math.abs(diffX) > 40) {
+      if (diffX < 0) {
+        setActivePosterIdx(prev => (prev + 1) % posters.length)
+      } else {
+        setActivePosterIdx(prev => (prev - 1 + posters.length) % posters.length)
+      }
+      isDragging.current = false
+      dragStartX.current = null
+    }
+  }
+
+  const handleDragEnd = () => {
+    isDragging.current = false
+    dragStartX.current = null
+  }
 
   useEffect(() => {
     try { localStorage.removeItem('inspico_gallery_cache') } catch {}
@@ -402,8 +448,11 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
         <div className="lp-ml-section lp-scroll-reveal">
           <div className="lp-ml-left">
             <p className="lp-ml-question">
-              <TypewriterText text="What the Next?" speed={90} delay={400} />
+              <TypewriterText text={"What the\nNext?"} speed={90} delay={400} />
             </p>
+            <div className="lp-creative-theme-1">
+              <img src="/theme1.png" alt="Eyes" className="lp-theme-1-img" />
+            </div>
             <div className="lp-ml-left-accent" aria-hidden="true" />
           </div>
           <div className="lp-ml-right">
@@ -427,60 +476,197 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
           </div>
         </div>
 
-        {/* Event Posters Section */}
+        {/* Event Posts Section (Focused Center 3D Carousel) */}
         {posters.length > 0 && (
-          <div className="lp-home-posters-section lp-scroll-reveal">
-            <h3 className="lp-home-gallery-title" style={{ marginBottom: 16 }}>Event Posters</h3>
-            <div className="lp-posters-grid">
-              {posters.map(poster => {
-                const isItemDownloading = downloadingPosterId === poster.id
-                return (
-                  <div key={poster.id} className="lp-poster-card" onClick={() => setTab('gallery')}>
-                    <img src={poster.thumb_url || poster.thumbUrl || poster.url} alt={poster.caption || 'Event Poster'} className="lp-poster-img" loading="lazy" decoding="async" />
-                    <button
-                      className="lp-poster-download-btn"
-                      disabled={isItemDownloading}
+          <div className="lp-home-gallery-wrap lp-scroll-reveal" style={{ marginTop: 36, marginBottom: 36 }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '4px 14px',
+                borderRadius: 20,
+                background: 'rgba(184, 25, 60, 0.1)',
+                border: '1px solid rgba(184, 25, 60, 0.25)',
+                marginBottom: 8
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#B8193C', display: 'inline-block', boxShadow: '0 0 8px #B8193C' }} />
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#e2486b' }}>HIGHLIGHTS</span>
+              </div>
+              <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.3px', margin: 0 }}>
+                Event Posts
+              </h2>
+            </div>
+            
+            <div
+              className="lp-poster-3d-container"
+              onMouseEnter={() => setPosterPaused(true)}
+              onMouseLeave={() => { setPosterPaused(false); handleDragEnd() }}
+              onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
+              onTouchMove={(e) => handleDragMove(e.touches[0].clientX)}
+              onTouchEnd={() => { handleDragEnd(); setPosterPaused(false) }}
+              onMouseDown={(e) => handleDragStart(e.clientX)}
+              onMouseMove={(e) => handleDragMove(e.clientX)}
+              onMouseUp={() => { handleDragEnd(); setPosterPaused(false) }}
+              onContextMenu={(e) => { e.preventDefault(); wasContextMenuOpened.current = true }}
+            >
+              <div className="lp-poster-3d-stage">
+                {posters.map((poster, idx) => {
+                  const n = posters.length
+                  let diff = (idx - activePosterIdx) % n
+                  if (diff > n / 2) diff -= n
+                  if (diff < -n / 2) diff += n
+
+                  const isCenter = diff === 0
+                  const isHidden = Math.abs(diff) > 1
+
+                  let translateX = 0
+                  let scale = 1
+                  let opacity = 1
+                  let zIndex = 1
+
+                  if (diff === 0) {
+                    translateX = 0
+                    scale = 1
+                    opacity = 1
+                    zIndex = 10
+                  } else if (diff === -1 || (n === 2 && diff === 1)) {
+                    translateX = -62
+                    scale = 0.8
+                    opacity = 0.5
+                    zIndex = 5
+                  } else if (diff === 1) {
+                    translateX = 62
+                    scale = 0.8
+                    opacity = 0.5
+                    zIndex = 5
+                  } else {
+                    translateX = diff < 0 ? -120 : 120
+                    scale = 0.6
+                    opacity = 0
+                    zIndex = 1
+                  }
+
+                  const isItemDownloading = downloadingPosterId === poster.id
+
+                  return (
+                    <div
+                      key={poster.id}
+                      className={`lp-poster-3d-card ${isCenter ? 'is-center' : ''}`}
+                      style={{
+                        transform: `translate(-50%, -50%) translateX(${translateX}%) scale(${scale})`,
+                        opacity: isHidden ? 0 : opacity,
+                        zIndex,
+                        pointerEvents: isHidden ? 'none' : 'auto'
+                      }}
+                      onContextMenu={(e) => { e.preventDefault(); wasContextMenuOpened.current = true }}
                       onClick={async (e) => {
-                        e.stopPropagation()
-                        if (downloadingPosterId) return
-                        setDownloadingPosterId(poster.id)
-                        try {
-                          let downloadUrl = poster.hd_url
-                          if (!downloadUrl) {
-                            const { data } = await supabase.from('gallery_media').select('hd_url').eq('id', poster.id).single()
-                            downloadUrl = data?.hd_url || poster.thumb_url || poster.thumbUrl
-                          }
-                          await triggerFileDownload(downloadUrl, `poster-${poster.id}.jpg`)
-                        } catch (err) {
-                          console.error('Download error:', err)
-                        } finally {
-                          setDownloadingPosterId(null)
+                        if (e.button !== undefined && e.button !== 0) return
+                        const holdDuration = Date.now() - (dragStartTime.current || 0)
+                        const wasHoldOrDrag = hasMoved.current || wasContextMenuOpened.current || (dragStartTime.current > 0 && holdDuration > 180)
+
+                        if (!isCenter) {
+                          setActivePosterIdx(idx)
+                        } else if (!wasHoldOrDrag) {
+                          setTab('gallery')
                         }
                       }}
-                      title="Download HD Poster"
-                      style={{
-                        position: 'absolute',
-                        bottom: '10px',
-                        right: '10px',
-                        background: 'rgba(0, 0, 0, 0.75)',
-                        backdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        color: '#fff',
-                        borderRadius: '50%',
-                        width: '34px',
-                        height: '34px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: isItemDownloading ? 'default' : 'pointer',
-                        zIndex: 2
-                      }}
                     >
-                      {isItemDownloading ? <DownloadSpinner size={16} /> : <IconDownload />}
-                    </button>
+                      <img
+                        src={poster.thumb_url || poster.thumbUrl || poster.url}
+                        alt={poster.caption || 'Event Poster'}
+                        className="lp-poster-3d-img"
+                        loading="lazy"
+                        decoding="async"
+                        draggable={false}
+                        onDragStart={(e) => e.preventDefault()}
+                        onContextMenu={(e) => { e.preventDefault(); wasContextMenuOpened.current = true }}
+                      />
+                      {poster.caption && (
+                        <div className="lp-poster-3d-caption-overlay">
+                          <p className="lp-poster-3d-caption">{poster.caption}</p>
+                        </div>
+                      )}
+                      
+                      {/* Download Button on 3D Card */}
+                      {isCenter && (
+                        <button
+                          className="lp-poster-download-btn"
+                          disabled={isItemDownloading}
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (downloadingPosterId) return
+                            setDownloadingPosterId(poster.id)
+                            try {
+                              let downloadUrl = poster.hd_url
+                              if (!downloadUrl) {
+                                const { data } = await supabase.from('gallery_media').select('hd_url').eq('id', poster.id).single()
+                                downloadUrl = data?.hd_url || poster.thumb_url || poster.thumbUrl
+                              }
+                              await triggerFileDownload(downloadUrl, `poster-${poster.id}.jpg`)
+                            } catch (err) {
+                              console.error('Download error:', err)
+                            } finally {
+                              setDownloadingPosterId(null)
+                            }
+                          }}
+                          title="Download HD Poster"
+                          style={{
+                            position: 'absolute',
+                            bottom: '12px',
+                            right: '12px',
+                            background: 'rgba(0, 0, 0, 0.75)',
+                            backdropFilter: 'blur(8px)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            color: '#fff',
+                            borderRadius: '50%',
+                            width: '34px',
+                            height: '34px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: isItemDownloading ? 'default' : 'pointer',
+                            zIndex: 20
+                          }}
+                        >
+                          {isItemDownloading ? <DownloadSpinner size={16} /> : <IconDownload />}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Navigation Controls */}
+              {posters.length > 1 && (
+                <>
+                  <button
+                    className="lp-poster-3d-nav-btn lp-poster-3d-prev"
+                    onClick={(e) => { e.stopPropagation(); setActivePosterIdx(prev => (prev - 1 + posters.length) % posters.length) }}
+                    aria-label="Previous Poster"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                  <button
+                    className="lp-poster-3d-nav-btn lp-poster-3d-next"
+                    onClick={(e) => { e.stopPropagation(); setActivePosterIdx(prev => (prev + 1) % posters.length) }}
+                    aria-label="Next Poster"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+
+                  <div className="lp-poster-3d-dots">
+                    {posters.map((_, dotIdx) => (
+                      <button
+                        key={dotIdx}
+                        className={`lp-poster-3d-dot ${dotIdx === activePosterIdx ? 'active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setActivePosterIdx(dotIdx) }}
+                        aria-label={`Go to poster ${dotIdx + 1}`}
+                      />
+                    ))}
                   </div>
-                )
-              })}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -639,7 +825,7 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
 
         {/* Teams Section */}
         <div className="lp-teams-section lp-scroll-reveal">
-          <h3 className="lp-teams-heading">Introducing the Team Names</h3>
+          <h3 className="lp-teams-heading">The Teams</h3>
 
           <div className="lp-team-entries">
             {[
@@ -1182,7 +1368,7 @@ function ScheduleTab() {
   async function fetchSchedule() {
     const { data } = await supabase
       .from('competition_schedule')
-      .select(`id, scheduled_date, sequence_order, estimated_duration_mins, status,
+      .select(`id, scheduled_date, scheduled_time, sequence_order, estimated_duration_mins, status,
         actual_start_time, competition_id,
         competitions(id, name, stage_id, stages(name, location), categories(name), rules_description, rules_duration, mark_criteria)`)
       .order('sequence_order', { ascending: true })
@@ -1215,6 +1401,23 @@ function ScheduleTab() {
   const hasItems = Object.values(stageGroups).some(g => g.items.length > 0)
 
   const fmt = d => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' })
+  function formatMinsTo12h(totalMins) {
+    if (totalMins === null || totalMins === undefined) return "TBD";
+    const h = Math.floor(totalMins / 60) % 24;
+    const m = totalMins % 60;
+    const ampm = h >= 12 ? "PM" : "AM";
+    const displayH = h % 12 || 12;
+    return `${String(displayH).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+  }
+
+  function getSessionName(totalMins) {
+    if (totalMins === null || totalMins === undefined) return null;
+    const h = Math.floor(totalMins / 60);
+    if (h < 12) return "Morning Session";
+    if (h < 16) return "Afternoon Session";
+    return "Evening Session";
+  }
+
 
   return (
     <div className="lp-tab-content">
@@ -1244,9 +1447,36 @@ function ScheduleTab() {
           {Object.values(stageGroups).map(group => {
             if (!group || group.items.length === 0) return null
             const stg = group.stage
-            const ongoing = group.items.find(i => i.status === 'ongoing')
-            const upcoming = group.items.filter(i => i.status === 'scheduled')
-            const done = group.items.filter(i => i.status === 'completed')
+
+            // Calculate start times sequentially across all items
+            let currentMins = null;
+            const itemsWithTime = group.items.map(item => {
+              let startMins = null;
+              let isAnchor = false;
+              
+              if (item.scheduled_time) {
+                const [h, m] = item.scheduled_time.split(':').map(Number);
+                startMins = h * 60 + m;
+                currentMins = startMins;
+                isAnchor = true;
+              } else if (currentMins !== null) {
+                startMins = currentMins;
+              }
+              
+              if (currentMins !== null) {
+                const dur = parseInt(item.estimated_duration_mins) || 30;
+                currentMins = currentMins + dur;
+              }
+              
+              return {
+                ...item,
+                computed_start_mins: startMins,
+                is_anchor: isAnchor
+              };
+            });
+
+            const hasOngoing = itemsWithTime.some(i => i.status === 'ongoing');
+
             return (
               <div key={stg.id} className="lp-stage-card">
                 <div className="lp-stage-card-header">
@@ -1254,127 +1484,123 @@ function ScheduleTab() {
                     <p className="lp-stage-name">{stg.name}</p>
                     {stg.location && <p className="lp-stage-loc">{stg.location}</p>}
                   </div>
-                  {ongoing && <span className="lp-stage-on-air"><span className="lp-live-dot-red" /> ON AIR</span>}
+                  {hasOngoing && <span className="lp-stage-on-air"><span className="lp-live-dot-red" /> ON AIR</span>}
                 </div>
 
-                 {ongoing && (() => {
-                  const comp = ongoing.competitions
-                  const hasRules = comp && (comp.rules_description || comp.rules_duration || comp.mark_criteria)
-                  return (
-                    <div 
-                      className="lp-sched-item lp-sched-ongoing" 
-                      onClick={() => handleOpenRules(comp)}
-                      style={{ cursor: 'pointer', borderLeft: '4px solid #ff4757' }}
-                    >
-                      <span className="lp-sched-status-dot" style={{ background: '#ff4757', boxShadow: '0 0 8px #ff4757' }} />
-                      <div className="lp-sched-info">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <p className="lp-sched-name" style={{ margin: 0 }}>{comp?.name}</p>
-                          {hasRules && (
-                            <span
-                              style={{
-                                background: 'rgba(79, 156, 249, 0.15)',
-                                border: '1px solid rgba(79, 156, 249, 0.3)',
-                                color: 'var(--accent)',
-                                fontSize: '10px',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                fontWeight: 600,
-                                fontFamily: 'inherit'
-                              }}
-                            >
-                              Rules
-                            </span>
-                          )}
-                        </div>
-                        <p className="lp-sched-cat">{comp?.categories?.name}</p>
-                      </div>
-                      <span className="lp-sched-pill" style={{ background: 'rgba(255,71,87,0.15)', color: '#ff4757', border: '1px solid rgba(255,71,87,0.3)' }}>Live</span>
-                    </div>
-                  )
-                })()}
-
-                {upcoming.slice(0, 3).map(item => {
+                {itemsWithTime.map((item, index) => {
                   const comp = item.competitions
                   const hasRules = comp && (comp.rules_description || comp.rules_duration || comp.mark_criteria)
-                  return (
-                    <div 
-                      key={item.id} 
-                      className="lp-sched-item"
-                      onClick={() => handleOpenRules(comp)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <span className="lp-sched-status-dot" style={{ background: 'rgba(255,255,255,0.25)' }} />
-                      <div className="lp-sched-info">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <p className="lp-sched-name" style={{ margin: 0 }}>{comp?.name}</p>
-                          {hasRules && (
-                            <span
-                              style={{
-                                background: 'rgba(255, 255, 255, 0.08)',
-                                border: '1px solid rgba(255, 255, 255, 0.15)',
-                                color: 'rgba(255, 255, 255, 0.8)',
-                                fontSize: '10px',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                fontWeight: 600,
-                                fontFamily: 'inherit'
-                              }}
-                            >
-                              Rules
-                            </span>
-                          )}
-                        </div>
-                        <p className="lp-sched-cat">{comp?.categories?.name}</p>
-                      </div>
-                      <span className="lp-sched-pill">
-                        {item.estimated_duration_mins ? `${item.estimated_duration_mins}m` : 'Soon'}
-                      </span>
-                    </div>
-                  )
-                })}
+                  const isOngoing = item.status === 'ongoing'
+                  const isCompleted = item.status === 'completed'
+                  
+                  // Session divider detection
+                  const currentSession = getSessionName(item.computed_start_mins)
+                  const prevItem = index > 0 ? itemsWithTime[index - 1] : null
+                  const prevSession = prevItem ? getSessionName(prevItem.computed_start_mins) : null
+                  const showSessionDivider = currentSession && (index === 0 || currentSession !== prevSession)
+                  
+                  // Break divider detection
+                  let showBreakDivider = false
+                  let gapMins = 0
+                  if (item.is_anchor && prevItem && prevItem.computed_start_mins !== null) {
+                    const prevEndMins = prevItem.computed_start_mins + (parseInt(prevItem.estimated_duration_mins) || 30)
+                    if (item.computed_start_mins > prevEndMins + 15) {
+                      showBreakDivider = true;
+                      gapMins = item.computed_start_mins - prevEndMins;
+                    }
+                  }
 
-                {done.map(item => {
-                  const comp = item.competitions
-                  const hasRules = comp && (comp.rules_description || comp.rules_duration || comp.mark_criteria)
+                  const sessionIcon = currentSession === 'Morning Session' ? '☀️' 
+                                    : currentSession === 'Afternoon Session' ? '⛅' 
+                                    : '🌙';
+
                   return (
-                    <div 
-                      key={item.id} 
-                      className="lp-sched-item"
-                      onClick={() => handleOpenRules(comp)}
-                      style={{ cursor: 'pointer', opacity: 0.7 }}
-                    >
-                      <span className="lp-sched-status-dot" style={{ background: '#2ed573' }} />
-                      <div className="lp-sched-info">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <p className="lp-sched-name" style={{ margin: 0, textDecoration: 'line-through' }}>{comp?.name}</p>
-                          {hasRules && (
-                            <span
-                              style={{
-                                background: 'rgba(255, 255, 255, 0.08)',
-                                border: '1px solid rgba(255, 255, 255, 0.15)',
-                                color: 'rgba(255, 255, 255, 0.8)',
-                                fontSize: '10px',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                fontWeight: 600,
-                                fontFamily: 'inherit'
+                    <div key={item.id}>
+                      {showSessionDivider && (
+                        <div className="lp-sched-session-divider">
+                          <span>{sessionIcon} {currentSession}</span>
+                        </div>
+                      )}
+                      {showBreakDivider && !showSessionDivider && (
+                        <div className="lp-sched-break-divider">
+                          <span>☕ Break ({gapMins} mins)</span>
+                        </div>
+                      )}
+                      
+                      <div 
+                        className={`lp-sched-item ${isOngoing ? "lp-sched-ongoing" : ""}`}
+                        onClick={() => handleOpenRules(comp)}
+                        style={{ 
+                          cursor: 'pointer', 
+                          opacity: isCompleted ? 0.6 : 1,
+                          borderLeft: isOngoing ? "4px solid #ff4757" : undefined
+                        }}
+                      >
+                        <span 
+                          className="lp-sched-status-dot" 
+                          style={{ 
+                            background: isOngoing ? "#ff4757" : isCompleted ? "#2ed573" : "rgba(255,255,255,0.25)", 
+                            boxShadow: isOngoing ? "0 0 8px #ff4757" : undefined 
+                          }} 
+                        />
+                        <div className="lp-sched-info">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <p 
+                              className="lp-sched-name" 
+                              style={{ 
+                                margin: 0, 
+                                textDecoration: isCompleted ? "line-through" : "none" 
                               }}
                             >
-                              Rules
+                              {comp?.name}
+                            </p>
+                            {hasRules && (
+                              <span
+                                style={{
+                                  background: isOngoing ? "rgba(79, 156, 249, 0.15)" : "rgba(255, 255, 255, 0.08)",
+                                  border: isOngoing ? "1px solid rgba(79, 156, 249, 0.3)" : "1px solid rgba(255, 255, 255, 0.15)",
+                                  color: isOngoing ? "var(--accent)" : "rgba(255, 255, 255, 0.8)",
+                                  fontSize: '10px',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: 600,
+                                  fontFamily: 'inherit'
+                                }}
+                              >
+                                Rules
+                              </span>
+                            )}
+                          </div>
+                          <p className="lp-sched-cat">{comp?.categories?.name}</p>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                          {item.computed_start_mins !== null && (
+                            <span 
+                              className="lp-sched-time-tag"
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: item.is_anchor ? 700 : 500,
+                                color: item.is_anchor ? "#2ed573" : "rgba(255,255,255,0.5)",
+                              }}
+                            >
+                              {item.is_anchor ? "" : "~"}{formatMinsTo12h(item.computed_start_mins)}
                             </span>
                           )}
+                          <span className="lp-sched-pill" style={{ 
+                            background: isOngoing ? "rgba(255,71,87,0.15)" : "rgba(255,255,255,0.05)", 
+                            color: isOngoing ? "#ff4757" : "rgba(255,255,255,0.5)", 
+                            border: isOngoing ? "1px solid rgba(255,71,87,0.3)" : "1px solid rgba(255,255,255,0.1)" 
+                          }}>
+                            {isOngoing ? "Live" : item.estimated_duration_mins ? `${item.estimated_duration_mins}m` : "Soon"}
+                          </span>
                         </div>
-                        <p className="lp-sched-cat">{comp?.categories?.name}</p>
                       </div>
-                      <span className="lp-sched-pill" style={{ background: 'rgba(46, 213, 115, 0.15)', color: '#2ed573', border: '1px solid rgba(46, 213, 115, 0.3)' }}>
-                        ✓ Completed
-                      </span>
                     </div>
                   )
                 })}
               </div>
-            )
+            );
           })}
         </div>
       )}
