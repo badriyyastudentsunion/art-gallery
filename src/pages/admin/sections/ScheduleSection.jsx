@@ -85,7 +85,12 @@ const IconClose = () => (
 
 const formatDateTab = (dateStr) => {
   if (!dateStr) return 'Unscheduled'
-  return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' })
+  const todayStr = new Date().toISOString().split('T')[0]
+  const formatted = new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' })
+  if (dateStr === todayStr) {
+    return `Today (${formatted})`
+  }
+  return formatted
 }
 
 export default function ScheduleSection() {
@@ -117,6 +122,56 @@ export default function ScheduleSection() {
 
   const skipRealtimeRef = useRef(false)
   const saveTimeoutRef = useRef(null)
+
+  // Drag Scroll Refs & State for Dates
+  const tabsWrapRef = useRef(null)
+  const dragStart = useRef({ x: 0, scrollLeft: 0, hasMoved: false })
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleMouseDown = (e) => {
+    if (!tabsWrapRef.current) return
+    setIsDragging(true)
+    dragStart.current = {
+      x: e.pageX,
+      scrollLeft: tabsWrapRef.current.scrollLeft,
+      hasMoved: false
+    }
+  }
+
+  const handleMouseMove = (e) => {
+    if (!isDragging || !tabsWrapRef.current) return
+    const dx = e.pageX - dragStart.current.x
+    if (Math.abs(dx) > 5) {
+      dragStart.current.hasMoved = true
+    }
+    tabsWrapRef.current.scrollLeft = dragStart.current.scrollLeft - dx
+  }
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleTabClick = (dateStr, e) => {
+    if (dragStart.current.hasMoved) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    setSelectedDate(dateStr)
+  }
+
+  // Auto-center today's or selected date
+  useEffect(() => {
+    if (!fetching && selectedDate && tabsWrapRef.current) {
+      const timer = setTimeout(() => {
+        const activeEl = tabsWrapRef.current.querySelector('.sched-date-tab.active')
+        if (activeEl) {
+          activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+        }
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [selectedDate, fetching])
 
   useEffect(() => {
     fetchAll()
@@ -492,24 +547,35 @@ export default function ScheduleSection() {
         <div className="sched-date-bar">
           <span className="sched-date-label">Event Date:</span>
           
-          {uniqueDates.length === 0 ? (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No scheduled dates yet. Click "+ Add Date" to begin:</span>
-          ) : (
-            uniqueDates.map(dateStr => {
-              const count = schedules.filter(s => s.scheduled_date === dateStr).length
-              return (
-                <button
-                  key={dateStr}
-                  className={`sched-date-tab ${selectedDate === dateStr ? 'active' : ''}`}
-                  onClick={() => setSelectedDate(dateStr)}
-                >
-                  <IconCalendar />
-                  <span>{formatDateTab(dateStr)}</span>
-                  <span className="sched-date-count">{count}</span>
-                </button>
-              )
-            })
-          )}
+          <div
+            className="sched-date-tabs-list"
+            ref={tabsWrapRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUpOrLeave}
+            onMouseLeave={handleMouseUpOrLeave}
+          >
+            {uniqueDates.length === 0 ? (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No scheduled dates yet. Click "+ Add Date" to begin:</span>
+            ) : (
+              uniqueDates.map(dateStr => {
+                const count = schedules.filter(s => s.scheduled_date === dateStr).length
+                const todayStr = new Date().toISOString().split('T')[0]
+                const isPast = dateStr < todayStr
+                return (
+                  <button
+                    key={dateStr}
+                    className={`sched-date-tab ${selectedDate === dateStr ? 'active' : ''} ${isPast ? 'past' : ''}`}
+                    onClick={(e) => handleTabClick(dateStr, e)}
+                  >
+                    <IconCalendar />
+                    <span>{formatDateTab(dateStr)}</span>
+                    <span className="sched-date-count">{count}</span>
+                  </button>
+                )
+              })
+            )}
+          </div>
 
           {/* Add Date Button */}
           {showAddDate ? (

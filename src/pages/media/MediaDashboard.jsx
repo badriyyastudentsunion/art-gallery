@@ -98,6 +98,8 @@ export default function MediaDashboard() {
   const [uploading, setUploading] = useState(false)
   const [overlays, setOverlays] = useState({ overlay43: '', overlay34: '' })
   const [applyOverlay, setApplyOverlay] = useState(true)
+  const [customOverlay, setCustomOverlay] = useState(null)
+  const [showGlobalFramesConfig, setShowGlobalFramesConfig] = useState(false)
 
   // Cropper State
   const [editFiles, setEditFiles] = useState([]) // Array of objects containing file & edit state
@@ -297,6 +299,81 @@ export default function MediaDashboard() {
     }
   }
 
+  const handleCustomFrameUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setCustomOverlay(reader.result)
+      showToast('Custom frame imported successfully!', 'success')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleGlobalOverlayUpload = async (e, type) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    if (file.type !== 'image/png') {
+      showToast('Only PNG images are supported for overlays (transparency required)', 'error')
+      return
+    }
+
+    try {
+      showToast(`Uploading ${type} frame overlay...`)
+      
+      const ext = 'png'
+      const path = `overlays/overlay_${type === '4:3' ? '43' : '34'}_${Date.now()}.${ext}`
+      const { data, error: uploadErr } = await supabase.storage.from('event-media').upload(path, file, {
+        contentType: 'image/png',
+        upsert: true
+      })
+      if (uploadErr) throw uploadErr
+
+      const { data: { publicUrl } } = supabase.storage.from('event-media').getPublicUrl(path)
+      
+      const newOverlays = { ...overlays }
+      if (type === '4:3') {
+        newOverlays.overlay43 = publicUrl
+      } else {
+        newOverlays.overlay34 = publicUrl
+      }
+
+      const { error: settingsErr } = await supabase.from('app_settings').upsert(
+        { key: 'gallery_overlays', value: JSON.stringify(newOverlays) },
+        { onConflict: 'key' }
+      )
+      if (settingsErr) throw settingsErr
+
+      setOverlays(newOverlays)
+      showToast(`${type} frame overlay updated successfully!`, 'success')
+    } catch (err) {
+      showToast('Upload failed: ' + err.message, 'error')
+    }
+  }
+
+  const handleGlobalOverlayDelete = async (type) => {
+    try {
+      const newOverlays = { ...overlays }
+      if (type === '4:3') {
+        newOverlays.overlay43 = ''
+      } else {
+        newOverlays.overlay34 = ''
+      }
+
+      const { error: settingsErr } = await supabase.from('app_settings').upsert(
+        { key: 'gallery_overlays', value: JSON.stringify(newOverlays) },
+        { onConflict: 'key' }
+      )
+      if (settingsErr) throw settingsErr
+
+      setOverlays(newOverlays)
+      showToast(`${type} frame overlay removed.`, 'success')
+    } catch (err) {
+      showToast('Delete failed: ' + err.message, 'error')
+    }
+  }
+
   const handleConfirmPresetDelete = async () => {
     if (!confirmPresetDel) return
     const id = confirmPresetDel
@@ -358,9 +435,13 @@ export default function MediaDashboard() {
       // Apply overlay
       let overlaySrc = null
       if (applyOverlay && mediaType === 'photo') {
-        const ar = tw / th
-        if (ratio === '4:3' || ar > 1.1) overlaySrc = overlays.overlay43 || null
-        else overlaySrc = overlays.overlay34 || null
+        if (customOverlay) {
+          overlaySrc = customOverlay
+        } else {
+          const ar = tw / th
+          if (ratio === '4:3' || ar > 1.1) overlaySrc = overlays.overlay43 || null
+          else overlaySrc = overlays.overlay34 || null
+        }
       }
 
       const buildResult = (cvs) => {
@@ -555,6 +636,265 @@ export default function MediaDashboard() {
                   ))}
                 </div>
 
+                {mediaType === 'photo' && (
+                  <div style={{ marginBottom: 16 }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowGlobalFramesConfig(!showGlobalFramesConfig)}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: 8,
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        color: '#fff',
+                        fontFamily: 'inherit',
+                        fontWeight: 600,
+                        fontSize: 12
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        ⚙ Manage Global Frames
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                        {showGlobalFramesConfig ? 'Collapse ▲' : 'Expand ▼'}
+                      </span>
+                    </button>
+
+                    {showGlobalFramesConfig && (
+                      <div style={{
+                        marginTop: 10,
+                        padding: '14px',
+                        background: 'rgba(255, 255, 255, 0.015)',
+                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                        borderRadius: 12,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 12,
+                        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)'
+                      }}>
+                        {/* 4:3 Landscape Overlay Card */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          background: 'rgba(255, 255, 255, 0.01)',
+                          border: '1px solid rgba(255, 255, 255, 0.04)',
+                          borderRadius: 8,
+                          padding: 10,
+                          position: 'relative'
+                        }}>
+                          {/* Left: Thumbnail Preview */}
+                          <div style={{
+                            width: 60,
+                            height: 45,
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: '#0d0d0f',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            position: 'relative'
+                          }}>
+                            {overlays.overlay43 ? (
+                              <>
+                                <img src={overlays.overlay43} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                                <a href={overlays.overlay43} target="_blank" rel="noreferrer" 
+                                   style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', opacity: 0, transition: 'opacity 0.2s', color: '#fff', fontSize: 9, fontWeight: 700 }}
+                                   onMouseEnter={e => e.target.style.opacity = 1}
+                                   onMouseLeave={e => e.target.style.opacity = 0}
+                                >
+                                  View
+                                </a>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: 18, color: 'rgba(255, 255, 255, 0.1)' }}>🖼</span>
+                            )}
+                          </div>
+
+                          {/* Middle: Details */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: '#f8fafc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Landscape Frame</p>
+                            <p style={{ margin: '2px 0 0 0', fontSize: 10, color: 'var(--accent-light)', fontWeight: 600 }}>1920 × 1440 px</p>
+                          </div>
+
+                          {/* Right: Actions */}
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById('sidebar-global-43-input').click()}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 6,
+                                width: 26,
+                                height: 26,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: '#e2e8f0',
+                                transition: 'all 0.2s'
+                              }}
+                              title="Upload Frame"
+                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-dim)'; e.currentTarget.style.borderColor = 'var(--accent-light)' }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)' }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                              </svg>
+                            </button>
+                            <input id="sidebar-global-43-input" type="file" accept="image/png" onChange={(e) => handleGlobalOverlayUpload(e, '4:3')} style={{ display: 'none' }} />
+
+                            {overlays.overlay43 && (
+                              <button
+                                type="button"
+                                onClick={() => handleGlobalOverlayDelete('4:3')}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.08)',
+                                  border: '1px solid rgba(239, 68, 68, 0.15)',
+                                  borderRadius: 6,
+                                  width: 26,
+                                  height: 26,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  color: '#ef4444',
+                                  transition: 'all 0.2s'
+                                }}
+                                title="Delete Frame"
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 3:4 Portrait Overlay Card */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          background: 'rgba(255, 255, 255, 0.01)',
+                          border: '1px solid rgba(255, 255, 255, 0.04)',
+                          borderRadius: 8,
+                          padding: 10,
+                          position: 'relative'
+                        }}>
+                          {/* Left: Thumbnail Preview */}
+                          <div style={{
+                            width: 60,
+                            height: 45,
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: '#0d0d0f',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            position: 'relative'
+                          }}>
+                            {overlays.overlay34 ? (
+                              <>
+                                <img src={overlays.overlay34} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                                <a href={overlays.overlay34} target="_blank" rel="noreferrer" 
+                                   style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', opacity: 0, transition: 'opacity 0.2s', color: '#fff', fontSize: 9, fontWeight: 700 }}
+                                   onMouseEnter={e => e.target.style.opacity = 1}
+                                   onMouseLeave={e => e.target.style.opacity = 0}
+                                >
+                                  View
+                                </a>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: 18, color: 'rgba(255, 255, 255, 0.1)' }}>🖼</span>
+                            )}
+                          </div>
+
+                          {/* Middle: Details */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: '#f8fafc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Portrait Frame</p>
+                            <p style={{ margin: '2px 0 0 0', fontSize: 10, color: 'var(--accent-light)', fontWeight: 600 }}>1440 × 1920 px</p>
+                          </div>
+
+                          {/* Right: Actions */}
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById('sidebar-global-34-input').click()}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 6,
+                                width: 26,
+                                height: 26,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: '#e2e8f0',
+                                transition: 'all 0.2s'
+                              }}
+                              title="Upload Frame"
+                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-dim)'; e.currentTarget.style.borderColor = 'var(--accent-light)' }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)' }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                              </svg>
+                            </button>
+                            <input id="sidebar-global-34-input" type="file" accept="image/png" onChange={(e) => handleGlobalOverlayUpload(e, '3:4')} style={{ display: 'none' }} />
+
+                            {overlays.overlay34 && (
+                              <button
+                                type="button"
+                                onClick={() => handleGlobalOverlayDelete('3:4')}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.08)',
+                                  border: '1px solid rgba(239, 68, 68, 0.15)',
+                                  borderRadius: 6,
+                                  width: 26,
+                                  height: 26,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  color: '#ef4444',
+                                  transition: 'all 0.2s'
+                                }}
+                                title="Delete Frame"
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="med-form">
                   {isImg && (
                     <>
@@ -638,9 +978,65 @@ export default function MediaDashboard() {
                               <span className="med-slider-lbl"><span>Saturation</span><div style={{display:'flex',alignItems:'center'}}><input type="number" className="med-val-input" value={activeFile.saturate} onChange={e => updateActiveFile({ saturate: Number(e.target.value), presetId: null })} onBlur={() => pushHistory()} onKeyDown={e => { if(e.key==='Enter') { e.preventDefault(); e.target.blur() } }} />%</div></span>
                               <input type="range" className="med-slider" min="0" max="200" value={activeFile.saturate} onChange={e => updateActiveFile({ saturate: Number(e.target.value), presetId: null })} onPointerUp={() => pushHistory()} onTouchEnd={() => pushHistory()} />
                             </div>
+
+                            {/* Frame Overlay Settings */}
+                            {mediaType === 'photo' && (
+                              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Apply Frame Overlay</span>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={applyOverlay} 
+                                    onChange={e => setApplyOverlay(e.target.checked)}
+                                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                                  />
+                                </div>
+
+                                {applyOverlay && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                      <button
+                                        type="button"
+                                        className="med-pill"
+                                        onClick={() => document.getElementById('custom-frame-input').click()}
+                                        style={{ flex: 1, fontSize: 11, padding: '6px 12px', justifyContent: 'center' }}
+                                      >
+                                        Import Custom Frame (PNG)
+                                      </button>
+                                      {customOverlay && (
+                                        <button
+                                          type="button"
+                                          className="med-text-btn"
+                                          onClick={() => setCustomOverlay(null)}
+                                          style={{ color: '#ff6b6b', fontSize: 11 }}
+                                        >
+                                          Reset
+                                        </button>
+                                      )}
+                                    </div>
+                                    <input
+                                      id="custom-frame-input"
+                                      type="file"
+                                      accept="image/png"
+                                      onChange={handleCustomFrameUpload}
+                                      style={{ display: 'none' }}
+                                    />
+                                    {customOverlay ? (
+                                      <div style={{ fontSize: 11, color: '#2ed573', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <span>✓ Custom frame imported</span>
+                                      </div>
+                                    ) : (
+                                      <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+                                        Uses default Inspico frame unless custom PNG is imported.
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
 
-                          {editFiles.length > 1 && (
+                          {editFiles.length > 1 && (activeFile.brightness !== 100 || activeFile.contrast !== 100 || activeFile.saturate !== 100) && (
                             <button type="button" className="med-pill" onClick={applyBulkSettings} style={{width:'100%', justifyContent:'center'}}>
                               <IconLayers s={13} /> Sync adjustments to all
                             </button>
@@ -702,8 +1098,17 @@ export default function MediaDashboard() {
                         onInteractionEnd={() => pushHistory()}
                         onMediaLoaded={onMediaLoaded}
                         objectFit={activeFile.ratio === 'original' ? "contain" : "contain"} 
-                        showGrid={activeFile.ratio !== 'original'}
-                        style={{ mediaStyle: { filter: isComparing ? 'none' : `brightness(${activeFile.brightness}%) contrast(${activeFile.contrast}%) saturate(${activeFile.saturate}%)` } }}
+                        showGrid={activeFile.ratio !== 'original' && !applyOverlay}
+                        style={{ 
+                          mediaStyle: { filter: isComparing ? 'none' : `brightness(${activeFile.brightness}%) contrast(${activeFile.contrast}%) saturate(${activeFile.saturate}%)` },
+                          cropAreaStyle: {
+                            backgroundImage: applyOverlay && mediaType === 'photo' ? `url(${customOverlay || (getAspect(activeFile.ratio, activeFile.naturalAspect) > 1.1 ? overlays.overlay43 : overlays.overlay34)})` : 'none',
+                            backgroundSize: '100% 100%',
+                            backgroundPosition: 'center',
+                            backgroundRepeat: 'no-repeat',
+                            pointerEvents: 'none'
+                          }
+                        }}
                       />
                     </div>
                     

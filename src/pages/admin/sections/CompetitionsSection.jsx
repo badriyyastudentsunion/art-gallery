@@ -1630,11 +1630,10 @@ export default function CompetitionsSection({ navigateTo }) {
                               />
                             </th>
                           )}
-                          <th style={{ width: '45%' }}>Competition</th>
+                          <th style={{ width: '57%' }}>Competition</th>
                           <th style={{ width: '11%' }}>Stage</th>
                           <th style={{ width: '12%' }}>Invigilator</th>
                           <th style={{ width: '12%' }}>Judge</th>
-                          <th style={{ width: '12%' }}>Announcer</th>
                           <th style={{ width: '8%' }}></th>
                         </tr>
                       </thead>
@@ -1824,36 +1823,7 @@ export default function CompetitionsSection({ navigateTo }) {
                             dataColor="#ff9f43"
                           />
                         </td>
-                        <td onClick={e => e.stopPropagation()}>
-                          {/* Announcer: single click assign/unassign */}
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                            {allAnnouncers.length === 0
-                              ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>
-                              : allAnnouncers.map(ann => {
-                                  const isAssigned = c.announcer_id === ann.id
-                                  return (
-                                    <button key={ann.id} type="button"
-                                      onClick={() => handleAnnouncerChange(c.id, isAssigned ? null : ann.id)}
-                                      disabled={isSaving}
-                                      style={{
-                                        fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                                        border: `1px solid ${isAssigned ? 'rgba(79, 156, 249, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
-                                        background: isAssigned ? 'var(--accent-dim)' : 'rgba(255, 255, 255, 0.02)',
-                                        color: isAssigned ? 'var(--accent)' : 'var(--text-muted)',
-                                        cursor: 'pointer', fontFamily: 'inherit',
-                                        transition: 'all 0.15s',
-                                        fontWeight: isAssigned ? 600 : 500,
-                                      }}
-                                    >
-                                      <span key={isAssigned ? 'y' : 'n'} className="text-slide-up">
-                                        {ann.name}
-                                      </span>
-                                    </button>
-                                  )
-                                })
-                            }
-                          </div>
-                        </td>
+
                         <td onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
                             {isSaving && <div className="spin" style={{ width: 12, height: 12, borderTopColor: 'var(--accent-light)' }} />}

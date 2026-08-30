@@ -62,12 +62,13 @@ const IcoSpeaker = () => (
   </svg>
 )
 const IcoTrophy = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
-    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-    <path d="M4 22h16" />
-    <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
-    <path d="M12 2a7 7 0 0 0-7 7v4a7 7 0 0 0 14 0V9a7 7 0 0 0-7-7z" />
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 17, height: 17 }}>
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+    <path d="M4 22h16"/>
+    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>
   </svg>
 )
 const IcoFlash = () => (
@@ -110,6 +111,7 @@ export default function AnnouncerDashboard() {
   const [revealMilestones, setRevealMilestones] = useState([])
   const [revealedMilestone, setRevealedMilestone] = useState(0)
   const [sequenceIds, setSequenceIds] = useState([])
+  const [rawSequence, setRawSequence] = useState([])
   const [revealedByAdmin, setRevealedByAdmin] = useState(false)
 
   const [leaderboard, setLeaderboard] = useState([])
@@ -265,15 +267,20 @@ export default function AnnouncerDashboard() {
           if (revealMilestonesVal) milList = JSON.parse(revealMilestonesVal)
         } catch(e) {}
 
-        let seqIds = []
+        let rawSeq = []
         try {
-          if (settingsMap['announcer_sequence']) seqIds = JSON.parse(settingsMap['announcer_sequence'])
+          if (settingsMap['announcer_sequence']) rawSeq = JSON.parse(settingsMap['announcer_sequence'])
         } catch (e) {}
+
+        const seqCompIds = rawSeq
+          .map(i => (typeof i === 'string' ? i : i?.id))
+          .filter(id => id && !id.startsWith('divider') && !id.startsWith('__divider'))
 
         setSuspenseActive(active)
         setRevealMilestones(milList)
         setRevealedMilestone(parseInt(revealedMilestoneVal || '0'))
-        setSequenceIds(seqIds)
+        setSequenceIds(seqCompIds)
+        setRawSequence(rawSeq)
         setRevealedByAdmin(settingsMap['leaderboard_revealed_by_admin'] === 'true')
 
         let mapped = comps.map(c => ({
@@ -285,14 +292,20 @@ export default function AnnouncerDashboard() {
 
         const publishedSorted = mapped.filter(c => c.published && c.published_at)
           .sort((a, b) => new Date(a.published_at) - new Date(b.published_at))
-        publishedSorted.forEach((c, i) => { c.announcementNumber = i + 1 })
+        const publishedCount = publishedSorted.length
 
-        if (seqIds.length > 0) {
-          const seqSet = new Set(seqIds)
+        if (seqCompIds.length > 0) {
+          const seqSet = new Set(seqCompIds)
+          seqCompIds.forEach((id, i) => {
+            const item = mapped.find(c => c.id === id)
+            if (item && !item.announcementNumber) {
+              item.announcementNumber = publishedCount + i + 1
+            }
+          })
           mapped.sort((a, b) => {
             const aInSeq = seqSet.has(a.id)
             const bInSeq = seqSet.has(b.id)
-            if (aInSeq && bInSeq) return seqIds.indexOf(a.id) - seqIds.indexOf(b.id)
+            if (aInSeq && bInSeq) return seqCompIds.indexOf(a.id) - seqCompIds.indexOf(b.id)
             if (aInSeq) return -1
             if (bInSeq) return 1
             return a.name.localeCompare(b.name)
@@ -313,6 +326,17 @@ export default function AnnouncerDashboard() {
 
   async function openCompetition(comp, isInitial = true) {
     if (!comp.hasJudgeResults) return
+
+    // Strict Sequence Enforcement: Cannot announce ahead of the sequence
+    if (comp.isVirtual && comp.isSequenceLocked) {
+      return
+    }
+    if (!comp.published && sequenceIds.length > 0 && sequenceIds.includes(comp.id)) {
+      const activeUnpublishedId = sequenceIds.find(id => competitions.some(c => c.id === id && !c.published))
+      if (activeUnpublishedId && activeUnpublishedId !== comp.id) {
+        return
+      }
+    }
 
     setSelected(comp)
     setPublished(comp.published)
@@ -416,53 +440,53 @@ export default function AnnouncerDashboard() {
     }
   }
 
-  const pendingComps = competitions.filter(c => !c.published)
+  // Build pending and completed queues from rawSequence (including Status Dividers)
+  const pendingComps = []
   const completedComps = competitions.filter(c => c.published)
+  const publishedCount = completedComps.length
 
-  if (!suspenseActive) {
-    if (revealedMilestone > 0 || revealedByAdmin) {
-      completedComps.push({
-        id: 'overall_leaderboard',
-        name: 'Overall Leaderboard',
-        hasJudgeResults: true,
-        published: true,
-        isVirtual: true,
-      })
-    } else {
-      pendingComps.push({
-        id: 'overall_leaderboard',
-        name: 'Overall Leaderboard',
-        hasJudgeResults: true,
-        published: false,
-        isVirtual: true,
-      })
-    }
-  } else {
-    const C = completedComps.length
-    const revealedList = revealMilestones.filter(m => revealedMilestone >= m)
-    revealedList.forEach(m => {
-      completedComps.push({
-        id: `overall_leaderboard_${m}`,
-        name: `Overall Leaderboard (Milestone ${m})`,
-        hasJudgeResults: true,
-        published: true,
-        isVirtual: true,
-        milestone: m,
-      })
+  let runningCompNum = 0
+  if (rawSequence.length > 0) {
+    rawSequence.forEach((item, idx) => {
+      const isDivider = (typeof item === 'object' && item.isDivider) || (typeof item === 'string' && item.startsWith('__divider'))
+      if (isDivider) {
+        const milestoneLimit = runningCompNum
+        const isRevealed = revealedMilestone >= milestoneLimit
+        const isReady = publishedCount >= milestoneLimit && !isRevealed
+        const isLocked = publishedCount < milestoneLimit
+
+        const dividerCard = {
+          id: typeof item === 'object' && item.id ? item.id : `divider-${idx}`,
+          name: `Points Standing Status`,
+          hasJudgeResults: true,
+          published: isRevealed,
+          isVirtual: true,
+          milestone: milestoneLimit,
+          isDivider: true,
+          isSequenceLocked: isLocked
+        }
+
+        if (isRevealed) {
+          if (!completedComps.some(c => c.id === dividerCard.id)) {
+            completedComps.push(dividerCard)
+          }
+        } else {
+          pendingComps.push(dividerCard)
+        }
+      } else {
+        runningCompNum++
+        const compId = typeof item === 'string' ? item : item.id
+        const comp = competitions.find(c => c.id === compId)
+        if (comp && !comp.published) {
+          pendingComps.push({
+            ...comp,
+            announcementNumber: runningCompNum
+          })
+        }
+      }
     })
-
-    const pendingMilestones = revealMilestones.filter(m => C >= m && m > revealedMilestone)
-    if (pendingMilestones.length > 0) {
-      const nextM = Math.min(...pendingMilestones)
-      pendingComps.push({
-        id: 'overall_leaderboard',
-        name: `Overall Leaderboard (Milestone ${nextM})`,
-        hasJudgeResults: true,
-        published: false,
-        isVirtual: true,
-        milestone: nextM,
-      })
-    }
+  } else {
+    competitions.filter(c => !c.published && c.hasJudgeResults).forEach(c => pendingComps.push(c))
   }
 
   const displayedComps = anncTab === 'pending' ? pendingComps : completedComps
@@ -476,10 +500,7 @@ export default function AnnouncerDashboard() {
               <button className="ann-back" onClick={() => window.history.back()}><IcoBack /></button>
             )}
             <div>
-              <p style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-                {selected ? 'Announcement' : 'Announcer'}
-              </p>
-              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
                 {selected ? selected.name : user?.name || user?.username}
               </p>
             </div>
@@ -548,8 +569,9 @@ export default function AnnouncerDashboard() {
               <div className="ann-group-box">
                 {displayedComps.map(c => {
                   const s = Array.isArray(c.competition_schedule) ? c.competition_schedule[0] : c.competition_schedule
-                  const isLocked = !c.hasJudgeResults
-                  const isSequenceLocked = suspenseActive && sequenceIds.length > 0 && sequenceIds.includes(c.id) && sequenceIds[0] !== c.id && !c.published
+                  const activeUnpublishedId = sequenceIds.find(id => competitions.some(comp => comp.id === id && !comp.published))
+                  const isSequenceLocked = c.isVirtual ? c.isSequenceLocked : (!c.published && sequenceIds.length > 0 && sequenceIds.includes(c.id) && activeUnpublishedId && activeUnpublishedId !== c.id)
+                  const isLocked = c.isVirtual ? c.isSequenceLocked : (!c.hasJudgeResults || isSequenceLocked)
                   return (
                     <div key={c.id}
                       className={`ann-comp-card ${c.published ? 'done' : ''} ${isLocked ? 'locked' : ''}`}
@@ -559,8 +581,8 @@ export default function AnnouncerDashboard() {
                         cursor: isLocked ? 'not-allowed' : 'pointer'
                       }}
                     >
-                      <div className={`ann-comp-icon ${c.published ? 'done-icon' : ''}`}>
-                        {c.published ? <IcoDone /> : (c.isVirtual ? <IcoTrophy /> : (c.competition_type === 'stage' ? <IcoStage /> : <IcoOffStage />))}
+                      <div className={`ann-comp-icon ${c.isVirtual ? 'trophy-icon' : (c.published ? 'done-icon' : '')}`}>
+                        {c.isVirtual ? <IcoTrophy /> : (c.published ? <IcoDone /> : (c.competition_type === 'stage' ? <IcoStage /> : <IcoOffStage />))}
                       </div>
                       <div className="ann-comp-body" style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -576,8 +598,8 @@ export default function AnnouncerDashboard() {
                         <div className="ann-comp-meta">
                           {c.isVirtual ? (
                             <>
-                              <span>Standings</span>
-                              <span style={{ color: 'var(--accent-light)' }}>Leaderboard</span>
+                              <span style={{ color: '#f7c948', fontWeight: 600 }}>Standings Status</span>
+                              <span>after Result #{c.milestone}</span>
                             </>
                           ) : (
                             <>
@@ -597,12 +619,14 @@ export default function AnnouncerDashboard() {
                               <IcoDone />
                               <span>Published</span>
                             </span>
-                          ) : c.isVirtual ? (
-                            <span>Ready to Reveal</span>
-                          ) : isSequenceLocked ? (
+                          ) : isLocked ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                               <IcoLock />
                               <span>Locked in Queue</span>
+                            </span>
+                          ) : c.isVirtual ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#f7c948' }}>
+                              <span>Ready to Reveal</span>
                             </span>
                           ) : !c.hasJudgeResults ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -623,12 +647,56 @@ export default function AnnouncerDashboard() {
           </div>
         ) : (
           <div className="ann-result-wrap" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="ann-info-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <p style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 600, margin: 0 }}>Results Announcement</p>
-                <p style={{ fontWeight: 700, fontSize: 15, marginTop: 4, margin: '4px 0 0 0', color: 'var(--text-primary)' }}>{selected.name}</p>
-                {!published && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, margin: '2px 0 0 0' }}>Review the final computed scores below before publishing.</p>}
+            <div className="ann-info-card" style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12,
+              background: 'linear-gradient(135deg, rgba(247, 201, 72, 0.08) 0%, rgba(79, 156, 249, 0.05) 100%)',
+              border: '1px solid rgba(247, 201, 72, 0.25)',
+              borderRadius: 12,
+              padding: '14px 18px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                {selected.announcementNumber && (
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    color: '#0e0b07',
+                    background: 'linear-gradient(135deg, #f7c948 0%, #ffb300 100%)',
+                    padding: '3px 10px',
+                    borderRadius: 16,
+                    letterSpacing: 0.6,
+                    boxShadow: '0 2px 8px rgba(247, 201, 72, 0.35)'
+                  }}>
+                    RESULT #{String(selected.announcementNumber).padStart(2, '0')}
+                  </span>
+                )}
+                <h2 style={{ fontWeight: 800, fontSize: 17, margin: 0, color: '#fff' }}>{selected.name}</h2>
+                {selected.categories?.name && (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: 4 }}>
+                    {selected.categories.name}
+                  </span>
+                )}
               </div>
+
+              {published && (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#2ed573',
+                  background: 'rgba(46, 213, 115, 0.12)',
+                  border: '1px solid rgba(46, 213, 115, 0.3)',
+                  padding: '6px 14px',
+                  borderRadius: 20
+                }}>
+                  <IcoDone /> Published
+                </span>
+              )}
             </div>
 
             {loadingDetail ? (

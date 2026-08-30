@@ -246,6 +246,8 @@ export default function TeamDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, fetchAll)
       .subscribe()
 
@@ -361,28 +363,30 @@ export default function TeamDashboard() {
       return (a.name || '').localeCompare(b.name || '')
     })
 
-    // 5. Fetch competition statuses
-    const { data: resRows } = await supabase.from('results').select('competition_id, published')
-    const { data: schedRows } = await supabase.from('schedules').select('competition_id, status')
-    const { data: judgeRows } = await supabase.from('judging_results').select('competition_id')
+    // 5. Fetch competition statuses with correct table names
+    const { data: resRows } = await supabase.from('competition_results').select('competition_id, published')
+    const { data: schedRows } = await supabase.from('competition_schedule').select('competition_id, status')
+    const { data: judgeRows } = await supabase.from('judge_results').select('competition_id')
     const { data: repRows } = await supabase.from('competition_reports').select('competition_id, participant_id')
 
     filteredComps.forEach(c => {
-      const res = (resRows || []).find(r => r.competition_id === c.id)
+      const resList = (resRows || []).filter(r => r.competition_id === c.id)
+      const hasPublishedResult = resList.some(r => r.published === true)
+      const hasResults = resList.length > 0
       const hasJudge = (judgeRows || []).some(r => r.competition_id === c.id)
       const hasRep = (repRows || []).some(r => r.competition_id === c.id)
       const sched = (schedRows || []).find(s => s.competition_id === c.id)
 
-      if (res) {
-        c.status = res.published ? 'Published' : 'Completed'
-      } else if (hasJudge) {
+      if (hasPublishedResult) {
+        c.status = 'Published'
+      } else if (hasResults || hasJudge || (sched && sched.status === 'completed')) {
         c.status = 'Completed'
-      } else if (sched && sched.status === 'completed') {
-        c.status = 'Ended'
-      } else if (hasRep) {
+      } else if (sched && sched.status === 'ongoing') {
         c.status = 'Ongoing'
       } else if (sched) {
         c.status = 'Scheduled'
+      } else if (hasRep) {
+        c.status = 'Ongoing'
       } else {
         c.status = 'Pending'
       }

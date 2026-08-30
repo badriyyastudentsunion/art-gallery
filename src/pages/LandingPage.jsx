@@ -7,6 +7,7 @@ import LogoLoader from '../components/LogoLoader'
 import { APP_VERSION } from '../version'
 import { QRCodeSVG } from 'qrcode.react'
 import LoginModal from '../components/LoginModal'
+import ResultPoster from '../components/ResultPoster'
 import './LandingPage.css'
 
 /* ══════════ ICONS ══════════ */
@@ -281,7 +282,7 @@ function MinimalCountdown() {
 }
 
 /* ══════════ HOME TAB ══════════ */
-function HomeTab({ onLoginClick, setTab, liveStream }) {
+function HomeTab({ onLoginClick, setTab, liveStream, onOpenPoster }) {
   const [photos, setPhotos] = useState([])
   const [posters, setPosters] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -568,7 +569,9 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
                         if (!isCenter) {
                           setActivePosterIdx(idx)
                         } else if (!wasHoldOrDrag) {
-                          setTab('gallery')
+                          if (onOpenPoster) {
+                            onOpenPoster(poster)
+                          }
                         }
                       }}
                     >
@@ -586,51 +589,6 @@ function HomeTab({ onLoginClick, setTab, liveStream }) {
                         <div className="lp-poster-3d-caption-overlay">
                           <p className="lp-poster-3d-caption">{poster.caption}</p>
                         </div>
-                      )}
-                      
-                      {/* Download Button on 3D Card */}
-                      {isCenter && (
-                        <button
-                          className="lp-poster-download-btn"
-                          disabled={isItemDownloading}
-                          onClick={async (e) => {
-                            e.stopPropagation()
-                            if (downloadingPosterId) return
-                            setDownloadingPosterId(poster.id)
-                            try {
-                              let downloadUrl = poster.hd_url
-                              if (!downloadUrl) {
-                                const { data } = await supabase.from('gallery_media').select('hd_url').eq('id', poster.id).single()
-                                downloadUrl = data?.hd_url || poster.thumb_url || poster.thumbUrl
-                              }
-                              await triggerFileDownload(downloadUrl, `poster-${poster.id}.jpg`)
-                            } catch (err) {
-                              console.error('Download error:', err)
-                            } finally {
-                              setDownloadingPosterId(null)
-                            }
-                          }}
-                          title="Download HD Poster"
-                          style={{
-                            position: 'absolute',
-                            bottom: '12px',
-                            right: '12px',
-                            background: 'rgba(0, 0, 0, 0.75)',
-                            backdropFilter: 'blur(8px)',
-                            border: '1px solid rgba(255, 255, 255, 0.2)',
-                            color: '#fff',
-                            borderRadius: '50%',
-                            width: '34px',
-                            height: '34px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: isItemDownloading ? 'default' : 'pointer',
-                            zIndex: 20
-                          }}
-                        >
-                          {isItemDownloading ? <DownloadSpinner size={16} /> : <IconDownload />}
-                        </button>
                       )}
                     </div>
                   )
@@ -1105,13 +1063,55 @@ function ResultsTab() {
   const [loading, setLoading] = useState(true)
   const [loadingResults, setLoadingResults] = useState(false)
   const [search, setSearch] = useState('')
+  const [showResultPoster, setShowResultPoster] = useState(true)
 
   useEffect(() => {
     fetchCompetitions()
+    
+    // Subscribe to realtime show_result_poster settings
+    const ch = supabase.channel('rt-results-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.show_result_poster' }, (payload) => {
+        const val = payload.new?.value
+        if (val !== undefined && val !== null) {
+          setShowResultPoster(val === true || val === 'true' || val === 1 || val === '1')
+        }
+      })
+      .subscribe()
+    return () => {
+      supabase.removeChannel(ch)
+    }
   }, [])
+
+  // Handle mobile swipe-back gesture for result details modal view
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selected) {
+        setSelected(null)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [selected])
 
   async function fetchCompetitions() {
     setLoading(true)
+    
+    try {
+      const { data: posterData } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'show_result_poster')
+        .maybeSingle()
+      if (posterData) {
+        setShowResultPoster(posterData.value === true || posterData.value === 'true' || posterData.value === 1 || posterData.value === '1')
+      } else {
+        setShowResultPoster(true)
+      }
+    } catch (e) {
+      console.error(e)
+    }
     // Select min published_at per competition so we know when it was first announced
     const { data } = await supabase
       .from('competition_results')
@@ -1148,6 +1148,7 @@ function ResultsTab() {
 
   async function openResults(comp) {
     setSelected(comp)
+    window.history.pushState({ view: 'result-detail' }, '')
     setLoadingResults(true)
     const { data } = await supabase
       .from('competition_results')
@@ -1181,54 +1182,73 @@ function ResultsTab() {
   if (selected) {
     return (
       <div className="lp-tab-content">
-        <div className="lp-results-header">
-          <button className="lp-back-btn" onClick={() => setSelected(null)}>
+        <div className="lp-results-header" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button className="lp-back-btn" onClick={() => window.history.back()}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
               <polyline points="15 18 9 12 15 6" />
             </svg>
             Back
           </button>
-          <div>
-            <h2 className="lp-section-title">{selected.name}</h2>
-            <p className="lp-section-sub">{selected.categories?.name}</p>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {selected.announcementNumber && (
+                <span style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: '#f7c948',
+                  letterSpacing: '0.5px'
+                }}>
+                  #{String(selected.announcementNumber).padStart(2, '0')}
+                </span>
+              )}
+              <h2 className="lp-section-title" style={{ margin: 0, fontSize: 18, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selected.name}</h2>
+              {selected.categories?.name && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  · {selected.categories.name}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         {loadingResults ? (
-          <LogoLoader text="Fetching competition results..." />
+          <LogoLoader text="Loading results..." />
         ) : results.length === 0 ? (
           <div className="lp-empty"><IconAward /><p>No results published yet</p></div>
         ) : (
-          <div className="lp-results-list">
-            {results.map((r, i) => {
-              const pos = r.position || (i + 1)
-              const isTied = results.filter(x => x.position === pos).length > 1
-              return (
-                <div key={r.id} className={`lp-result-row ${pos === 1 ? 'lp-result-first' : pos === 2 ? 'lp-result-second' : pos === 3 ? 'lp-result-third' : ''}`}>
-                  <div className="lp-result-rank-medal">
-                    <span className="lp-result-num">{pos}</span>
-                  </div>
-                  <div className="lp-result-info">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span className="lp-result-name">{r.participants?.name}</span>
-                      {isTied && (
-                        <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent-light)', background: 'rgba(79, 156, 249, 0.12)', border: '1px solid rgba(79, 156, 249, 0.3)', padding: '1px 5px', borderRadius: 4 }}>
-                          TIED
-                        </span>
-                      )}
+          <>
+            {showResultPoster && <ResultPoster competition={selected} results={results} />}
+            <div className="lp-results-list" style={{ maxWidth: 480, margin: '0 auto' }}>
+              {results.map((r, i) => {
+                const pos = r.position || (i + 1)
+                const isTied = results.filter(x => x.position === pos).length > 1
+                return (
+                  <div key={r.id} className={`lp-result-row ${pos === 1 ? 'lp-result-first' : pos === 2 ? 'lp-result-second' : pos === 3 ? 'lp-result-third' : ''}`}>
+                    <div className="lp-result-rank-medal">
+                      <span className="lp-result-num">{pos}</span>
                     </div>
-                    <span className="lp-result-meta">
-                      {r.participants?.teams?.name && <span className="lp-result-team">{r.participants.teams.name}</span>}
-                      {r.participants?.chess_number && <span className="lp-result-chess">#{r.participants.chess_number}</span>}
+                    <div className="lp-result-info">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="lp-result-name">{r.participants?.name}</span>
+                        {isTied && (
+                          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent-light)', background: 'rgba(79, 156, 249, 0.12)', border: '1px solid rgba(79, 156, 249, 0.3)', padding: '1px 5px', borderRadius: 4 }}>
+                            TIED
+                          </span>
+                        )}
+                      </div>
+                      <span className="lp-result-meta">
+                        {r.participants?.teams?.name && <span className="lp-result-team">{r.participants.teams.name}</span>}
+                        {r.participants?.chess_number && <span className="lp-result-chess">#{r.participants.chess_number}</span>}
+                      </span>
+                    </div>
+                    <span className="lp-result-score" style={{ fontSize: 15, fontWeight: 800 }}>
+                      {r.grade && r.grade !== '—' ? r.grade : '—'}
                     </span>
                   </div>
-                  <span className="lp-result-score" style={{ fontSize: 16, fontWeight: 800 }}>
-                    {r.grade && r.grade !== '—' ? r.grade : '—'}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
     )
@@ -1239,27 +1259,18 @@ function ResultsTab() {
       {/* Integrated Team Points Leaderboard at the top of Results */}
       <TeamPointsTab showHeader={true} />
 
-      <div className="lp-section-header" style={{ marginTop: '30px' }}>
+      <div className="lp-section-header" style={{ marginTop: '30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <h2 className="lp-section-title" style={{ margin: 0 }}>Competition Results</h2>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              color: 'var(--accent-light)',
-              background: 'rgba(79, 156, 249, 0.08)',
-              border: '1px solid rgba(79, 156, 249, 0.25)',
-              padding: '4px 12px',
-              borderRadius: '20px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-light)', boxShadow: '0 0 8px var(--accent-light)' }} />
-              {competitions.length} Results Published
-            </span>
-          </div>
+          <h2 className="lp-section-title" style={{ margin: 0 }}>Competition Results</h2>
           <p className="lp-section-sub" style={{ marginTop: 4 }}>Select a competition to view rankings</p>
+        </div>
+        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+          <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--accent-light, #4f9cf9)', lineHeight: 1, letterSpacing: '-0.5px' }}>
+            {String(competitions.length).padStart(2, '0')}
+          </span>
+          <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-muted, #888)', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: 2 }}>
+            Published
+          </span>
         </div>
       </div>
 
@@ -1326,6 +1337,21 @@ function ScheduleTab() {
   const [teamParticipants, setTeamParticipants] = useState([])
   const [loadingTeamParts, setLoadingTeamParts] = useState(false)
 
+  const dateTabsRef = useRef(null)
+
+  // Auto-center selected date tab in schedule
+  useEffect(() => {
+    if (!loading && selectedDate && dateTabsRef.current) {
+      const timer = setTimeout(() => {
+        const activeEl = dateTabsRef.current?.querySelector('.lp-date-tab.active')
+        if (activeEl) {
+          activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+        }
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [selectedDate, loading])
+
   async function handleOpenRules(comp) {
     setViewingRules(comp)
     setTeamParticipants([])
@@ -1377,8 +1403,19 @@ function ScheduleTab() {
     const uniq = [...new Set(list.map(s => s.scheduled_date).filter(Boolean))].sort()
     setDates(uniq)
     if (uniq.length > 0 && !selectedDate) {
-      const today = new Date().toISOString().split('T')[0]
-      setSelectedDate(uniq.includes(today) ? today : uniq[0])
+      const todayStr = new Date().toISOString().split('T')[0]
+      if (uniq.includes(todayStr)) {
+        setSelectedDate(todayStr)
+      } else {
+        // Pick first upcoming date >= today
+        const upcoming = uniq.find(d => d >= todayStr)
+        if (upcoming) {
+          setSelectedDate(upcoming)
+        } else {
+          // If all dates past, pick the latest / last date
+          setSelectedDate(uniq[uniq.length - 1])
+        }
+      }
     }
     setLoading(false)
   }
@@ -1400,7 +1437,12 @@ function ScheduleTab() {
 
   const hasItems = Object.values(stageGroups).some(g => g.items.length > 0)
 
-  const fmt = d => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' })
+  const todayStr = new Date().toISOString().split('T')[0]
+  const fmt = d => {
+    const formatted = new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', weekday: 'short' })
+    if (d === todayStr) return `Today (${formatted})`
+    return formatted
+  }
   function formatMinsTo12h(totalMins) {
     if (totalMins === null || totalMins === undefined) return "TBD";
     const h = Math.floor(totalMins / 60) % 24;
@@ -1430,9 +1472,9 @@ function ScheduleTab() {
       </div>
 
       {dates.length > 0 && (
-        <div className="lp-date-tabs">
+        <div ref={dateTabsRef} className="lp-date-tabs" style={{ scrollBehavior: 'smooth' }}>
           {dates.map(d => (
-            <button key={d} className={`lp-date-tab ${selectedDate === d ? 'active' : ''}`}
+            <button key={d} className={`lp-date-tab ${selectedDate === d ? 'active' : ''} ${d < todayStr ? 'past' : ''}`}
               onClick={() => setSelectedDate(d)}>{fmt(d)}</button>
           ))}
         </div>
@@ -1523,7 +1565,7 @@ function ScheduleTab() {
                       )}
                       {showBreakDivider && !showSessionDivider && (
                         <div className="lp-sched-break-divider">
-                          <span>☕ Break ({gapMins} mins)</span>
+                          <span>Break ({gapMins} mins)</span>
                         </div>
                       )}
                       
@@ -1733,7 +1775,7 @@ function ScheduleTab() {
 }
 
 /* ══════════ GALLERY TAB ══════════ */
-function GalleryTab() {
+function GalleryTab({ initialItem, onClearInitialItem }) {
   const [media, setMedia] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all') // 'all' | 'photo' | 'video' | 'live'
@@ -1747,7 +1789,7 @@ function GalleryTab() {
     if (isPhoto) {
       setLightboxItem(item)
       setHdImage(item.hd_url || null)
-      setHdLoaded(!!item.hd_url)
+      setHdLoaded(false)
       // Lazily fetch HD in background for full crisp quality
       supabase.from('gallery_media').select('hd_url').eq('id', item.id).maybeSingle().then(({ data }) => {
         if (data?.hd_url) setHdImage(data.hd_url)
@@ -1757,6 +1799,13 @@ function GalleryTab() {
     }
     window.history.pushState({ modal: 'gallery-lightbox' }, '')
   }
+
+  useEffect(() => {
+    if (initialItem) {
+      openItemModal(initialItem, initialItem.type === 'photo' || initialItem.type === 'poster')
+      onClearInitialItem()
+    }
+  }, [initialItem])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -2091,10 +2140,7 @@ function GalleryTab() {
                 maxWidth: '100%', 
                 maxHeight: '85vh', 
                 objectFit: 'contain', 
-                borderRadius: 8,
-                filter: hdLoaded ? 'blur(4px)' : 'none',
-                opacity: hdLoaded ? 0.5 : 1,
-                transition: 'filter 0.4s ease, opacity 0.4s ease'
+                borderRadius: 8
               }} 
             />
             {/* The HD image - loaded absolutely over the thumbnail */}
@@ -2115,6 +2161,29 @@ function GalleryTab() {
                   transition: 'opacity 0.4s ease'
                 }} 
               />
+            )}
+            {/* WhatsApp-like HD loading indicator */}
+            {!hdLoaded && hdImage && (
+              <div style={{
+                position: 'absolute',
+                bottom: '12px',
+                left: '12px',
+                background: 'rgba(0, 0, 0, 0.75)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#fff',
+                padding: '6px 12px',
+                borderRadius: '20px',
+                fontSize: '11px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                zIndex: 25
+              }}>
+                <DownloadSpinner size={12} color="#fff" />
+                <span style={{ letterSpacing: '0.5px' }}>HD loading...</span>
+              </div>
             )}
           </div>
           
@@ -2214,6 +2283,7 @@ export default function LandingPage() {
   const [viewingRules, setViewingRules] = useState(null)
   const [rulesMap, setRulesMap] = useState({})
   const [liveStream, setLiveStream] = useState(null)
+  const [activeLightboxPoster, setActiveLightboxPoster] = useState(null)
   
   const tabScrollPositions = useRef({})
   const prevTabRef = useRef(tab)
@@ -2450,10 +2520,21 @@ export default function LandingPage() {
       {/* ── Main Content ── */}
       <main className="lp-main">
         <div style={{ display: tab === 'home' ? 'block' : 'none' }}>
-          <HomeTab onLoginClick={openLoginModal} setTab={changeTab} liveStream={liveStream} />
+          <HomeTab 
+            onLoginClick={openLoginModal} 
+            setTab={changeTab} 
+            liveStream={liveStream} 
+            onOpenPoster={(poster) => {
+              changeTab('gallery')
+              setActiveLightboxPoster(poster)
+            }}
+          />
         </div>
         <div style={{ display: tab === 'gallery' ? 'block' : 'none' }}>
-          <GalleryTab />
+          <GalleryTab 
+            initialItem={activeLightboxPoster} 
+            onClearInitialItem={() => setActiveLightboxPoster(null)} 
+          />
         </div>
         <div style={{ display: (tab === 'results' || tab === 'points') ? 'block' : 'none' }}>
           <ResultsTab />

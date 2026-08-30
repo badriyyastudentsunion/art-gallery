@@ -77,9 +77,27 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  overflow-x: auto;
   padding-top: 4px;
-  scrollbar-width: thin;
+  width: 100%;
+}
+
+.sched-date-tabs-list {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none; /* Hide scrollbars for Firefox */
+  cursor: grab;
+  user-select: none;
+  flex-grow: 1;
+}
+
+.sched-date-tabs-list:active {
+  cursor: grabbing;
+}
+
+.sched-date-tabs-list::-webkit-scrollbar {
+  display: none; /* Hide scrollbars for Chrome/Safari */
 }
 
 .sched-date-label {
@@ -121,6 +139,22 @@
   color: var(--accent, #4f9cf9);
   font-weight: 700;
 }
+
+.sched-date-tab.past {
+  opacity: 0.45;
+  filter: grayscale(40%);
+}
+
+.sched-date-tab.past:hover {
+  opacity: 0.8;
+  filter: none;
+}
+
+.sched-date-tab.past.active {
+  opacity: 1;
+  filter: none;
+}
+
 
 .sched-date-count {
   font-size: 10px;

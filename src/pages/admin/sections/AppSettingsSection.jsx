@@ -40,6 +40,7 @@ export default function AppSettingsSection() {
 
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
+  const [showResultPoster, setShowResultPoster] = useState(true)
 
   useEffect(() => {
     fetchSettings()
@@ -64,8 +65,35 @@ export default function AppSettingsSection() {
       if (data?.value) {
         setMaintenance(prev => ({ ...prev, ...JSON.parse(data.value) }))
       }
+
+      const { data: posterData } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'show_result_poster')
+        .maybeSingle()
+      if (posterData) {
+        setShowResultPoster(posterData.value === true || posterData.value === 'true' || posterData.value === 1 || posterData.value === '1')
+      }
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  const toggleResultPoster = async () => {
+    const nextVal = !showResultPoster
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({ key: 'show_result_poster', value: JSON.stringify(nextVal) })
+      if (error) throw error
+      setShowResultPoster(nextVal)
+      showToast(nextVal ? 'Result Poster enabled!' : 'Result Poster disabled!')
+    } catch (err) {
+      console.error(err)
+      showToast(`Failed: ${err.message}`, 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -241,6 +269,43 @@ export default function AppSettingsSection() {
             }}
           >
             {maintenance.allow_localhost_bypass ? '🟢 ENABLED' : '🛑 DISABLED'}
+          </button>
+        </div>
+
+        {/* Result Poster Preference Card */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 12,
+          padding: '14px 18px',
+          marginBottom: 16,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16
+        }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#fff' }}>Display Result Posters</h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: 11, color: 'var(--text-muted)' }}>Show generated graphics/posters on the public results page.</p>
+          </div>
+          <button
+            type="button"
+            onClick={toggleResultPoster}
+            disabled={saving}
+            style={{
+              background: showResultPoster ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+              border: showResultPoster ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+              color: showResultPoster ? '#34d399' : 'rgba(255,255,255,0.4)',
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              fontFamily: 'inherit'
+            }}
+          >
+            {showResultPoster ? '🟢 ENABLED' : '🛑 DISABLED'}
           </button>
         </div>
 

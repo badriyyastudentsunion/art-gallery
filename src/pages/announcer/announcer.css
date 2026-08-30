@@ -119,6 +119,12 @@
   color: #2ed573;
 }
 
+.ann-comp-icon.trophy-icon {
+  background: rgba(247, 201, 72, 0.15) !important;
+  border-color: rgba(247, 201, 72, 0.4) !important;
+  color: #f7c948 !important;
+}
+
 .ann-comp-body { flex: 1; min-width: 0; }
 
 .ann-comp-name {
