@@ -25,12 +25,25 @@ export default function ResultsSection() {
   const [activeTab, setActiveTab] = useState('competitions')
   const [standings, setStandings] = useState([])
   const [standingsSearch, setStandingsSearch] = useState('')
+  const [selectedParticipant, setSelectedParticipant] = useState(null)
   const [absentees, setAbsentees] = useState([])
   const [teams, setTeams] = useState([])
   const [absSearch, setAbsSearch] = useState('')
   const [absTeamFilter, setAbsTeamFilter] = useState('')
   const [allJudgedDetails, setAllJudgedDetails] = useState({})
   const [compJudgesMap, setCompJudgesMap] = useState({})
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        setSelectedParticipant(null)
+      }
+    }
+    if (selectedParticipant) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedParticipant])
 
   useEffect(() => {
     if (unlocked) {
@@ -79,7 +92,7 @@ export default function ResultsSection() {
       supabase.from('categories').select('id, name').order('name'),
       supabase.from('point_settings').select('*').order('max_percent', { ascending: false }),
       supabase.from('judge_results').select('competition_id, code_letter, points_raw, grade'),
-      supabase.from('competition_reports').select('competition_id, code_letter, participant_id, participants(name, team_id, teams(name))'),
+      supabase.from('competition_reports').select('competition_id, code_letter, participant_id, participants(id, name, chess_number, team_id, teams(name))'),
       supabase.from('competition_participants').select('competition_id, participant_id, participants(name, teams(name)), competitions(name, categories(name))'),
       supabase.from('teams').select('id, name').order('name'),
       supabase.from('competition_judges').select('competition_id, judges(name)')
@@ -170,11 +183,14 @@ export default function ResultsSection() {
           const key = r.participant.name
           if (!participantPoints[key]) {
             participantPoints[key] = {
+              id: r.participant.id,
+              chess_number: r.participant.chess_number,
               name: r.participant.name,
               team: r.participant.teams?.name || '—',
               stagePts: 0,
               offStagePts: 0,
-              pts: 0
+              pts: 0,
+              competitions: []
             }
           }
           if (type === 'stage') {
@@ -183,6 +199,20 @@ export default function ResultsSection() {
             participantPoints[key].offStagePts += r.total_points
           }
           participantPoints[key].pts += r.total_points
+
+          participantPoints[key].competitions.push({
+            competition_id: comp.id,
+            competition_name: comp.name,
+            category_name: comp.categories?.name || 'General',
+            competition_type: comp.competition_type || (comp.is_stage ? 'stage' : 'off-stage'),
+            is_stage: comp.competition_type === 'stage' || !!comp.is_stage,
+            position: r.position,
+            grade: r.grade,
+            avg_points: r.avg_points,
+            placement_points: r.placement_points,
+            grade_points: r.grade_points,
+            total_points: r.total_points
+          })
         }
       })
 
@@ -777,12 +807,20 @@ export default function ResultsSection() {
                 <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>{award.subtitle}</p>
                 {award.list.length > 0 ? (
                   <>
-                    {award.list.map((w, i) => (
-                      <div key={i} style={{ marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: 13, color: '#fff' }}>{w.name}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{w.team} · <strong style={{ color: award.color }}>{w.pts} pts</strong></span>
-                      </div>
-                    ))}
+                    {award.list.map((w, i) => {
+                      const matched = standings.find(s => s.name === w.name)
+                      return (
+                        <div 
+                          key={i} 
+                          style={{ marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: matched ? 'pointer' : 'default' }}
+                          onClick={() => matched && setSelectedParticipant(matched)}
+                          title={matched ? "Click to view competition points breakdown" : ""}
+                        >
+                          <span style={{ fontWeight: 700, fontSize: 13, color: '#fff', textDecoration: matched ? 'underline' : 'none', textUnderlineOffset: 3 }}>{w.name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{w.team} · <strong style={{ color: award.color }}>{w.pts} pts</strong></span>
+                        </div>
+                      )
+                    })}
                     {award.list.length > 1 && (
                       <p style={{ fontSize: 9.5, color: '#f7c948', marginTop: 6, fontWeight: 600 }}>⚠ {award.list.length}-way tie detected</p>
                     )}
@@ -886,24 +924,56 @@ export default function ResultsSection() {
                     <th style={{ top: 0 }}>Stage Pts</th>
                     <th style={{ top: 0 }}>Off-Stage Pts</th>
                     <th style={{ top: 0 }}>Total Pts</th>
+                    <th style={{ top: 0, width: 100, textAlign: 'center' }}>Breakdown</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredStandings.map((p, idx) => (
-                    <tr key={p.name}>
+                    <tr 
+                      key={p.name}
+                      onClick={() => setSelectedParticipant(p)}
+                      className="row-clickable"
+                      style={{ cursor: 'pointer' }}
+                      title="Click to view competition points breakdown"
+                    >
                       <td style={{ fontWeight: 700, color: 'var(--accent-light)' }}>#{idx + 1}</td>
-                      <td className="td-name">{p.name}</td>
+                      <td className="td-name">
+                        <span style={{ fontWeight: 600, color: '#fff' }}>{p.name}</span>
+                        {p.chess_number && (
+                          <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>#{p.chess_number}</span>
+                        )}
+                      </td>
                       <td>
                         <span className="td-badge">{p.team}</span>
                       </td>
                       <td>{p.stagePts}</td>
                       <td>{p.offStagePts}</td>
                       <td style={{ fontWeight: 800, color: '#f7c948' }}>{p.pts}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="td-badge-link"
+                          style={{
+                            fontSize: 10,
+                            padding: '3px 8px',
+                            background: 'rgba(79, 156, 249, 0.08)',
+                            borderColor: 'rgba(79, 156, 249, 0.25)',
+                            color: 'var(--accent-light)',
+                            cursor: 'pointer'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedParticipant(p)
+                          }}
+                        >
+                          View ({p.competitions?.length || 0})
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {filteredStandings.length === 0 && (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                         No standings data found.
                       </td>
                     </tr>
@@ -1079,6 +1149,158 @@ export default function ResultsSection() {
               })()}
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Participant Competition Points Breakdown Modal ── */}
+      {selectedParticipant && (
+        <div 
+          className="modal-backdrop" 
+          onClick={() => setSelectedParticipant(null)} 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20
+          }}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{
+              background: '#0d1117',
+              border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+              borderRadius: 16,
+              width: '100%',
+              maxWidth: 660,
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 10, background: 'linear-gradient(135deg, rgba(247, 201, 72, 0.15) 0%, rgba(247, 201, 72, 0.05) 100%)', border: '1px solid rgba(247, 201, 72, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f7c948', fontWeight: 800, fontSize: 15 }}>
+                  #{filteredStandings.findIndex(x => x.name === selectedParticipant.name) + 1}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>{selectedParticipant.name}</h3>
+                    {selectedParticipant.chess_number && (
+                      <span style={{ fontSize: 11, padding: '2px 6px', background: 'rgba(255,255,255,0.08)', borderRadius: 4, color: 'var(--text-muted)' }}>
+                        #{selectedParticipant.chess_number}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--accent-light)' }}>
+                    {selectedParticipant.team}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedParticipant(null)}
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 15, height: 15 }}>
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Stats summary bar */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: '14px 22px', background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.06))' }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '8px 12px' }}>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Stage Points</span>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--accent-light)', marginTop: 2 }}>{selectedParticipant.stagePts}</div>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '8px 12px' }}>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Off-Stage Points</span>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#a78bfa', marginTop: 2 }}>{selectedParticipant.offStagePts}</div>
+              </div>
+              <div style={{ background: 'rgba(247, 201, 72, 0.05)', border: '1px solid rgba(247, 201, 72, 0.2)', borderRadius: 8, padding: '8px 12px' }}>
+                <span style={{ fontSize: 10, color: '#f7c948', textTransform: 'uppercase', letterSpacing: 0.5 }}>Total Points</span>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#f7c948', marginTop: 2 }}>{selectedParticipant.pts}</div>
+              </div>
+            </div>
+
+            {/* Competitions list */}
+            <div style={{ padding: '18px 22px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                Participated Competitions ({selectedParticipant.competitions?.length || 0})
+              </div>
+
+              {(!selectedParticipant.competitions || selectedParticipant.competitions.length === 0) ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                  No individual competition score records available.
+                </div>
+              ) : (
+                selectedParticipant.competitions.map((comp, cIdx) => (
+                  <div 
+                    key={comp.competition_id || cIdx}
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
+                      borderRadius: 10,
+                      padding: '12px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 14
+                    }}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13.5, color: '#fff' }}>{comp.competition_name}</span>
+                        <span style={{
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          background: comp.is_stage ? 'rgba(79, 156, 249, 0.12)' : 'rgba(167, 139, 250, 0.12)',
+                          color: comp.is_stage ? 'var(--accent-light)' : '#c4b5fd',
+                          border: `1px solid ${comp.is_stage ? 'rgba(79, 156, 249, 0.25)' : 'rgba(167, 139, 250, 0.25)'}`
+                        }}>
+                          {comp.is_stage ? 'Stage' : 'Off-Stage'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                        <span>{comp.category_name}</span>
+                        <span>•</span>
+                        <span>Score: <strong style={{ color: 'var(--text-primary)' }}>{comp.avg_points}%</strong></span>
+                        <span>•</span>
+                        <span>Grade: <strong style={{ color: 'var(--accent-light)' }}>{comp.grade}</strong> ({comp.grade_points} pts)</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, textAlign: 'right' }}>
+                      <div>
+                        <div style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          color: comp.position === 1 ? '#f7c948' : comp.position === 2 ? '#cbd5e1' : comp.position === 3 ? '#fb923c' : 'var(--text-muted)'
+                        }}>
+                          {comp.position === 1 ? '1st Place (+5)' : comp.position === 2 ? '2nd Place (+3)' : comp.position === 3 ? '3rd Place (+1)' : `Rank #${comp.position}`}
+                        </div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: '#f7c948', marginTop: 2 }}>
+                          +{comp.total_points} <span style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--text-muted)' }}>pts</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -17,6 +17,8 @@ import ResultsSection from './sections/ResultsSection'
 import AnnouncerFlowSection from './sections/AnnouncerFlowSection'
 import MediaSection from './sections/MediaSection'
 import AppSettingsSection from './sections/AppSettingsSection'
+import AwardUsersSection from './sections/AwardUsersSection'
+import AwardsSection from './sections/AwardsSection'
 import { APP_VERSION } from '../../version'
 
 // ── Icons ──
@@ -48,6 +50,8 @@ const icons = {
   'point-settings': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>,
   'app-settings': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
   logout:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  'award-users': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  awards: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>,
 }
 
 // ── Nav config ──
@@ -61,11 +65,13 @@ const NAV = [
   { id: 'judges',       label: 'Judges',       group: 'People',      features: ['Assign judges to events', 'Manage score submissions', 'View judge profiles'] },
   { id: 'announcers',   label: 'Announcers',   group: 'People',      features: ['Manage announcer roster', 'Assign to stages', 'Schedule announcements'] },
   { id: 'media',        label: 'Media Portal', group: 'People',      features: ['Manage media uploaders', 'Moderate uploaded photos & live links', 'Assign YouTube videos'] },
+  { id: 'award-users',  label: 'Award Users',  group: 'People',      features: ['Create credentials for distributors', 'Audit logins', 'Manage distribution counters'] },
   { id: 'stages',       label: 'Stages',       group: 'Venue',       features: ['Define stage/hall locations', 'Schedule stage usage', 'Manage stage capacity'] },
   { id: 'schedule',     label: 'Schedule',     group: 'Venue',       features: ['Set date & time per competition', 'Stage/room number', 'View chronological schedule'] },
   { id: 'point-settings', label: 'Point Settings', group: 'Reporting', features: ['Edit grade → points table', 'Placement points by group size', 'Results password'] },
   { id: 'results',      label: 'Results',      group: 'Reporting',   features: ['Compile final scores & rankings', 'Generate result reports', 'Export & publish results'] },
   { id: 'announcer-flow', label: 'Announcer Flow', group: 'Reporting', features: ['Sequence ready competitions', 'Tally simulator', 'Suspense settings'] },
+  { id: 'awards',       label: 'Awards Corner', group: 'Reporting',   features: ['Distribute 1st & 2nd placement awards', 'Mark received by Team Leaders', 'Export distribution logs PDF'] },
   { id: 'app-settings', label: 'App Settings', group: 'System',     features: ['Maintenance mode toggles', 'Disable specific portals/logins', 'Custom maintenance notice'] },
 ]
 
@@ -156,7 +162,9 @@ export default function AdminPanel() {
         {active === 'announcer-flow' && <AnnouncerFlowSection />}
         {active === 'media'          && <MediaSection />}
         {active === 'app-settings'   && <AppSettingsSection />}
-        {!['teams','categories','competitions','participants','invigilators','judges','announcers','stages','point-settings','schedule','dashboard','results','announcer-flow','media','app-settings'].includes(active) && (
+        {active === 'award-users'    && <AwardUsersSection />}
+        {active === 'awards'         && <AwardsSection />}
+        {!['teams','categories','competitions','participants','invigilators','judges','announcers','stages','point-settings','schedule','dashboard','results','announcer-flow','media','app-settings','award-users','awards'].includes(active) && (
           <>
             <div className="page-header">
               <div className="page-header-left">

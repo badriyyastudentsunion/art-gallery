@@ -81,7 +81,8 @@ export default function DashboardSection() {
       { data: recentJudgeResults },
       { data: recentReports },
       { data: recentParticipants },
-      { data: recentSchedule }
+      { data: recentSchedule },
+      { data: recentPrizes }
     ] = await Promise.all([
       supabase.from('competitions').select('id, name, categories(name), announcer_id').order('name'),
       supabase.from('competition_reports').select('competition_id'),
@@ -95,11 +96,12 @@ export default function DashboardSection() {
       supabase.from('app_settings').select('key, value').in('key', ['leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'team_colors']),
 
       // Activities queries (lookup names from comps array instead of PostgREST join to prevent 400 Bad Request errors)
-      supabase.from('competition_results').select('competition_id, updated_at, published').eq('published', true).order('updated_at', { ascending: false }).limit(15),
-      supabase.from('judge_results').select('competition_id, created_at').order('created_at', { ascending: false }).limit(15),
-      supabase.from('competition_reports').select('competition_id, created_at').order('created_at', { ascending: false }).limit(15),
-      supabase.from('participants').select('name, created_at, teams(name)').order('created_at', { ascending: false }).limit(15),
-      supabase.from('competition_schedule').select('competition_id, status, updated_at').order('updated_at', { ascending: false }).limit(15)
+      supabase.from('competition_results').select('competition_id, published_at, published').eq('published', true).order('published_at', { ascending: false }).limit(100),
+      supabase.from('judge_results').select('competition_id, submitted_at').order('submitted_at', { ascending: false }).limit(100),
+      supabase.from('competition_reports').select('competition_id, reported_at').order('reported_at', { ascending: false }).limit(100),
+      supabase.from('participants').select('name, created_at, teams(name)').order('created_at', { ascending: false }).limit(100),
+      supabase.from('competition_schedule').select('competition_id, status, created_at').order('created_at', { ascending: false }).limit(100),
+      supabase.from('competition_results').select('competition_id, prize_given_at, prize_given_to_leader, participants(name)').eq('prize_given', true).order('prize_given_at', { ascending: false }).limit(100)
     ])
 
     const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
@@ -193,7 +195,7 @@ export default function DashboardSection() {
         seenPub.add(r.competition_id)
         activeList.push({
           text: `${compName} result published`,
-          time: new Date(r.updated_at || Date.now()),
+          time: new Date(r.published_at || Date.now()),
           icon: '🏆'
         })
       })
@@ -206,7 +208,7 @@ export default function DashboardSection() {
         seenJudge.add(r.competition_id)
         activeList.push({
           text: `${compName} judged`,
-          time: new Date(r.created_at || Date.now()),
+          time: new Date(r.submitted_at || Date.now()),
           icon: '⭐'
         })
       })
@@ -218,8 +220,8 @@ export default function DashboardSection() {
         if (!compName || seenReport.has(r.competition_id)) return
         seenReport.add(r.competition_id)
         activeList.push({
-          text: `Exam report submitted: ${compName}`,
-          time: new Date(r.created_at || Date.now()),
+          text: `Invigilation report submitted: ${compName}`,
+          time: new Date(r.reported_at || Date.now()),
           icon: '📋'
         })
       })
@@ -242,8 +244,20 @@ export default function DashboardSection() {
         seenSched.add(r.competition_id)
         activeList.push({
           text: `${compName} marked ${r.status}`,
-          time: new Date(r.updated_at || Date.now()),
+          time: new Date(r.created_at || Date.now()),
           icon: r.status === 'completed' ? '✅' : '⏳'
+        })
+      })
+    }
+    if (recentPrizes) {
+      recentPrizes.forEach(r => {
+        const compName = compMap.get(r.competition_id)
+        if (!compName) return
+        const recipient = r.prize_given_to_leader ? 'Team Leader' : (r.participants?.name || 'Winner')
+        activeList.push({
+          text: `Prize distributed: ${compName} (${recipient})`,
+          time: new Date(r.prize_given_at || Date.now()),
+          icon: '🎁'
         })
       })
     }

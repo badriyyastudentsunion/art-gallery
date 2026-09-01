@@ -33,6 +33,7 @@ export function AuthProvider({ children }) {
           ...(data.judgeId && { judgeId: data.judgeId }),
           ...(data.announcerId && { announcerId: data.announcerId }),
           ...(data.uploaderId && { uploaderId: data.uploaderId }),
+          ...(data.awardUserId && { awardUserId: data.awardUserId }),
         }
         if (data.role === 'Admin') {
           localStorage.setItem('ag_pass', password)

@@ -508,7 +508,6 @@ export default function ScheduleSection() {
         <div className="sched-top-row">
           <div className="sched-title-group">
             <h1>Schedule Manager</h1>
-            <p>Organize event timeline by date, assign stage slots, and monitor live competition status</p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

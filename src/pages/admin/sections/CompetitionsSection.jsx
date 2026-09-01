@@ -51,6 +51,170 @@ const IconRules = () => (
   </svg>
 )
 
+const IconGrid = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+  </svg>
+)
+const IconStage = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+  </svg>
+)
+const IconOffStage = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+  </svg>
+)
+const IconAlertTriangle = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+)
+const IconClock = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>
+)
+const IconCheckCircle = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+  </svg>
+)
+const IconAward = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>
+  </svg>
+)
+const IconSort = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"/>
+  </svg>
+)
+const IconFilter = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+  </svg>
+)
+const IconFolder = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  </svg>
+)
+const IconActivity = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+  </svg>
+)
+const IconUsers = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+)
+
+// ── Custom Glassmorphic Filter Dropdown ──
+function FilterDropdown({ label, icon: Icon, items, value, onChange, minWidth = 140, showSearch = false }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false)
+        setSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [open])
+
+  const selectedItem = items.find(i => i.id === value)
+  const isCustomActive = value && value !== 'all' && value !== 'category-name'
+  const displayLabel = selectedItem ? selectedItem.label : label
+
+  const filteredItems = items.filter(item =>
+    !search || item.label.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div className="filter-dropdown-wrap" ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        className={`filter-dropdown-btn ${isCustomActive ? 'filter-dropdown-btn--active' : ''}`}
+        style={{ minWidth }}
+        onClick={() => {
+          if (!open) setSearch('')
+          setOpen(v => !v)
+        }}
+      >
+        <span className="filter-dropdown-btn-left">
+          {Icon && <Icon />}
+          <span className="filter-dropdown-btn-label">{displayLabel}</span>
+        </span>
+        <IconChevron />
+      </button>
+
+      {open && (
+        <div className="ci-dropdown-menu filter-dropdown-menu" onClick={e => e.stopPropagation()}>
+          {showSearch && items.length > 5 && (
+            <div style={{ position: 'sticky', top: -6, background: 'rgba(18, 21, 28, 0.98)', zIndex: 10, margin: '-6px -6px 6px -6px', padding: '6px 6px 4px 6px' }}>
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: 'none',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)',
+                  color: '#fff',
+                  padding: '6px 10px',
+                  fontSize: '11px',
+                  outline: 'none',
+                  borderRadius: 4
+                }}
+              />
+            </div>
+          )}
+          {filteredItems.length === 0 ? (
+            <p className="ci-dropdown-empty">No options found</p>
+          ) : (
+            filteredItems.map(item => {
+              const isSelected = item.id === value
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`ci-dropdown-item ${isSelected ? 'ci-dropdown-item--selected' : ''}`}
+                  onClick={() => {
+                    onChange(item.id)
+                    setOpen(false)
+                    setSearch('')
+                  }}
+                >
+                  <span className="ci-dropdown-check">{isSelected ? '✓' : ''}</span>
+                  <span>{item.label}</span>
+                </button>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Checkbox({ checked, onChange, label }) {
   return (
     <label className="field-check" onClick={onChange} style={{ userSelect: 'none' }}>
@@ -464,6 +628,14 @@ export default function CompetitionsSection({ navigateTo }) {
   const [selectedIds, setSelectedIds] = useState([])
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null)
   
+  // Filter & Sort states
+  const [filterCategory, setFilterCategory] = useState('all')
+  const [filterType, setFilterType] = useState('all')
+  const [filterFormat, setFilterFormat] = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [quickPill, setQuickPill] = useState('all')
+  const [sortBy, setSortBy] = useState('category-name')
+
   const listRef = useRef(null)
   const scrollPosRef = useRef(0)
   const [name, setName] = useState('')
@@ -1198,14 +1370,144 @@ export default function CompetitionsSection({ navigateTo }) {
     })
   }
 
+  function getCompetitionStatus(cId) {
+    const rawSt = statusMap[cId] || 'Pending'
+    const ds = dataStatusMap[cId] || { hasReports: false, hasJudgeRes: false, isEnded: false }
+
+    if (rawSt === 'Published') return 'Published'
+    if (rawSt === 'Completed' || ds.hasJudgeRes) return 'Completed'
+    if (ds.isEnded) return 'Ended'
+    if (rawSt === 'Ongoing' || ds.hasReports) return 'Ongoing'
+    if (rawSt === 'Scheduled') return 'Scheduled'
+    return 'Pending'
+  }
+
+  function isNonJudged(cId) {
+    const rawSt = statusMap[cId] || 'Pending'
+    const ds = dataStatusMap[cId] || { hasReports: false, hasJudgeRes: false, isEnded: false }
+    return !ds.hasJudgeRes && rawSt !== 'Completed' && rawSt !== 'Published'
+  }
+
+  const pillCounts = {
+    all: competitions.length,
+    stage: competitions.filter(c => c.is_stage).length,
+    offStage: competitions.filter(c => !c.is_stage).length,
+    nonJudged: competitions.filter(c => isNonJudged(c.id)).length,
+    ongoing: competitions.filter(c => getCompetitionStatus(c.id) === 'Ongoing').length,
+    completed: competitions.filter(c => {
+      const st = getCompetitionStatus(c.id)
+      return st === 'Completed' || st === 'Published'
+    }).length,
+    published: competitions.filter(c => getCompetitionStatus(c.id) === 'Published').length,
+  }
+
+  const hasActiveFilters = Boolean(
+    search || 
+    quickPill !== 'all' || 
+    filterCategory !== 'all' || 
+    filterType !== 'all' || 
+    filterFormat !== 'all' || 
+    filterStatus !== 'all' || 
+    sortBy !== 'category-name'
+  )
+
+  function resetAllFilters() {
+    setSearch('')
+    setQuickPill('all')
+    setFilterCategory('all')
+    setFilterType('all')
+    setFilterFormat('all')
+    setFilterStatus('all')
+    setSortBy('category-name')
+  }
+
   const displayedCompetitions = competitions
-    .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.categories?.name?.toLowerCase().includes(search.toLowerCase()))
+    .filter(c => {
+      // 1. Search Query
+      if (search.trim()) {
+        const q = search.toLowerCase().trim()
+        const matchName = (c.name || '').toLowerCase().includes(q)
+        const matchCat = (c.categories?.name || '').toLowerCase().includes(q)
+        const matchStage = (allStages.find(s => s.id === c.stage_id)?.name || '').toLowerCase().includes(q)
+        if (!matchName && !matchCat && !matchStage) return false
+      }
+
+      const st = getCompetitionStatus(c.id)
+      const nonJudged = isNonJudged(c.id)
+      const ds = dataStatusMap[c.id] || { hasReports: false, hasJudgeRes: false, isEnded: false }
+
+      // 2. Quick Pills filter
+      if (quickPill === 'stage' && !c.is_stage) return false
+      if (quickPill === 'off-stage' && c.is_stage) return false
+      if (quickPill === 'non-judged' && !nonJudged) return false
+      if (quickPill === 'completed' && st !== 'Completed' && st !== 'Published') return false
+      if (quickPill === 'ongoing' && st !== 'Ongoing') return false
+      if (quickPill === 'published' && st !== 'Published') return false
+
+      // 3. Category Filter
+      if (filterCategory !== 'all' && c.category_id !== filterCategory) return false
+
+      // 4. Type Filter
+      if (filterType === 'stage' && !c.is_stage) return false
+      if (filterType === 'off-stage' && c.is_stage) return false
+
+      // 5. Format Filter
+      if (filterFormat === 'individual' && c.is_group) return false
+      if (filterFormat === 'group' && !c.is_group) return false
+
+      // 6. Status Dropdown Filter
+      if (filterStatus !== 'all') {
+        if (filterStatus === 'non-judged' && !nonJudged) return false
+        if (filterStatus === 'awaiting-judgement' && (!ds.hasReports || ds.hasJudgeRes)) return false
+        if (filterStatus === 'published' && st !== 'Published') return false
+        if (filterStatus === 'completed' && st !== 'Completed') return false
+        if (filterStatus === 'ongoing' && st !== 'Ongoing') return false
+        if (filterStatus === 'scheduled' && st !== 'Scheduled') return false
+        if (filterStatus === 'pending' && st !== 'Pending') return false
+        if (filterStatus === 'ended' && st !== 'Ended') return false
+      }
+
+      return true
+    })
     .sort((a, b) => {
+      const pCountA = participantCounts[a.id] || 0
+      const pCountB = participantCounts[b.id] || 0
       const catA = a.categories?.name || ''
       const catB = b.categories?.name || ''
+      const nameA = a.name || ''
+      const nameB = b.name || ''
+
+      if (sortBy === 'name-asc') {
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+      }
+      if (sortBy === 'name-desc') {
+        return nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' })
+      }
+      if (sortBy === 'category-asc') {
+        const cRes = catA.localeCompare(catB, undefined, { numeric: true, sensitivity: 'base' })
+        if (cRes !== 0) return cRes
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+      }
+      if (sortBy === 'participants-desc') {
+        if (pCountB !== pCountA) return pCountB - pCountA
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+      }
+      if (sortBy === 'participants-asc') {
+        if (pCountA !== pCountB) return pCountA - pCountB
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+      }
+      if (sortBy === 'status') {
+        const order = { 'Pending': 1, 'Scheduled': 2, 'Ongoing': 3, 'Ended': 4, 'Completed': 5, 'Published': 6 }
+        const rankA = order[getCompetitionStatus(a.id)] || 99
+        const rankB = order[getCompetitionStatus(b.id)] || 99
+        if (rankA !== rankB) return rankA - rankB
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+      }
+
+      // Default: category-name
       const catComp = catA.localeCompare(catB, undefined, { numeric: true, sensitivity: 'base' })
       if (catComp !== 0) return catComp
-      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })
+      return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
     })
 
   return (
@@ -1607,6 +1909,244 @@ export default function CompetitionsSection({ navigateTo }) {
                           </button>
                         </>
                       )}
+                    </div>
+                  </div>
+
+                  {/* ── Rich Filter & Sorting Toolbar ── */}
+                  <div className="comp-toolbar-wrap">
+                    {/* Top Row: Quick Filter Badges/Pills */}
+                    <div className="comp-pills-row">
+                      <button
+                        type="button"
+                        className={`comp-pill-btn ${quickPill === 'all' && filterType === 'all' && filterStatus === 'all' ? 'active' : ''}`}
+                        onClick={() => {
+                          setQuickPill('all')
+                          setFilterType('all')
+                          setFilterStatus('all')
+                        }}
+                      >
+                        <IconGrid />
+                        <span>All</span>
+                        <span className="comp-pill-count">{pillCounts.all}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`comp-pill-btn pill-stage ${quickPill === 'stage' || filterType === 'stage' ? 'active' : ''}`}
+                        onClick={() => {
+                          if (quickPill === 'stage' || filterType === 'stage') {
+                            setQuickPill('all')
+                            setFilterType('all')
+                          } else {
+                            setQuickPill('stage')
+                            setFilterType('stage')
+                          }
+                        }}
+                      >
+                        <IconStage />
+                        <span>Stage</span>
+                        <span className="comp-pill-count">{pillCounts.stage}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`comp-pill-btn pill-offstage ${quickPill === 'off-stage' || filterType === 'off-stage' ? 'active' : ''}`}
+                        onClick={() => {
+                          if (quickPill === 'off-stage' || filterType === 'off-stage') {
+                            setQuickPill('all')
+                            setFilterType('all')
+                          } else {
+                            setQuickPill('off-stage')
+                            setFilterType('off-stage')
+                          }
+                        }}
+                      >
+                        <IconOffStage />
+                        <span>Off-Stage</span>
+                        <span className="comp-pill-count">{pillCounts.offStage}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`comp-pill-btn pill-nonjudged ${quickPill === 'non-judged' || filterStatus === 'non-judged' ? 'active' : ''}`}
+                        onClick={() => {
+                          if (quickPill === 'non-judged' || filterStatus === 'non-judged') {
+                            setQuickPill('all')
+                            setFilterStatus('all')
+                          } else {
+                            setQuickPill('non-judged')
+                            setFilterStatus('non-judged')
+                          }
+                        }}
+                        title="Competitions with pending judge evaluation"
+                      >
+                        <IconAlertTriangle />
+                        <span>Non-Judged</span>
+                        <span className="comp-pill-count">{pillCounts.nonJudged}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`comp-pill-btn ${quickPill === 'ongoing' || filterStatus === 'ongoing' ? 'active' : ''}`}
+                        onClick={() => {
+                          if (quickPill === 'ongoing' || filterStatus === 'ongoing') {
+                            setQuickPill('all')
+                            setFilterStatus('all')
+                          } else {
+                            setQuickPill('ongoing')
+                            setFilterStatus('ongoing')
+                          }
+                        }}
+                      >
+                        <IconClock />
+                        <span>Ongoing</span>
+                        <span className="comp-pill-count">{pillCounts.ongoing}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`comp-pill-btn pill-completed ${quickPill === 'completed' || filterStatus === 'completed' ? 'active' : ''}`}
+                        onClick={() => {
+                          if (quickPill === 'completed' || filterStatus === 'completed') {
+                            setQuickPill('all')
+                            setFilterStatus('all')
+                          } else {
+                            setQuickPill('completed')
+                            setFilterStatus('completed')
+                          }
+                        }}
+                      >
+                        <IconCheckCircle />
+                        <span>Completed</span>
+                        <span className="comp-pill-count">{pillCounts.completed}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`comp-pill-btn ${quickPill === 'published' || filterStatus === 'published' ? 'active' : ''}`}
+                        onClick={() => {
+                          if (quickPill === 'published' || filterStatus === 'published') {
+                            setQuickPill('all')
+                            setFilterStatus('all')
+                          } else {
+                            setQuickPill('published')
+                            setFilterStatus('published')
+                          }
+                        }}
+                      >
+                        <IconAward />
+                        <span>Published</span>
+                        <span className="comp-pill-count">{pillCounts.published}</span>
+                      </button>
+                    </div>
+
+                    {/* Bottom Row: Detailed Dropdown Filters and Sort */}
+                    <div className="comp-controls-row">
+                      <div className="comp-controls-left">
+                        {/* Category Dropdown */}
+                        <FilterDropdown
+                          label="All Categories"
+                          icon={IconFolder}
+                          items={[
+                            { id: 'all', label: 'All Categories' },
+                            ...categories.map(cat => ({ id: cat.id, label: cat.name }))
+                          ]}
+                          value={filterCategory}
+                          onChange={val => {
+                            setFilterCategory(val)
+                            setQuickPill('all')
+                          }}
+                          showSearch={true}
+                          minWidth={140}
+                        />
+
+                        {/* Status Dropdown */}
+                        <FilterDropdown
+                          label="All Statuses"
+                          icon={IconActivity}
+                          items={[
+                            { id: 'all', label: 'All Statuses' },
+                            { id: 'non-judged', label: 'Non-Judged (Pending Evaluation)' },
+                            { id: 'awaiting-judgement', label: 'Check-in Done (Ready to Judge)' },
+                            { id: 'pending', label: 'Pending (Not Started)' },
+                            { id: 'scheduled', label: 'Scheduled' },
+                            { id: 'ongoing', label: 'Ongoing' },
+                            { id: 'ended', label: 'Ended' },
+                            { id: 'completed', label: 'Completed' },
+                            { id: 'published', label: 'Published' }
+                          ]}
+                          value={filterStatus}
+                          onChange={val => {
+                            setFilterStatus(val)
+                            setQuickPill('all')
+                          }}
+                          minWidth={130}
+                        />
+
+                        {/* Format & Venue Dropdown */}
+                        <FilterDropdown
+                          label="All Formats"
+                          icon={IconFilter}
+                          items={[
+                            { id: 'all', label: 'All Formats & Venues' },
+                            { id: 'stage', label: 'Stage Only' },
+                            { id: 'off-stage', label: 'Off-Stage Only' },
+                            { id: 'individual', label: 'Individual Solo' },
+                            { id: 'group', label: 'Group Events' }
+                          ]}
+                          value={filterFormat !== 'all' ? filterFormat : filterType}
+                          onChange={val => {
+                            setQuickPill('all')
+                            if (val === 'stage' || val === 'off-stage') {
+                              setFilterType(val)
+                              setFilterFormat('all')
+                            } else if (val === 'individual' || val === 'group') {
+                              setFilterFormat(val)
+                              setFilterType('all')
+                            } else {
+                              setFilterType('all')
+                              setFilterFormat('all')
+                            }
+                          }}
+                          minWidth={130}
+                        />
+                      </div>
+
+                      <div className="comp-controls-right">
+                        {/* Sort Dropdown */}
+                        <FilterDropdown
+                          label="Sort Competitions"
+                          icon={IconSort}
+                          items={[
+                            { id: 'category-name', label: 'Category + Name (Default)' },
+                            { id: 'name-asc', label: 'Name (A → Z)' },
+                            { id: 'name-desc', label: 'Name (Z → A)' },
+                            { id: 'category-asc', label: 'Category (A → Z)' },
+                            { id: 'status', label: 'Status Progression' },
+                            { id: 'participants-desc', label: 'Participants (High → Low)' },
+                            { id: 'participants-asc', label: 'Participants (Low → High)' }
+                          ]}
+                          value={sortBy}
+                          onChange={val => setSortBy(val)}
+                          minWidth={180}
+                        />
+
+                        {/* Reset Button */}
+                        {hasActiveFilters && (
+                          <button
+                            type="button"
+                            className="comp-reset-btn"
+                            onClick={resetAllFilters}
+                            title="Clear all active search and filter criteria"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                            <span>Reset</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                   {fetching ? (

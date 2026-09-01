@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import PublicSchedule from '../components/PublicSchedule'
 import './Login.css'
 
-const ROLES = ['Admin', 'Team Leader', 'Judge', 'Announcer', 'Invigilator', 'Participant']
+const ROLES = ['Admin', 'Team Leader', 'Judge', 'Announcer', 'Invigilator', 'Award Corner', 'Participant']
 
 const IconFrame = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

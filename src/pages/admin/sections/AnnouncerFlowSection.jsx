@@ -441,9 +441,6 @@ export default function AnnouncerFlowSection() {
           <h1 className="list-title" style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>
             Announcer Tray & Flow Manager
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 0 0' }}>
-            Queue judged competitions into the tray and insert Points Standing status dividers.
-          </p>
         </div>
 
         {/* ── Auto-save Status Indicator ── */}

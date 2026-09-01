@@ -10,6 +10,7 @@ import InvigilatorDashboard from './pages/invigilator/InvigilatorDashboard'
 import JudgeDashboard from './pages/judge/JudgeDashboard'
 import AnnouncerDashboard from './pages/announcer/AnnouncerDashboard'
 import MediaDashboard from './pages/media/MediaDashboard'
+import AwardDashboard from './pages/award/AwardDashboard'
 
 import PWAInstallPrompt from './components/PWAInstallPrompt'
 import MaintenanceScreen from './components/MaintenanceScreen'
@@ -112,6 +113,7 @@ function AppRoutes() {
       {user.role === 'Judge' && <JudgeDashboard />}
       {user.role === 'Announcer' && <AnnouncerDashboard />}
       {user.role === 'Media' && <MediaDashboard />}
+      {user.role === 'Award' && <AwardDashboard />}
       <PWAInstallPrompt />
     </>
   )

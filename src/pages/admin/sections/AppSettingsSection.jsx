@@ -286,7 +286,6 @@ export default function AppSettingsSection() {
         }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#fff' }}>Display Result Posters</h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: 11, color: 'var(--text-muted)' }}>Show generated graphics/posters on the public results page.</p>
           </div>
           <button
             type="button"

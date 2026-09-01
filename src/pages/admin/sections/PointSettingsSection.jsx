@@ -174,7 +174,6 @@ export default function PointSettingsSection() {
       <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Point & App Settings</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>Configure scoring rules, placement rewards, and global system parameters</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {saved && (
@@ -196,7 +195,6 @@ export default function PointSettingsSection() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Grade-Based Points</p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Set minimum and maximum score percentages for each grade</p>
             </div>
             <button className="btn-submit" style={{ width: 'auto', padding: '6px 18px', fontSize: 11, margin: 0, height: 32, opacity: isGradesDirty ? 1 : 0.4, cursor: isGradesDirty ? 'pointer' : 'not-allowed' }}
               disabled={savingSection !== null || !isGradesDirty} onClick={saveGrades}>
@@ -243,7 +241,6 @@ export default function PointSettingsSection() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Placement Points (1st / 2nd / 3rd)</p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Assign points for top positions by competition category type</p>
             </div>
             <button className="btn-submit" style={{ width: 'auto', padding: '6px 18px', fontSize: 11, margin: 0, height: 32, opacity: isPlacementsDirty ? 1 : 0.4, cursor: isPlacementsDirty ? 'pointer' : 'not-allowed' }}
               disabled={savingSection !== null || !isPlacementsDirty} onClick={savePlacements}>
@@ -290,7 +287,6 @@ export default function PointSettingsSection() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>System & Event Limits</p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Global parameters for student participation and access controls</p>
             </div>
             <button className="btn-submit" style={{ width: 'auto', padding: '6px 18px', fontSize: 11, margin: 0, height: 32, opacity: isSettingsDirty ? 1 : 0.4, cursor: isSettingsDirty ? 'pointer' : 'not-allowed' }}
               disabled={savingSection !== null || !isSettingsDirty} onClick={saveAppSettings}>
