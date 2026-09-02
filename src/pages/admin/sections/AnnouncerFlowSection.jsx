@@ -1128,7 +1128,7 @@ export default function AnnouncerFlowSection() {
                           )}
 
                           <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
-                            Standings after {item.compCountAtDivider} {item.compCountAtDivider === 1 ? 'Competition' : 'Competitions'}
+                            After {item.compCountAtDivider} Results
                           </span>
                         </div>
 

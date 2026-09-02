@@ -1052,6 +1052,7 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
   const [resultsCount, setResultsCount] = useState(0)
   const [isRevealed, setIsRevealed] = useState(false)
   const [activePoster, setActivePoster] = useState(null)
+  const [downloadingPoster, setDownloadingPoster] = useState(false)
 
   useEffect(() => {
     fetchTeamPoints(true)
@@ -1185,7 +1186,7 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
           <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-light)', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            🏆 Live Team Standings {resultsCount > 0 ? `(${resultsCount} Results)` : ''}
+            Live Team Standings {resultsCount > 0 ? `(${resultsCount} Results)` : ''}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
@@ -1217,6 +1218,29 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
     )
   }
 
+  const handleDownloadActivePoster = async (e) => {
+    if (e) e.stopPropagation()
+    if (!activePoster || downloadingPoster) return
+    const url = activePoster.hd_url || activePoster.thumb_url
+    try {
+      setDownloadingPoster(true)
+      const resp = await fetch(url)
+      const blob = await resp.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `inspico-status-after-${activePoster.milestone || 'milestone'}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      window.open(url, '_blank')
+    } finally {
+      setDownloadingPoster(false)
+    }
+  }
+
   return (
     <div className="lp-tab-content" style={{ padding: showHeader ? undefined : 0, marginBottom: '24px' }}>
       {showHeader && (
@@ -1235,36 +1259,66 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
             }}>
               {resultsCount > 0 ? `Points after ${resultsCount} ${resultsCount === 1 ? 'Result' : 'Results'}` : 'Initial Standings'}
             </span>
-
-            {activePoster && onOpenStatusPoster && (
-              <button
-                type="button"
-                onClick={() => onOpenStatusPoster(activePoster)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  background: 'linear-gradient(135deg, rgba(247, 201, 72, 0.15) 0%, rgba(245, 158, 11, 0.25) 100%)',
-                  border: '1px solid rgba(247, 201, 72, 0.4)',
-                  color: '#f7c948',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: '3px 9px',
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 8px rgba(247, 201, 72, 0.15)'
-                }}
-              >
-                <span>🖼️</span>
-                <span>View Status Poster</span>
-              </button>
-            )}
           </div>
           <div className="lp-live-badge">
             <span className="lp-live-dot" />
             Live
           </div>
+        </div>
+      )}
+
+      {/* Direct Status Poster Display if active poster exists */}
+      {activePoster && (
+        <div className="result-poster-wrapper" style={{ margin: '0 auto 20px auto', maxWidth: 480 }}>
+          <div
+            className="result-poster-viewport"
+            onClick={() => onOpenStatusPoster?.(activePoster)}
+            style={{
+              width: '100%',
+              borderRadius: 12,
+              overflow: 'hidden',
+              background: '#0e0b07',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              boxShadow: '0 8px 28px rgba(0, 0, 0, 0.6)',
+              cursor: onOpenStatusPoster ? 'pointer' : 'default'
+            }}
+          >
+            <img
+              src={activePoster.hd_url || activePoster.thumb_url}
+              alt={activePoster.caption || 'Status Poster'}
+              style={{
+                width: '100%',
+                height: 'auto',
+                display: 'block',
+                objectFit: 'contain'
+              }}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="result-poster-download-btn"
+            onClick={handleDownloadActivePoster}
+            disabled={downloadingPoster}
+          >
+            {downloadingPoster ? (
+              <>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+                  <circle cx="12" cy="12" r="10" stroke="#0e0b07" strokeWidth="3" strokeDasharray="45 25" strokeLinecap="round" />
+                </svg>
+                <span>Downloading Poster...</span>
+              </>
+            ) : (
+              <>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Download Poster</span>
+              </>
+            )}
+          </button>
         </div>
       )}
 
@@ -1336,7 +1390,10 @@ function ResultsTab() {
   const [milestonePosters, setMilestonePosters] = useState({})
   const [revealedMilestone, setRevealedMilestone] = useState(0)
   const [revealMilestones, setRevealMilestones] = useState([])
+  const [teamsList, setTeamsList] = useState([])
+  const [publishedPointsData, setPublishedPointsData] = useState([])
   const [activeStatusPosterModal, setActiveStatusPosterModal] = useState(null)
+  const [downloadingPoster, setDownloadingPoster] = useState(false)
 
   const selectedRef = useRef(selected)
   useEffect(() => {
@@ -1344,22 +1401,46 @@ function ResultsTab() {
   }, [selected])
 
   const handleDownloadPoster = async (poster) => {
-    if (!poster) return
+    if (!poster || downloadingPoster) return
     const url = poster.hd_url || poster.thumb_url
     try {
+      setDownloadingPoster(true)
       const resp = await fetch(url)
       const blob = await resp.blob()
       const blobUrl = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = blobUrl
-      a.download = `status-milestone-${poster.milestone || 'milestone'}.jpg`
+      a.download = `inspico-status-after-${poster.milestone || 'milestone'}.jpg`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(blobUrl)
     } catch (e) {
       window.open(url, '_blank')
+    } finally {
+      setDownloadingPoster(false)
     }
+  }
+
+  const getStandingsAtMilestone = (milestoneNumber) => {
+    const compsUpToM = competitions.slice(0, milestoneNumber).map(c => c.id)
+    const compIdSet = new Set(compsUpToM)
+
+    const pointsMap = {}
+    teamsList.forEach(t => {
+      pointsMap[t.id] = { id: t.id, name: t.name, color: t.color, points: 0 }
+    })
+
+    publishedPointsData.forEach(r => {
+      if (compIdSet.has(r.competition_id)) {
+        const tid = r.participants?.team_id
+        if (tid && pointsMap[tid]) {
+          pointsMap[tid].points += (Number(r.placement_points) || 0) + (Number(r.grade_points) || 0)
+        }
+      }
+    })
+
+    return Object.values(pointsMap).sort((a, b) => b.points - a.points)
   }
 
   useEffect(() => {
@@ -1410,15 +1491,32 @@ function ResultsTab() {
     try {
       const [
         { data: settingsData },
-        { data: milestoneMedia }
+        { data: milestoneMedia },
+        { data: teamsData },
+        { data: allPubResults }
       ] = await Promise.all([
-        supabase.from('app_settings').select('key, value').in('key', ['show_result_poster', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones']),
-        supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone').eq('type', 'poster').not('milestone', 'is', null)
+        supabase.from('app_settings').select('key, value').in('key', ['show_result_poster', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones', 'team_colors']),
+        supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone').eq('type', 'poster').not('milestone', 'is', null),
+        supabase.from('teams').select('id, name').order('name'),
+        supabase.from('competition_results').select('competition_id, placement_points, grade_points, participants(team_id)').eq('published', true)
       ])
 
       const posterSetting = settingsData?.find(s => s.key === 'show_result_poster')
       const revSetting = settingsData?.find(s => s.key === 'leaderboard_revealed_milestone')
       const milestonesSetting = settingsData?.find(s => s.key === 'leaderboard_reveal_milestones')
+      const colorSetting = settingsData?.find(s => s.key === 'team_colors')
+
+      let colorMap = {}
+      if (colorSetting?.value) {
+        try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+      }
+
+      const formattedTeams = (teamsData || []).map(t => ({
+        ...t,
+        color: colorMap[t.id] || null
+      }))
+      setTeamsList(formattedTeams)
+      setPublishedPointsData(allPubResults || [])
 
       if (posterSetting) {
         setShowResultPoster(posterSetting.value === true || posterSetting.value === 'true' || posterSetting.value === 1 || posterSetting.value === '1')
@@ -1667,235 +1765,224 @@ function ResultsTab() {
                   </div>
                 </button>
 
-                {hasMilestoneDivider && (
-                  <div
-                    key={`divider-banner-${c.announcementNumber}`}
-                    style={{
-                      gridColumn: '1 / -1',
-                      background: 'linear-gradient(135deg, rgba(46, 213, 115, 0.09) 0%, rgba(13, 17, 23, 0.95) 100%)',
-                      border: '1.5px solid rgba(46, 213, 115, 0.35)',
-                      borderRadius: 14,
-                      padding: '14px 18px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: 14,
-                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(46, 213, 115, 0.08)',
-                      margin: '6px 0 10px 0'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <div style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 10,
-                        background: 'rgba(46, 213, 115, 0.15)',
-                        border: '1px solid rgba(46, 213, 115, 0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 20,
-                        flexShrink: 0
-                      }}>
-                        🏆
-                      </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{
-                            fontSize: 9.5,
-                            fontWeight: 800,
-                            color: '#0e0b07',
-                            background: '#2ed573',
-                            padding: '2px 8px',
-                            borderRadius: 10,
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.5
-                          }}>
-                            Standings Revealed
-                          </span>
-                          <span style={{ fontSize: 13.5, fontWeight: 800, color: '#fff' }}>
-                            Points Standing Status (after Result #{c.announcementNumber})
-                          </span>
-                        </div>
-                        <p style={{ margin: '3px 0 0 0', fontSize: 11.5, color: 'rgba(255, 255, 255, 0.65)' }}>
-                          Official points standing announcement after {c.announcementNumber} competitions
-                        </p>
-                      </div>
-                    </div>
+                {hasMilestoneDivider && (() => {
+                  const milestoneStandings = getStandingsAtMilestone(c.announcementNumber)
+                  const poster = milestonePosters[c.announcementNumber]
 
-                    {milestonePosters[c.announcementNumber] ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                        <img
-                          src={milestonePosters[c.announcementNumber].thumb_url}
-                          alt="Status Poster Preview"
-                          style={{
-                            width: 42,
-                            height: 56,
-                            objectFit: 'cover',
-                            borderRadius: 6,
-                            border: '1.5px solid rgba(255, 255, 255, 0.25)',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => setActiveStatusPosterModal(milestonePosters[c.announcementNumber])}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setActiveStatusPosterModal(milestonePosters[c.announcementNumber])}
-                          style={{
-                            background: 'linear-gradient(135deg, #f7c948, #f59e0b)',
-                            color: '#0e0b07',
-                            border: 'none',
-                            padding: '8px 14px',
-                            borderRadius: 8,
-                            fontSize: 12,
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            boxShadow: '0 4px 14px rgba(247, 201, 72, 0.3)'
-                          }}
-                        >
-                          <span>🖼️</span>
-                          <span>View & Download Poster</span>
-                        </button>
+                  return (
+                    <div
+                      key={`divider-banner-${c.announcementNumber}`}
+                      onClick={() => {
+                        if (poster) setActiveStatusPosterModal(poster)
+                      }}
+                      style={{
+                        gridColumn: '1 / -1',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(247, 201, 72, 0.22)',
+                        borderRadius: 12,
+                        padding: '16px 18px',
+                        cursor: poster ? 'pointer' : 'default',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 12,
+                        margin: '6px 0 12px 0'
+                      }}
+                      onMouseEnter={e => {
+                        if (poster) {
+                          e.currentTarget.style.borderColor = 'rgba(247, 201, 72, 0.45)'
+                          e.currentTarget.style.background = 'rgba(247, 201, 72, 0.03)'
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = 'rgba(247, 201, 72, 0.22)'
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'
+                      }}
+                    >
+                      {/* Top Header Row */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 17, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.3px' }}>
+                            After {c.announcementNumber} Results
+                          </span>
+                          {poster && (
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#f7c948', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              Tap to view poster ›
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Poster preview visible from outside */}
+                        {poster && (
+                          <div style={{ flexShrink: 0 }}>
+                            <img
+                              src={poster.thumb_url}
+                              alt={`Status Poster after ${c.announcementNumber} Results`}
+                              style={{
+                                width: 50,
+                                height: 66,
+                                objectFit: 'cover',
+                                borderRadius: 6,
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.5)',
+                                display: 'block'
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div style={{
-                        fontSize: 11,
-                        color: 'rgba(255, 255, 255, 0.5)',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        padding: '5px 10px',
-                        borderRadius: 6,
-                        border: '1px solid rgba(255, 255, 255, 0.08)'
-                      }}>
-                        ✓ Standings Announced
-                      </div>
-                    )}
-                  </div>
-                )}
+
+                      {/* Bottom Text Points Strip */}
+                      {milestoneStandings.length > 0 && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          flexWrap: 'wrap',
+                          paddingTop: 10,
+                          borderTop: '1px solid rgba(255, 255, 255, 0.06)'
+                        }}>
+                          {milestoneStandings.map((t, idx) => (
+                            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: idx === 0 ? '#f7c948' : 'rgba(255,255,255,0.4)' }}>
+                                {idx + 1}.
+                              </span>
+                              <span style={{
+                                display: 'inline-block',
+                                width: 6,
+                                height: 6,
+                                borderRadius: '50%',
+                                background: t.color || '#4f9cf9',
+                                boxShadow: t.color ? `0 0 5px ${t.color}` : 'none'
+                              }} />
+                              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255, 255, 255, 0.9)' }}>
+                                {t.name}
+                              </span>
+                              <span style={{ fontSize: 12, fontWeight: 800, color: idx === 0 ? '#f7c948' : '#e2e8f0' }}>
+                                ({parseFloat(t.points.toFixed(1))} pts)
+                              </span>
+                              {idx < milestoneStandings.length - 1 && (
+                                <span style={{ color: 'rgba(255,255,255,0.15)', marginLeft: 3 }}>|</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </Fragment>
             )
           })}
         </div>
       )}
 
-      {/* ── Status Milestone Poster Lightbox Modal ── */}
+      {/* ── Status Milestone Poster Modal (Matching Result Poster Look) ── */}
       {activeStatusPosterModal && (
         <div
           className="lp-modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.88)',
+            background: 'rgba(0, 0, 0, 0.85)',
             backdropFilter: 'blur(10px)',
             zIndex: 999999,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 16
+            padding: 16,
+            overflowY: 'auto'
           }}
           onClick={() => setActiveStatusPosterModal(null)}
         >
           <div
+            className="result-poster-wrapper"
             style={{
               position: 'relative',
-              maxWidth: '92vw',
-              maxHeight: '92vh',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center'
+              maxWidth: 480,
+              width: '100%',
+              margin: 'auto'
             }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              width: '100%',
-              marginBottom: 12,
-              gap: 12
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <span style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  color: '#0e0b07',
-                  background: '#2ed573',
-                  padding: '2.5px 8px',
-                  borderRadius: 10,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                  flexShrink: 0
-                }}>
-                  Points Status
-                </span>
-                <span style={{ color: '#fff', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {activeStatusPosterModal.caption || 'Status Milestone Poster'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                <button
-                  type="button"
-                  onClick={() => handleDownloadPoster(activeStatusPosterModal)}
-                  style={{
-                    background: '#2ed573',
-                    color: '#0e0b07',
-                    border: 'none',
-                    padding: '6px 14px',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    boxShadow: '0 4px 12px rgba(46, 213, 115, 0.3)'
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {/* Top Close Button */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => setActiveStatusPosterModal(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: 'none',
+                  color: '#fff',
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  fontSize: 16,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Poster Image Viewport */}
+            <div
+              className="result-poster-viewport"
+              style={{
+                width: '100%',
+                maxHeight: '74vh',
+                borderRadius: 12,
+                overflow: 'hidden',
+                background: '#0e0b07',
+                border: '1px solid rgba(255,255,255,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 12px 36px rgba(0,0,0,0.7)'
+              }}
+            >
+              <img
+                src={activeStatusPosterModal.hd_url || activeStatusPosterModal.thumb_url}
+                alt={activeStatusPosterModal.caption || 'Status Poster'}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  maxHeight: '74vh',
+                  objectFit: 'contain',
+                  display: 'block'
+                }}
+              />
+            </div>
+
+            {/* Matching Yellow Download Poster Button */}
+            <button
+              type="button"
+              className="result-poster-download-btn"
+              onClick={() => handleDownloadPoster(activeStatusPosterModal)}
+              disabled={downloadingPoster}
+              style={{ marginTop: 12 }}
+            >
+              {downloadingPoster ? (
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+                    <circle cx="12" cy="12" r="10" stroke="#0e0b07" strokeWidth="3" strokeDasharray="45 25" strokeLinecap="round" />
+                  </svg>
+                  <span>Downloading Poster...</span>
+                </>
+              ) : (
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
-                  Download HD
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveStatusPosterModal(null)}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.12)',
-                    border: 'none',
-                    color: '#fff',
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    fontSize: 16,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <img
-              src={activeStatusPosterModal.hd_url || activeStatusPosterModal.thumb_url}
-              alt="Points Standing Status Poster"
-              style={{
-                maxWidth: '88vw',
-                maxHeight: '80vh',
-                objectFit: 'contain',
-                borderRadius: 12,
-                boxShadow: '0 15px 50px rgba(0,0,0,0.8)',
-                border: '1px solid rgba(255,255,255,0.15)'
-              }}
-            />
+                  <span>Download Poster</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
