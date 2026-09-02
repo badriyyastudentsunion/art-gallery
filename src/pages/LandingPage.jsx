@@ -919,12 +919,11 @@ function HomeTab({ onLoginClick, setTab, liveStream, onOpenPoster }) {
 }
 
 /* ══════════ TEAM POINTS TAB ══════════ */
-/* ══════════ TEAM POINTS TAB ══════════ */
 function TeamPointsTab({ compact = false, showHeader = true }) {
-  return null // Temporarily hidden as requested
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
   const [resultsCount, setResultsCount] = useState(0)
+  const [isRevealed, setIsRevealed] = useState(false)
 
   useEffect(() => {
     fetchTeamPoints(true)
@@ -943,37 +942,45 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
     try {
       const [
         { data: teamsData },
-        { data: settings },
-        { data: pubData }
+        { data: settings }
       ] = await Promise.all([
         supabase.from('teams').select('id, name').order('name'),
-        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence']),
-        supabase.from('competition_results').select('competition_id').eq('published', true)
+        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence'])
       ])
 
-      const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
       const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
       const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
 
-      const suspenseActive = activeSetting?.value === 'true'
-      const revealedMilestone = parseInt(revealedMilestoneSetting?.value || '0')
+      const revealedMilestone = parseInt(revealedMilestoneSetting?.value || '0', 10)
       
-      let seqIds = []
+      // If no status divider has been passed yet (milestone is 0), hide the standings completely
+      if (!revealedMilestone || revealedMilestone <= 0) {
+        setIsRevealed(false)
+        setResultsCount(0)
+        setTeams([])
+        return
+      }
+
+      let rawSeq = []
       try {
-        if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
+        if (seqSetting?.value) rawSeq = JSON.parse(seqSetting.value)
       } catch (e) {}
 
-      const isSuspense = suspenseActive && (seqIds.length > 0)
-      const excludeComps = isSuspense ? seqIds.slice(revealedMilestone) : []
+      // Extract only competition IDs from sequence (ignoring divider objects)
+      const seqCompIds = rawSeq
+        .map(i => (typeof i === 'string' ? i : (i?.isDivider ? null : i?.id)))
+        .filter(Boolean)
 
-      if (pubData) {
-        const uniqueComps = new Set(pubData.map(r => r.competition_id).filter(id => !excludeComps.includes(id)))
-        setResultsCount(uniqueComps.size)
-      }
+      // Only include competitions up to the revealed milestone
+      const includedComps = seqCompIds.slice(0, revealedMilestone)
+      const excludeComps = seqCompIds.slice(revealedMilestone)
+
+      setResultsCount(revealedMilestone)
+      setIsRevealed(true)
 
       // Fetch aggregated standings from RPC
       const { data: standingsData } = await supabase.rpc('get_team_standings', { 
-        exclude_comps: excludeComps
+        exclude_comps: excludeComps || []
       })
 
       const colorSetting = settings?.find(s => s.key === 'team_colors')
@@ -987,11 +994,29 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
         teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0 } 
       })
       
-      ;(standingsData || []).forEach(r => {
-        if (teamMap[r.team_id]) {
-          teamMap[r.team_id].points = Number(r.points) || 0
+      if (standingsData && standingsData.length > 0) {
+        standingsData.forEach(r => {
+          if (teamMap[r.team_id]) {
+            teamMap[r.team_id].points = Number(r.points) || 0
+          }
+        })
+      } else {
+        // Fallback direct aggregation from competition_results for included competitions only
+        const { data: directResults } = await supabase
+          .from('competition_results')
+          .select('placement_points, grade_points, competition_id, participants(team_id)')
+          .eq('published', true)
+
+        if (directResults) {
+          directResults.forEach(cr => {
+            const tId = cr.participants?.team_id
+            const isIncluded = includedComps.length > 0 ? includedComps.includes(cr.competition_id) : (!excludeComps || !excludeComps.includes(cr.competition_id))
+            if (tId && teamMap[tId] && isIncluded) {
+              teamMap[tId].points += (Number(cr.placement_points) || 0) + (Number(cr.grade_points) || 0)
+            }
+          })
         }
-      })
+      }
 
       const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
       setTeams(sorted)
@@ -1001,6 +1026,10 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
       setLoading(false)
     }
   }
+
+  // If loading or no status divider reached yet, hide completely
+  if (loading) return null
+  if (!isRevealed || resultsCount <= 0) return null
 
   const maxPoints = teams[0]?.points || 0
   const isAllTied = teams.length > 0 && teams.every(t => t.points === teams[0].points)

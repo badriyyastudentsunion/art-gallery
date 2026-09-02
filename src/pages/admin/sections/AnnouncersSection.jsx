@@ -77,7 +77,7 @@ export default function AnnouncersSection() {
   }, [])
 
   async function fetchAll() {
-    const { data } = await supabase.from('announcers').select('id, name, username, created_at').order('name')
+    const { data } = await supabase.from('announcers').select('id, name, username, password, created_at').order('name')
     if (data) { setRows(data); localStorage.setItem('cache_announcers', JSON.stringify(data)) }
     setFetching(false)
   }

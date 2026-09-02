@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import '../sections.css'
 
@@ -50,6 +51,7 @@ export default function AnnouncerFlowSection() {
   const [success, setSuccess] = useState('')
   const [sortReadyByTeam, setSortReadyByTeam] = useState('')
   const [searchReady, setSearchReady] = useState('')
+  const [confirmModal, setConfirmModal] = useState(null)
 
   useEffect(() => {
     fetchInitialData()
@@ -353,12 +355,19 @@ export default function AnnouncerFlowSection() {
     setTrayItems(prev => [...prev, { ...comp, isDivider: false }])
   }
 
-  // Add all ready competitions to Tray
+  // Add all ready competitions to Tray with Confirmation Popup
   function addAllReadyToTray() {
     if (sortedReadyComps.length === 0) return
-    const idsToAdd = new Set(sortedReadyComps.map(c => c.id))
-    setReadyComps(prev => prev.filter(c => !idsToAdd.has(c.id)))
-    setTrayItems(prev => [...prev, ...sortedReadyComps.map(c => ({ ...c, isDivider: false }))])
+    setConfirmModal({
+      title: 'Add All to Tray',
+      message: `Are you sure you want to add all ${sortedReadyComps.length} judged competitions to the announcement tray at once?`,
+      confirmText: `Add All (${sortedReadyComps.length})`,
+      onConfirm: () => {
+        const idsToAdd = new Set(sortedReadyComps.map(c => c.id))
+        setReadyComps(prev => prev.filter(c => !idsToAdd.has(c.id)))
+        setTrayItems(prev => [...prev, ...sortedReadyComps.map(c => ({ ...c, isDivider: false }))])
+      }
+    })
   }
 
   // Remove item from Tray with confirmation for published results
@@ -903,19 +912,20 @@ export default function AnnouncerFlowSection() {
               value={sortReadyByTeam}
               onChange={e => setSortReadyByTeam(e.target.value)}
               style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid var(--border-subtle)',
+                background: '#161b22',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
                 borderRadius: 6,
-                padding: '4px 8px',
-                fontSize: 11,
-                color: '#fff',
+                padding: '6px 10px',
+                fontSize: 12,
+                color: '#ffffff',
                 outline: 'none',
-                maxWidth: 130
+                maxWidth: 140,
+                cursor: 'pointer'
               }}
             >
-              <option value="">Sort: Name</option>
+              <option value="" style={{ background: '#161b22', color: '#ffffff' }}>Sort: Name</option>
               {teams.map(t => (
-                <option key={t.id} value={t.id}>{t.name} Pts</option>
+                <option key={t.id} value={t.id} style={{ background: '#161b22', color: '#ffffff' }}>{t.name} Pts</option>
               ))}
             </select>
           </div>
@@ -994,6 +1004,41 @@ export default function AnnouncerFlowSection() {
         </div>
 
       </div>
+
+      {/* ── Confirmation Modal ── */}
+      {confirmModal && createPortal(
+        <div className="dash-modal-overlay" onClick={() => setConfirmModal(null)}>
+          <div className="dash-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 10px 0', color: 'var(--accent-light, #4f9cf9)' }}>
+              {confirmModal.title || 'Confirm Action'}
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              {confirmModal.message}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button 
+                type="button" 
+                className="btn-cancel-edit" 
+                style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}
+                onClick={() => setConfirmModal(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                style={{ padding: '8px 18px', background: 'var(--accent-light, #4f9cf9)', color: '#0e0b07', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                onClick={() => {
+                  confirmModal.onConfirm?.()
+                  setConfirmModal(null)
+                }}
+              >
+                {confirmModal.confirmText || 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

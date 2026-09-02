@@ -19,6 +19,7 @@ import MediaSection from './sections/MediaSection'
 import AppSettingsSection from './sections/AppSettingsSection'
 import AwardUsersSection from './sections/AwardUsersSection'
 import AwardsSection from './sections/AwardsSection'
+import PosterTemplatesSection from './sections/PosterTemplatesSection'
 import { APP_VERSION } from '../../version'
 
 // ── Icons ──
@@ -52,6 +53,7 @@ const icons = {
   logout:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
   'award-users': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   awards: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>,
+  'poster-templates': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
 }
 
 // ── Nav config ──
@@ -72,6 +74,7 @@ const NAV = [
   { id: 'results',      label: 'Results',      group: 'Reporting',   features: ['Compile final scores & rankings', 'Generate result reports', 'Export & publish results'] },
   { id: 'announcer-flow', label: 'Announcer Flow', group: 'Reporting', features: ['Sequence ready competitions', 'Tally simulator', 'Suspense settings'] },
   { id: 'awards',       label: 'Awards Corner', group: 'Reporting',   features: ['Distribute 1st & 2nd placement awards', 'Mark received by Team Leaders', 'Export distribution logs PDF'] },
+  { id: 'poster-templates', label: 'Poster Templates', group: 'Reporting', features: ['Upload custom PSD-to-HTML posters', 'Dynamic live result rendering', 'Test presets & auto-fit'] },
   { id: 'app-settings', label: 'App Settings', group: 'System',     features: ['Maintenance mode toggles', 'Disable specific portals/logins', 'Custom maintenance notice'] },
 ]
 
@@ -164,7 +167,8 @@ export default function AdminPanel() {
         {active === 'app-settings'   && <AppSettingsSection />}
         {active === 'award-users'    && <AwardUsersSection />}
         {active === 'awards'         && <AwardsSection />}
-        {!['teams','categories','competitions','participants','invigilators','judges','announcers','stages','point-settings','schedule','dashboard','results','announcer-flow','media','app-settings','award-users','awards'].includes(active) && (
+        {active === 'poster-templates' && <PosterTemplatesSection />}
+        {!['teams','categories','competitions','participants','invigilators','judges','announcers','stages','point-settings','schedule','dashboard','results','announcer-flow','media','app-settings','award-users','awards','poster-templates'].includes(active) && (
           <>
             <div className="page-header">
               <div className="page-header-left">
