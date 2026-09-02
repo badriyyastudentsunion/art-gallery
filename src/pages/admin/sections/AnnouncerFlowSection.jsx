@@ -344,6 +344,8 @@ export default function AnnouncerFlowSection() {
         }
       })
 
+      const currentReady = enhancedComps.filter(c => c.isJudged && !seqCompIds.has(c.id))
+
       if (isInitial) {
         setTrayItems(initialTray)
         setReadyComps(currentReady)
