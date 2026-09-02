@@ -260,38 +260,49 @@ function TypewriterText({ text, speed = 70, delay = 200 }) {
 /* ══════════ HERO LIVE STAGE STATUS / COUNTDOWN ══════════ */
 function HeroStageStatus({ setTab }) {
   const [liveComp, setLiveComp] = useState(null)
+  const [daysLeft, setDaysLeft] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Calculate days remaining to event start
+    const startDate = new Date('2026-09-02T00:00:00')
+    const now = new Date()
+    const diff = startDate.getTime() - now.getTime()
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
+    setDaysLeft(days)
+
     async function fetchOngoingStageEvent() {
       try {
         const { data } = await supabase
           .from('competition_schedule')
           .select(`
             id, status, scheduled_time, actual_start_time,
-            competitions (id, name, stage_id, stages (name, location), categories (name))
+            competitions (id, name, stage_id, stages (id, name, location), categories (name))
           `)
           .eq('status', 'ongoing')
-          .limit(1)
 
-        if (data && data.length > 0 && data[0].competitions) {
-          const item = data[0]
-          setLiveComp({
-            name: item.competitions.name,
-            stageName: item.competitions.stages?.name || 'Main Stage'
-          })
+        if (data && data.length > 0) {
+          // Prioritize Main Stage if multiple ongoing
+          const activeItem = data.find(item => 
+            item.competitions?.stages?.name?.toLowerCase().includes('main') ||
+            item.competitions?.stages?.name?.toLowerCase().includes('stage 1')
+          ) || data[0]
+
+          if (activeItem && activeItem.competitions) {
+            setLiveComp({
+              name: activeItem.competitions.name,
+              category: activeItem.competitions.categories?.name,
+              stageName: activeItem.competitions.stages?.name || 'Main Stage'
+            })
+          } else {
+            setLiveComp(null)
+          }
         } else {
-          // Preview state for testing/demo as requested
-          setLiveComp({
-            name: "Qira'at (Senior)",
-            stageName: "Main Stage"
-          })
+          setLiveComp(null)
         }
       } catch (e) {
-        setLiveComp({
-          name: "Qira'at (Senior)",
-          stageName: "Main Stage"
-        })
+        console.error("Failed to fetch ongoing stage event:", e)
+        setLiveComp(null)
       } finally {
         setLoading(false)
       }
@@ -299,6 +310,7 @@ function HeroStageStatus({ setTab }) {
 
     fetchOngoingStageEvent()
 
+    // Realtime listener for invigilator live updates
     const ch = supabase.channel('hero-live-stage-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, fetchOngoingStageEvent)
       .subscribe()
@@ -306,38 +318,53 @@ function HeroStageStatus({ setTab }) {
     return () => supabase.removeChannel(ch)
   }, [])
 
-  if (loading || !liveComp) return null
+  if (loading) return null
 
-  // Extract category if bracketed or separate
-  let displayName = liveComp.name
-  let displayCat = liveComp.category
+  // 1. If an active competition is marked 'ongoing' by the invigilator:
+  if (liveComp) {
+    let displayName = liveComp.name
+    let displayCat = liveComp.category
 
-  const match = displayName.match(/^(.*?)\s*\((.*?)\)$/)
-  if (match) {
-    displayName = match[1]
-    displayCat = match[2]
+    const match = displayName.match(/^(.*?)\s*\((.*?)\)$/)
+    if (match) {
+      displayName = match[1]
+      displayCat = match[2]
+    }
+
+    return (
+      <div 
+        className="lp-live-pill lp-scroll-reveal" 
+        onClick={() => setTab && setTab('schedule')}
+        role="button"
+        tabIndex={0}
+        title="Click to view live stage schedule"
+      >
+        <span className="lp-live-pill-tag">
+          <span className="lp-live-pulse-dot" />
+          <span>LIVE</span>
+        </span>
+        <span className="lp-live-pill-sep">|</span>
+        <span className="lp-live-pill-stage">{liveComp.stageName}:</span>
+        <span className="lp-live-pill-title">
+          {displayName}
+          {displayCat && <span className="lp-live-pill-cat"> ({displayCat})</span>}
+        </span>
+      </div>
+    )
   }
 
-  return (
-    <div 
-      className="lp-live-pill lp-scroll-reveal" 
-      onClick={() => setTab && setTab('schedule')}
-      role="button"
-      tabIndex={0}
-      title="Click to view live stage schedule"
-    >
-      <span className="lp-live-pill-tag">
-        <span className="lp-live-pulse-dot" />
-        <span>LIVE</span>
-      </span>
-      <span className="lp-live-pill-sep">|</span>
-      <span className="lp-live-pill-stage">{liveComp.stageName}:</span>
-      <span className="lp-live-pill-title">
-        {displayName}
-        {displayCat && <span className="lp-live-pill-cat"> ({displayCat})</span>}
-      </span>
-    </div>
-  )
+  // 2. If no competition is ongoing, but event is upcoming (daysLeft > 0):
+  if (daysLeft !== null && daysLeft > 0) {
+    return (
+      <div className="lp-countdown lp-scroll-reveal" aria-label="Event Countdown">
+        <span className="lp-cd-val">{daysLeft}</span>
+        <span className="lp-cd-lbl">{daysLeft === 1 ? 'DAY TO GO' : 'DAYS TO GO'}</span>
+      </div>
+    )
+  }
+
+  // 3. If during event or ended and no competition is ongoing: show nothing
+  return null
 }
 
 /* ══════════ HOME TAB ══════════ */
