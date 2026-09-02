@@ -1174,18 +1174,32 @@ function ResultsTab() {
   const [search, setSearch] = useState('')
   const [showResultPoster, setShowResultPoster] = useState(true)
 
+  const selectedRef = useRef(selected)
   useEffect(() => {
-    fetchCompetitions()
+    selectedRef.current = selected
+  }, [selected])
+
+  useEffect(() => {
+    fetchCompetitions(true)
     
-    // Subscribe to realtime show_result_poster settings
-    const ch = supabase.channel('rt-results-settings')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'key=eq.show_result_poster' }, (payload) => {
-        const val = payload.new?.value
-        if (val !== undefined && val !== null) {
-          setShowResultPoster(val === true || val === 'true' || val === 1 || val === '1')
+    // Realtime subscription for live competition results & settings
+    const rand = Math.random().toString(36).substring(2, 7)
+    const ch = supabase.channel(`lp-results-rt-${rand}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, () => {
+        fetchCompetitions(false)
+        if (selectedRef.current) {
+          openResults(selectedRef.current, false)
         }
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+        if (payload.new?.key === 'show_result_poster') {
+          const val = payload.new.value
+          setShowResultPoster(val === true || val === 'true' || val === 1 || val === '1')
+        }
+        fetchCompetitions(false)
+      })
       .subscribe()
+
     return () => {
       supabase.removeChannel(ch)
     }
@@ -1204,8 +1218,8 @@ function ResultsTab() {
     }
   }, [selected])
 
-  async function fetchCompetitions() {
-    setLoading(true)
+  async function fetchCompetitions(isInitial = false) {
+    if (isInitial && competitions.length === 0) setLoading(true)
     
     try {
       const { data: posterData } = await supabase
@@ -1221,65 +1235,79 @@ function ResultsTab() {
     } catch (e) {
       console.error(e)
     }
-    // Select min published_at per competition so we know when it was first announced
-    const { data } = await supabase
-      .from('competition_results')
-      .select('competitions(id, name, categories(id, name), is_stage, is_group, max_participants), published_at')
-      .eq('published', true)
-      
-    // Collect unique competitions + earliest published_at for each
-    const compMap = {}
-    if (data) {
-      data.forEach(r => {
-        const c = r.competitions
-        if (!c) return
-        if (!compMap[c.id]) {
-          compMap[c.id] = { ...c, published_at: r.published_at }
-        } else if (r.published_at && r.published_at < compMap[c.id].published_at) {
-          compMap[c.id].published_at = r.published_at
-        }
+
+    try {
+      // Select min published_at per competition so we know when it was first announced
+      const { data } = await supabase
+        .from('competition_results')
+        .select('competitions(id, name, categories(id, name), is_stage, is_group, max_participants), published_at')
+        .eq('published', true)
+        
+      // Collect unique competitions + earliest published_at for each
+      const compMap = {}
+      if (data) {
+        data.forEach(r => {
+          const c = r.competitions
+          if (!c) return
+          if (!compMap[c.id]) {
+            compMap[c.id] = { ...c, published_at: r.published_at }
+          } else if (r.published_at && r.published_at < compMap[c.id].published_at) {
+            compMap[c.id].published_at = r.published_at
+          }
+        })
+      }
+      // Sort by published_at ascending = announcement order
+      const comps = Object.values(compMap).sort((a, b) => {
+        if (!a.published_at) return 1
+        if (!b.published_at) return -1
+        return new Date(a.published_at) - new Date(b.published_at)
       })
+      // Assign announcement number
+      comps.forEach((c, i) => { c.announcementNumber = i + 1 })
+      
+      setCompetitions(comps)
+      const cats = [...new Map(comps.filter(c => c.categories).map(c => [c.categories.id, c.categories])).values()]
+      setCategories(cats)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
-    // Sort by published_at ascending = announcement order
-    const comps = Object.values(compMap).sort((a, b) => {
-      if (!a.published_at) return 1
-      if (!b.published_at) return -1
-      return new Date(a.published_at) - new Date(b.published_at)
-    })
-    // Assign announcement number
-    comps.forEach((c, i) => { c.announcementNumber = i + 1 })
-    
-    setCompetitions(comps)
-    const cats = [...new Map(comps.filter(c => c.categories).map(c => [c.categories.id, c.categories])).values()]
-    setCategories(cats)
-    setLoading(false)
   }
 
-  async function openResults(comp) {
+  async function openResults(comp, isInitial = true) {
     setSelected(comp)
-    window.history.pushState({ view: 'result-detail' }, '')
-    setLoadingResults(true)
-    const { data } = await supabase
-      .from('competition_results')
-      .select(`
-        id, position, grade, avg_points, placement_points, grade_points,
-        participants(name, chess_number, teams(name))
-      `)
-      .eq('competition_id', comp.id)
-      .eq('published', true)
-      
-    // Use the published position from DB directly — no recalculation needed
-    // Sort by published position, then by avg_points for same position
-    const list = (data || []).map(r => ({ ...r }))
-    list.sort((a, b) => {
-      const posA = a.position || 999
-      const posB = b.position || 999
-      if (posA !== posB) return posA - posB
-      return (b.avg_points || 0) - (a.avg_points || 0)
-    })
+    if (isInitial) {
+      window.history.pushState({ view: 'result-detail' }, '')
+      setLoadingResults(true)
+    }
 
-    setResults(list)
-    setLoadingResults(false)
+    try {
+      const { data } = await supabase
+        .from('competition_results')
+        .select(`
+          id, position, grade, avg_points, placement_points, grade_points,
+          participants(name, chess_number, teams(name))
+        `)
+        .eq('competition_id', comp.id)
+        .eq('published', true)
+        
+      // Use the published position from DB directly — no recalculation needed
+      // Sort by published position, then by avg_points for same position
+      const list = (data || []).map(r => ({ ...r }))
+      list.sort((a, b) => {
+        const posA = a.position || 999
+        const posB = b.position || 999
+        if (posA !== posB) return posA - posB
+        return (b.avg_points || 0) - (a.avg_points || 0)
+      })
+
+      setResults(list)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingResults(false)
+    }
   }
 
   const filtered = competitions.filter(c => {
