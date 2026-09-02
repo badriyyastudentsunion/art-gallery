@@ -1,6 +1,6 @@
 // src/pages/LandingPage.jsx
 // ─── UI Design: Claude Sonnet 4.6 | Logic: Gemini ───
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase, safeRemoveChannel } from '../lib/supabase'
 import LogoLoader from '../components/LogoLoader'
@@ -365,6 +365,171 @@ function HeroStageStatus({ setTab }) {
 
   // 3. If during event or ended and no competition is ongoing: show nothing
   return null
+}
+
+/* ══════════ INTERACTIVE LIVE MARQUEE ROW ══════════ */
+function InteractiveMarqueeRow({ items, direction = 'left', onCardClick }) {
+  const containerRef = useRef(null)
+  const isDragging = useRef(false)
+  const startX = useRef(0)
+  const currentOffset = useRef(0)
+  const hasMoved = useRef(false)
+  const dragDistance = useRef(0)
+  const animFrameId = useRef(null)
+  const lastTime = useRef(performance.now())
+
+  // Ensure repetition for completely seamless wrap
+  const singleList = useMemo(() => {
+    if (!items || items.length === 0) return []
+    let list = [...items]
+    while (list.length < 10) {
+      list = [...list, ...items]
+    }
+    return list
+  }, [items])
+
+  const fullList = useMemo(() => {
+    if (singleList.length === 0) return []
+    return [...singleList, ...singleList]
+  }, [singleList])
+
+  // Constant velocity: ~36 pixels per second
+  const speed = 36 * (direction === 'left' ? -1 : 1)
+
+  useEffect(() => {
+    if (fullList.length === 0) return
+    const el = containerRef.current
+    if (!el) return
+
+    // For right-sliding row, start at -halfWidth so it can scroll right smoothly
+    if (direction === 'right' && currentOffset.current === 0) {
+      const hw = el.scrollWidth / 2
+      if (hw > 0) currentOffset.current = -hw
+    }
+
+    const tick = (now) => {
+      const dt = Math.min(0.1, (now - lastTime.current) / 1000)
+      lastTime.current = now
+
+      if (!isDragging.current && el) {
+        currentOffset.current += speed * dt
+
+        const halfWidth = el.scrollWidth / 2
+        if (halfWidth > 0) {
+          while (currentOffset.current <= -halfWidth) {
+            currentOffset.current += halfWidth
+          }
+          while (currentOffset.current > 0) {
+            currentOffset.current -= halfWidth
+          }
+        }
+        el.style.transform = `translate3d(${currentOffset.current}px, 0, 0)`
+      }
+
+      animFrameId.current = requestAnimationFrame(tick)
+    }
+
+    lastTime.current = performance.now()
+    animFrameId.current = requestAnimationFrame(tick)
+
+    return () => {
+      if (animFrameId.current) cancelAnimationFrame(animFrameId.current)
+    }
+  }, [speed, fullList.length, direction])
+
+  if (fullList.length === 0) return null
+
+  const getClientX = (e) => {
+    if (e.touches && e.touches.length > 0) return e.touches[0].clientX
+    if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientX
+    return e.clientX || 0
+  }
+
+  const handlePointerDown = (e) => {
+    isDragging.current = true
+    hasMoved.current = false
+    dragDistance.current = 0
+    startX.current = getClientX(e)
+  }
+
+  const handlePointerMove = (e) => {
+    if (!isDragging.current) return
+    const clientX = getClientX(e)
+    const delta = clientX - startX.current
+    dragDistance.current += Math.abs(delta)
+    if (dragDistance.current > 6) {
+      hasMoved.current = true
+    }
+    currentOffset.current += delta
+    startX.current = clientX
+
+    const el = containerRef.current
+    if (el) {
+      const halfWidth = el.scrollWidth / 2
+      if (halfWidth > 0) {
+        while (currentOffset.current <= -halfWidth) {
+          currentOffset.current += halfWidth
+        }
+        while (currentOffset.current > 0) {
+          currentOffset.current -= halfWidth
+        }
+      }
+      el.style.transform = `translate3d(${currentOffset.current}px, 0, 0)`
+    }
+  }
+
+  const handlePointerUp = () => {
+    isDragging.current = false
+    lastTime.current = performance.now()
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="lp-marquee-row"
+      style={{
+        cursor: 'grab',
+        touchAction: 'pan-y',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        willChange: 'transform'
+      }}
+      onMouseDown={handlePointerDown}
+      onMouseMove={handlePointerMove}
+      onMouseUp={handlePointerUp}
+      onMouseLeave={handlePointerUp}
+      onTouchStart={handlePointerDown}
+      onTouchMove={handlePointerMove}
+      onTouchEnd={handlePointerUp}
+      onTouchCancel={handlePointerUp}
+    >
+      {fullList.map((item, idx) => (
+        <div
+          key={`${item.id}-${idx}`}
+          className="lp-marquee-card"
+          onClick={() => {
+            if (!hasMoved.current && onCardClick) {
+              onCardClick(item)
+            }
+          }}
+        >
+          <img
+            src={item.thumbUrl || item.url}
+            alt={item.caption || 'Gallery photo'}
+            className="lp-marquee-img"
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+          />
+          {item.caption && (
+            <div className="lp-marquee-caption-overlay">
+              <p className="lp-marquee-caption">{item.caption}</p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 /* ══════════ HOME TAB ══════════ */
@@ -759,17 +924,7 @@ function HomeTab({ onLoginClick, setTab, liveStream, onOpenPoster }) {
             <h3 className="lp-home-gallery-title">Live Event Gallery</h3>
             
             <div className="lp-marquee-container">
-              {/* Helper to build seamless infinite loop row */}
               {(() => {
-                const getMarqueeRow = (items) => {
-                  if (!items || items.length === 0) return []
-                  let singleHalf = [...items]
-                  while (singleHalf.length < 15) {
-                    singleHalf = [...singleHalf, ...items]
-                  }
-                  return [...singleHalf, ...singleHalf]
-                }
-
                 const halfCount = Math.ceil(photos.length / 2)
                 const list1 = photos.slice(0, halfCount)
                 const list2 = photos.slice(halfCount)
@@ -777,46 +932,18 @@ function HomeTab({ onLoginClick, setTab, liveStream, onOpenPoster }) {
                 const items1 = list1.length > 0 ? list1 : photos
                 const items2 = list2.length > 0 ? list2 : photos
 
-                const row1 = getMarqueeRow(items1)
-                const row2 = getMarqueeRow(items2)
-
                 return (
                   <>
-                    {/* Row 1: Slides Left */}
-                    <div className="lp-marquee-row lp-marquee-left">
-                      {row1.map((item, idx) => (
-                        <div
-                          key={`row1-${item.id}-${idx}`}
-                          className="lp-marquee-card"
-                          onClick={() => setTab('gallery')}
-                        >
-                          <img src={item.thumbUrl || item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" loading="lazy" decoding="async" />
-                          {item.caption && (
-                            <div className="lp-marquee-caption-overlay">
-                              <p className="lp-marquee-caption">{item.caption}</p>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Row 2: Slides Right */}
-                    <div className="lp-marquee-row lp-marquee-right">
-                      {row2.map((item, idx) => (
-                        <div
-                          key={`row2-${item.id}-${idx}`}
-                          className="lp-marquee-card"
-                          onClick={() => setTab('gallery')}
-                        >
-                          <img src={item.thumbUrl || item.url} alt={item.caption || 'Gallery photo'} className="lp-marquee-img" loading="lazy" decoding="async" />
-                          {item.caption && (
-                            <div className="lp-marquee-caption-overlay">
-                              <p className="lp-marquee-caption">{item.caption}</p>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <InteractiveMarqueeRow
+                      items={items1}
+                      direction="left"
+                      onCardClick={() => setTab('gallery')}
+                    />
+                    <InteractiveMarqueeRow
+                      items={items2}
+                      direction="right"
+                      onCardClick={() => setTab('gallery')}
+                    />
                   </>
                 )
               })()}

@@ -2632,28 +2632,8 @@
   width: max-content;
   gap: 14px;
   will-change: transform;
-}
-
-.lp-marquee-left {
-  animation: marquee-slide-left 35s linear infinite;
-}
-
-.lp-marquee-right {
-  animation: marquee-slide-right 35s linear infinite;
-}
-
-.lp-marquee-row:hover {
-  animation-play-state: paused;
-}
-
-@keyframes marquee-slide-left {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(-50%, 0, 0); }
-}
-
-@keyframes marquee-slide-right {
-  0% { transform: translate3d(-50%, 0, 0); }
-  100% { transform: translate3d(0, 0, 0); }
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .lp-marquee-card {
