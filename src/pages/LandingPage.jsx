@@ -1463,7 +1463,7 @@ function ResultsTab() {
 }
 
 /* ══════════ SCHEDULE TAB ══════════ */
-function ScheduleTab() {
+function ScheduleTab({ isActive = true }) {
   const { user } = useAuth() || {}
   const [stages, setStages] = useState([])
   const [schedules, setSchedules] = useState([])
@@ -1476,18 +1476,23 @@ function ScheduleTab() {
 
   const dateTabsRef = useRef(null)
 
-  // Auto-center selected date tab in schedule
+  // Auto-center selected date tab in schedule when active or navigating
   useEffect(() => {
-    if (!loading && selectedDate && dateTabsRef.current) {
-      const timer = setTimeout(() => {
+    if (isActive && !loading && selectedDate && dateTabsRef.current) {
+      const runScroll = () => {
         const activeEl = dateTabsRef.current?.querySelector('.lp-date-tab.active')
         if (activeEl) {
           activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
         }
-      }, 100)
-      return () => clearTimeout(timer)
+      }
+      const t1 = setTimeout(runScroll, 60)
+      const t2 = setTimeout(runScroll, 220)
+      return () => {
+        clearTimeout(t1)
+        clearTimeout(t2)
+      }
     }
-  }, [selectedDate, loading])
+  }, [isActive, selectedDate, loading])
 
   async function handleOpenRules(comp) {
     setViewingRules(comp)
@@ -2677,7 +2682,7 @@ export default function LandingPage() {
           <ResultsTab />
         </div>
         <div style={{ display: tab === 'schedule' ? 'block' : 'none' }}>
-          <ScheduleTab />
+          <ScheduleTab isActive={tab === 'schedule'} />
         </div>
         {tab === 'profile' && (
           <ParticipantProfileTab
