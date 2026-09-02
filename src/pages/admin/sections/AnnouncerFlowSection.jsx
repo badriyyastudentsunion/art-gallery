@@ -54,20 +54,87 @@ export default function AnnouncerFlowSection() {
   const [sortReadyByTeam, setSortReadyByTeam] = useState('')
   const [searchReady, setSearchReady] = useState('')
   const [confirmModal, setConfirmModal] = useState(null)
+  const isSelfSavingRef = useRef(false)
+  const trayItemsRef = useRef([])
+
+  useEffect(() => {
+    trayItemsRef.current = trayItems
+  }, [trayItems])
 
   useEffect(() => {
     fetchInitialData(true)
 
     // Realtime subscriptions for live stage announcements and settings
     const rand = Math.random().toString(36).substring(2, 7)
+    let judgeDebounceTimer = null
+
     const ch = supabase.channel(`rt-announcer-flow-${rand}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, () => fetchInitialData(false))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, () => fetchInitialData(false))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, () => fetchInitialData(false))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_reports' }, () => fetchInitialData(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, async () => {
+        try {
+          const { data: pubResults } = await supabase
+            .from('competition_results')
+            .select('competition_id, published, published_at')
+            .eq('published', true)
+
+          const publishedMap = {}
+          const uniquePubComps = []
+          const publishedCompsMap = {}
+          ;(pubResults || []).forEach(r => {
+            publishedMap[r.competition_id] = true
+            if (!publishedCompsMap[r.competition_id]) {
+              publishedCompsMap[r.competition_id] = { id: r.competition_id, published_at: r.published_at }
+              uniquePubComps.push(publishedCompsMap[r.competition_id])
+            }
+          })
+          uniquePubComps.sort((a, b) => {
+            if (!a.published_at) return 1
+            if (!b.published_at) return -1
+            return new Date(a.published_at) - new Date(b.published_at)
+          })
+          const numMap = {}
+          uniquePubComps.forEach((c, idx) => { numMap[c.id] = idx + 1 })
+          setOfficialNumberMap(numMap)
+
+          setAllComps(prev => prev.map(c => ({
+            ...c,
+            published: !!publishedMap[c.id],
+            officialNumber: numMap[c.id] || null
+          })))
+
+          setTrayItems(prev => prev.map(item => {
+            if (item.isDivider) return item
+            return {
+              ...item,
+              published: !!publishedMap[item.id],
+              isPublished: !!publishedMap[item.id],
+              officialNumber: numMap[item.id] || null
+            }
+          }))
+        } catch (err) {
+          console.error("Error refreshing competition results:", err)
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+        const k = payload.new?.key
+        const v = payload.new?.value
+        if (k === 'leaderboard_revealed_milestone') {
+          setRevealedMilestone(parseInt(v || '0', 10))
+        } else if (k === 'leaderboard_suspense_active') {
+          setSuspenseActive(v === 'true')
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, () => {
+        clearTimeout(judgeDebounceTimer)
+        judgeDebounceTimer = setTimeout(() => fetchInitialData(false), 2000)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_reports' }, () => {
+        clearTimeout(judgeDebounceTimer)
+        judgeDebounceTimer = setTimeout(() => fetchInitialData(false), 2000)
+      })
       .subscribe()
 
     return () => {
+      clearTimeout(judgeDebounceTimer)
       supabase.removeChannel(ch)
     }
   }, [])
@@ -242,42 +309,64 @@ export default function AnnouncerFlowSection() {
       const seqCompIds = new Set()
       const initialTray = []
 
-      // Place already published competitions at the top in exact Result Number order
-      publishedComps.forEach(c => {
-        initialTray.push({ ...c, isDivider: false, isPublished: true })
-        seqCompIds.add(c.id)
-      })
-
-      // Add remaining sequence items
-      rawSequence.forEach((item, idx) => {
-        if (typeof item === 'string' && item.startsWith('__divider')) {
-          initialTray.push({
-            id: `divider-${idx}-${Date.now()}`,
-            isDivider: true,
-            title: 'Points Standing Status'
-          })
-        } else if (typeof item === 'object' && item.isDivider) {
-          initialTray.push({
-            id: item.id || `divider-${idx}-${Date.now()}`,
-            isDivider: true,
-            title: item.title || 'Points Standing Status'
-          })
-        } else {
-          const compId = typeof item === 'string' ? item : item.id
-          if (!seqCompIds.has(compId)) {
-            const found = enhancedComps.find(c => c.id === compId)
-            if (found) {
-              initialTray.push({ ...found, isDivider: false })
-              seqCompIds.add(compId)
+      // If rawSequence exists, build initialTray respecting exact saved sequence order (dividers and comps alike)
+      if (rawSequence && rawSequence.length > 0) {
+        rawSequence.forEach((item, idx) => {
+          const isDivider = (typeof item === 'object' && item.isDivider) || (typeof item === 'string' && item.startsWith('__divider'))
+          if (isDivider) {
+            initialTray.push({
+              id: typeof item === 'object' && item.id ? item.id : `divider-${idx}-${Date.now()}`,
+              isDivider: true,
+              title: typeof item === 'object' && item.title ? item.title : 'Points Standing Status'
+            })
+          } else {
+            const compId = typeof item === 'string' ? item : item.id
+            if (!seqCompIds.has(compId)) {
+              const found = enhancedComps.find(c => c.id === compId)
+              if (found) {
+                initialTray.push({
+                  ...found,
+                  isDivider: false,
+                  isPublished: !!found.published
+                })
+                seqCompIds.add(compId)
+              }
             }
           }
+        })
+      }
+
+      // Add any published competitions that were not yet in the sequence
+      publishedComps.forEach(c => {
+        if (!seqCompIds.has(c.id)) {
+          initialTray.push({ ...c, isDivider: false, isPublished: true })
+          seqCompIds.add(c.id)
         }
       })
 
-      const currentReady = enhancedComps.filter(c => c.isJudged && !seqCompIds.has(c.id))
+      if (isInitial) {
+        setTrayItems(initialTray)
+        setReadyComps(currentReady)
+      } else {
+        // Keep active tray state intact, only update simulatedPoints & published flags in-place
+        setTrayItems(prev => {
+          return prev.map(item => {
+            if (item.isDivider) return item
+            const found = enhancedComps.find(c => c.id === item.id)
+            if (!found) return item
+            return {
+              ...item,
+              ...found,
+              isPublished: !!found.published
+            }
+          })
+        })
 
-      setTrayItems(initialTray)
-      setReadyComps(currentReady)
+        setReadyComps(prev => {
+          const activeTrayIds = new Set((trayItemsRef.current || []).filter(i => !i.isDivider).map(i => i.id))
+          return enhancedComps.filter(c => c.isJudged && !activeTrayIds.has(c.id))
+        })
+      }
 
       // 5. Baseline points (starts from 0 since all comps are calculated through the sequence)
       const basePoints = {}
@@ -404,6 +493,7 @@ export default function AnnouncerFlowSection() {
     setSaveStatus('saving')
     const timer = setTimeout(async () => {
       try {
+        isSelfSavingRef.current = true
         const encodedSequence = trayItems.map(item => {
           if (item.isDivider) {
             return { id: item.id, isDivider: true, title: item.title }
@@ -434,8 +524,12 @@ export default function AnnouncerFlowSection() {
       } catch (err) {
         console.error("Auto-save failed:", err)
         setSaveStatus('error')
+      } finally {
+        setTimeout(() => {
+          isSelfSavingRef.current = false
+        }, 1200)
       }
-    }, 600)
+    }, 400)
 
     return () => clearTimeout(timer)
   }, [trayItems, suspenseActive, fetching])
@@ -505,6 +599,34 @@ export default function AnnouncerFlowSection() {
     newTray[index] = newTray[targetIdx]
     newTray[targetIdx] = temp
     setTrayItems(newTray)
+  }
+
+  // Move a divider directly after a specific competition count
+  function moveDividerToCompCount(dividerIdx, targetCompCount) {
+    setTrayItems(prev => {
+      const itemToMove = prev[dividerIdx]
+      if (!itemToMove || !itemToMove.isDivider) return prev
+
+      const withoutDivider = prev.filter((_, i) => i !== dividerIdx)
+      let compCount = 0
+      let insertIdx = withoutDivider.length
+
+      for (let i = 0; i < withoutDivider.length; i++) {
+        if (!withoutDivider[i].isDivider) {
+          compCount++
+          if (compCount === targetCompCount) {
+            insertIdx = i + 1
+            break
+          }
+        }
+      }
+
+      if (targetCompCount === 0) insertIdx = 0
+
+      const next = [...withoutDivider]
+      next.splice(insertIdx, 0, itemToMove)
+      return next
+    })
   }
 
   // Sort Tray by Result Number (published competitions ordered #1..#N, followed by dividers and pending queue)
@@ -857,6 +979,28 @@ export default function AnnouncerFlowSection() {
                               ↺ Revert
                             </button>
                           )}
+
+                          {/* Quick Jump Position Selector */}
+                          <select
+                            value={item.compCountAtDivider}
+                            onChange={e => moveDividerToCompCount(idx, parseInt(e.target.value, 10))}
+                            title="Quickly jump divider position to after a specific competition"
+                            style={{
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              border: '1px solid rgba(255, 255, 255, 0.18)',
+                              color: '#fff',
+                              fontSize: 11,
+                              padding: '2px 6px',
+                              borderRadius: 6,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {Array.from({ length: trayCompsCount + 1 }).map((_, cIdx) => (
+                              <option key={cIdx} value={cIdx} style={{ background: '#1c2128', color: '#fff' }}>
+                                {cIdx === 0 ? 'At Start (0)' : `After #${cIdx}`}
+                              </option>
+                            ))}
+                          </select>
 
                           <button
                             className="btn-icon"
