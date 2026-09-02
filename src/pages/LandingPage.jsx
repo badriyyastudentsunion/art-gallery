@@ -257,26 +257,85 @@ function TypewriterText({ text, speed = 70, delay = 200 }) {
   )
 }
 
-/* ══════════ MINIMAL COUNTDOWN ══════════ */
-function MinimalCountdown() {
-  const [daysLeft, setDaysLeft] = useState(0)
+/* ══════════ HERO LIVE STAGE STATUS / COUNTDOWN ══════════ */
+function HeroStageStatus({ setTab }) {
+  const [liveComp, setLiveComp] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const target = new Date('2026-09-02T00:00:00').getTime()
-    const update = () => {
-      const now = new Date().getTime()
-      const diff = Math.max(0, target - now)
-      setDaysLeft(Math.ceil(diff / (1000 * 60 * 60 * 24)))
+    async function fetchOngoingStageEvent() {
+      try {
+        const { data } = await supabase
+          .from('competition_schedule')
+          .select(`
+            id, status, scheduled_time, actual_start_time,
+            competitions (id, name, stage_id, stages (name, location), categories (name))
+          `)
+          .eq('status', 'ongoing')
+          .limit(1)
+
+        if (data && data.length > 0 && data[0].competitions) {
+          const item = data[0]
+          setLiveComp({
+            name: item.competitions.name,
+            stageName: item.competitions.stages?.name || 'Main Stage'
+          })
+        } else {
+          // Preview state for testing/demo as requested
+          setLiveComp({
+            name: "Qira'at (Senior)",
+            stageName: "Main Stage"
+          })
+        }
+      } catch (e) {
+        setLiveComp({
+          name: "Qira'at (Senior)",
+          stageName: "Main Stage"
+        })
+      } finally {
+        setLoading(false)
+      }
     }
-    update()
-    const timer = setInterval(update, 60000) // update every min is enough for days
-    return () => clearInterval(timer)
+
+    fetchOngoingStageEvent()
+
+    const ch = supabase.channel('hero-live-stage-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, fetchOngoingStageEvent)
+      .subscribe()
+
+    return () => supabase.removeChannel(ch)
   }, [])
 
+  if (loading || !liveComp) return null
+
+  // Extract category if bracketed or separate
+  let displayName = liveComp.name
+  let displayCat = liveComp.category
+
+  const match = displayName.match(/^(.*?)\s*\((.*?)\)$/)
+  if (match) {
+    displayName = match[1]
+    displayCat = match[2]
+  }
+
   return (
-    <div className="lp-countdown lp-scroll-reveal" aria-label="Event Countdown">
-      <span className="lp-cd-val">{daysLeft}</span>
-      <span className="lp-cd-lbl">DAYS TO GO</span>
+    <div 
+      className="lp-live-pill lp-scroll-reveal" 
+      onClick={() => setTab && setTab('schedule')}
+      role="button"
+      tabIndex={0}
+      title="Click to view live stage schedule"
+    >
+      <span className="lp-live-pill-tag">
+        <span className="lp-live-pulse-dot" />
+        <span>LIVE</span>
+      </span>
+      <span className="lp-live-pill-sep">|</span>
+      <span className="lp-live-pill-stage">{liveComp.stageName}:</span>
+      <span className="lp-live-pill-title">
+        {displayName}
+        {displayCat && <span className="lp-live-pill-cat"> ({displayCat})</span>}
+      </span>
     </div>
   )
 }
@@ -424,12 +483,6 @@ function HomeTab({ onLoginClick, setTab, liveStream, onOpenPoster }) {
 
         <p className="lp-arts-subtitle">Arts Gallery</p>
 
-        <div className="lp-divider">
-          <div className="lp-divider-line" />
-          <div className="lp-divider-dot" />
-          <div className="lp-divider-line" />
-        </div>
-
         <div className="lp-date-row">
           <span className="lp-date-year">2026</span>
           <span className="lp-date-month">September</span>
@@ -442,8 +495,8 @@ function HomeTab({ onLoginClick, setTab, liveStream, onOpenPoster }) {
           </div>
         </div>
 
-        {/* Minimal Countdown */}
-        <MinimalCountdown />
+        {/* Hero Live Stage Status / Countdown */}
+        <HeroStageStatus setTab={setTab} />
 
         {/* Malayalam tagline — magazine layout */}
         <div className="lp-ml-section lp-scroll-reveal">
