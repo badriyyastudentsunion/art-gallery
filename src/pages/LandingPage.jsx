@@ -1,6 +1,6 @@
 // src/pages/LandingPage.jsx
 // ─── UI Design: Claude Sonnet 4.6 | Logic: Gemini ───
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase, safeRemoveChannel } from '../lib/supabase'
 import LogoLoader from '../components/LogoLoader'
@@ -1046,11 +1046,12 @@ function HomeTab({ onLoginClick, setTab, liveStream, onOpenPoster }) {
 }
 
 /* ══════════ TEAM POINTS TAB ══════════ */
-function TeamPointsTab({ compact = false, showHeader = true }) {
+function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster }) {
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
   const [resultsCount, setResultsCount] = useState(0)
   const [isRevealed, setIsRevealed] = useState(false)
+  const [activePoster, setActivePoster] = useState(null)
 
   useEffect(() => {
     fetchTeamPoints(true)
@@ -1058,6 +1059,7 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
     const ch = supabase.channel('lp-team-points')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, () => fetchTeamPoints(false))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, () => fetchTeamPoints(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, () => fetchTeamPoints(false))
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [])
@@ -1069,10 +1071,12 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
     try {
       const [
         { data: teamsData },
-        { data: settings }
+        { data: settings },
+        { data: milestoneMedia }
       ] = await Promise.all([
         supabase.from('teams').select('id, name').order('name'),
-        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence'])
+        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence']),
+        supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone').eq('type', 'poster').not('milestone', 'is', null)
       ])
 
       const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
@@ -1085,8 +1089,12 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
         setIsRevealed(false)
         setResultsCount(0)
         setTeams([])
+        setActivePoster(null)
         return
       }
+
+      const currentMilestonePoster = (milestoneMedia || []).find(p => p.milestone === revealedMilestone)
+      setActivePoster(currentMilestonePoster || null)
 
       let rawSeq = []
       try {
@@ -1227,6 +1235,31 @@ function TeamPointsTab({ compact = false, showHeader = true }) {
             }}>
               {resultsCount > 0 ? `Points after ${resultsCount} ${resultsCount === 1 ? 'Result' : 'Results'}` : 'Initial Standings'}
             </span>
+
+            {activePoster && onOpenStatusPoster && (
+              <button
+                type="button"
+                onClick={() => onOpenStatusPoster(activePoster)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: 'linear-gradient(135deg, rgba(247, 201, 72, 0.15) 0%, rgba(245, 158, 11, 0.25) 100%)',
+                  border: '1px solid rgba(247, 201, 72, 0.4)',
+                  color: '#f7c948',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '3px 9px',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(247, 201, 72, 0.15)'
+                }}
+              >
+                <span>🖼️</span>
+                <span>View Status Poster</span>
+              </button>
+            )}
           </div>
           <div className="lp-live-badge">
             <span className="lp-live-dot" />
@@ -1300,11 +1333,34 @@ function ResultsTab() {
   const [loadingResults, setLoadingResults] = useState(false)
   const [search, setSearch] = useState('')
   const [showResultPoster, setShowResultPoster] = useState(true)
+  const [milestonePosters, setMilestonePosters] = useState({})
+  const [revealedMilestone, setRevealedMilestone] = useState(0)
+  const [revealMilestones, setRevealMilestones] = useState([])
+  const [activeStatusPosterModal, setActiveStatusPosterModal] = useState(null)
 
   const selectedRef = useRef(selected)
   useEffect(() => {
     selectedRef.current = selected
   }, [selected])
+
+  const handleDownloadPoster = async (poster) => {
+    if (!poster) return
+    const url = poster.hd_url || poster.thumb_url
+    try {
+      const resp = await fetch(url)
+      const blob = await resp.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `status-milestone-${poster.milestone || 'milestone'}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (e) {
+      window.open(url, '_blank')
+    }
+  }
 
   useEffect(() => {
     fetchCompetitions(true)
@@ -1317,6 +1373,9 @@ function ResultsTab() {
         if (selectedRef.current) {
           openResults(selectedRef.current, false)
         }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, () => {
+        fetchCompetitions(false)
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
         if (payload.new?.key === 'show_result_poster') {
@@ -1349,16 +1408,37 @@ function ResultsTab() {
     if (isInitial && competitions.length === 0) setLoading(true)
     
     try {
-      const { data: posterData } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'show_result_poster')
-        .maybeSingle()
-      if (posterData) {
-        setShowResultPoster(posterData.value === true || posterData.value === 'true' || posterData.value === 1 || posterData.value === '1')
+      const [
+        { data: settingsData },
+        { data: milestoneMedia }
+      ] = await Promise.all([
+        supabase.from('app_settings').select('key, value').in('key', ['show_result_poster', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones']),
+        supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone').eq('type', 'poster').not('milestone', 'is', null)
+      ])
+
+      const posterSetting = settingsData?.find(s => s.key === 'show_result_poster')
+      const revSetting = settingsData?.find(s => s.key === 'leaderboard_revealed_milestone')
+      const milestonesSetting = settingsData?.find(s => s.key === 'leaderboard_reveal_milestones')
+
+      if (posterSetting) {
+        setShowResultPoster(posterSetting.value === true || posterSetting.value === 'true' || posterSetting.value === 1 || posterSetting.value === '1')
       } else {
         setShowResultPoster(true)
       }
+
+      setRevealedMilestone(parseInt(revSetting?.value || '0', 10))
+
+      let parsedMilestones = []
+      try {
+        if (milestonesSetting?.value) parsedMilestones = JSON.parse(milestonesSetting.value)
+      } catch (e) {}
+      setRevealMilestones(parsedMilestones)
+
+      const posterMap = {}
+      ;(milestoneMedia || []).forEach(p => {
+        if (p.milestone) posterMap[p.milestone] = p
+      })
+      setMilestonePosters(posterMap)
     } catch (e) {
       console.error(e)
     }
@@ -1521,7 +1601,7 @@ function ResultsTab() {
   return (
     <div className="lp-tab-content">
       {/* Integrated Team Points Leaderboard at the top of Results */}
-      <TeamPointsTab showHeader={true} />
+      <TeamPointsTab showHeader={true} onOpenStatusPoster={setActiveStatusPosterModal} />
 
       <div className="lp-section-header" style={{ marginTop: '30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
         <div>
@@ -1561,28 +1641,262 @@ function ResultsTab() {
         <div className="lp-empty"><IconAward /><p>No competitions found</p></div>
       ) : (
         <div className="lp-comp-grid">
-          {filtered.map(c => (
-            <button key={c.id} className="lp-comp-card" onClick={() => openResults(c)}>
-              <div className="lp-comp-card-top">
-                <span className="lp-comp-cat">{c.categories?.name || 'General'}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-                  {c.is_stage && <span className="lp-comp-badge">Stage</span>}
-                  {c.is_group && <span className="lp-comp-badge lp-comp-badge-group">Group</span>}
-                  {c.announcementNumber && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 800, color: '#f7c948',
-                      background: 'rgba(247,201,72,0.1)', border: '1px solid rgba(247,201,72,0.3)',
-                      padding: '2px 7px', borderRadius: 20, letterSpacing: 0.5
-                    }}>#{c.announcementNumber}</span>
-                  )}
-                </div>
+          {filtered.map(c => {
+            const hasMilestoneDivider = (revealMilestones.includes(c.announcementNumber) || !!milestonePosters[c.announcementNumber]) && (revealedMilestone >= c.announcementNumber)
+
+            return (
+              <Fragment key={c.id}>
+                <button className="lp-comp-card" onClick={() => openResults(c)}>
+                  <div className="lp-comp-card-top">
+                    <span className="lp-comp-cat">{c.categories?.name || 'General'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+                      {c.is_stage && <span className="lp-comp-badge">Stage</span>}
+                      {c.is_group && <span className="lp-comp-badge lp-comp-badge-group">Group</span>}
+                      {c.announcementNumber && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 800, color: '#f7c948',
+                          background: 'rgba(247,201,72,0.1)', border: '1px solid rgba(247,201,72,0.3)',
+                          padding: '2px 7px', borderRadius: 20, letterSpacing: 0.5
+                        }}>#{c.announcementNumber}</span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="lp-comp-name">{c.name}</p>
+                  <div className="lp-comp-footer">
+                    <span className="lp-comp-view">View Results <IconArrow /></span>
+                  </div>
+                </button>
+
+                {hasMilestoneDivider && (
+                  <div
+                    key={`divider-banner-${c.announcementNumber}`}
+                    style={{
+                      gridColumn: '1 / -1',
+                      background: 'linear-gradient(135deg, rgba(46, 213, 115, 0.09) 0%, rgba(13, 17, 23, 0.95) 100%)',
+                      border: '1.5px solid rgba(46, 213, 115, 0.35)',
+                      borderRadius: 14,
+                      padding: '14px 18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 14,
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(46, 213, 115, 0.08)',
+                      margin: '6px 0 10px 0'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <div style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 10,
+                        background: 'rgba(46, 213, 115, 0.15)',
+                        border: '1px solid rgba(46, 213, 115, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        flexShrink: 0
+                      }}>
+                        🏆
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: 9.5,
+                            fontWeight: 800,
+                            color: '#0e0b07',
+                            background: '#2ed573',
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.5
+                          }}>
+                            Standings Revealed
+                          </span>
+                          <span style={{ fontSize: 13.5, fontWeight: 800, color: '#fff' }}>
+                            Points Standing Status (after Result #{c.announcementNumber})
+                          </span>
+                        </div>
+                        <p style={{ margin: '3px 0 0 0', fontSize: 11.5, color: 'rgba(255, 255, 255, 0.65)' }}>
+                          Official points standing announcement after {c.announcementNumber} competitions
+                        </p>
+                      </div>
+                    </div>
+
+                    {milestonePosters[c.announcementNumber] ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <img
+                          src={milestonePosters[c.announcementNumber].thumb_url}
+                          alt="Status Poster Preview"
+                          style={{
+                            width: 42,
+                            height: 56,
+                            objectFit: 'cover',
+                            borderRadius: 6,
+                            border: '1.5px solid rgba(255, 255, 255, 0.25)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => setActiveStatusPosterModal(milestonePosters[c.announcementNumber])}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setActiveStatusPosterModal(milestonePosters[c.announcementNumber])}
+                          style={{
+                            background: 'linear-gradient(135deg, #f7c948, #f59e0b)',
+                            color: '#0e0b07',
+                            border: 'none',
+                            padding: '8px 14px',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            boxShadow: '0 4px 14px rgba(247, 201, 72, 0.3)'
+                          }}
+                        >
+                          <span>🖼️</span>
+                          <span>View & Download Poster</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{
+                        fontSize: 11,
+                        color: 'rgba(255, 255, 255, 0.5)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '5px 10px',
+                        borderRadius: 6,
+                        border: '1px solid rgba(255, 255, 255, 0.08)'
+                      }}>
+                        ✓ Standings Announced
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Fragment>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Status Milestone Poster Lightbox Modal ── */}
+      {activeStatusPosterModal && (
+        <div
+          className="lp-modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.88)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16
+          }}
+          onClick={() => setActiveStatusPosterModal(null)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: '92vw',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              marginBottom: 12,
+              gap: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: '#0e0b07',
+                  background: '#2ed573',
+                  padding: '2.5px 8px',
+                  borderRadius: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                  flexShrink: 0
+                }}>
+                  Points Status
+                </span>
+                <span style={{ color: '#fff', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {activeStatusPosterModal.caption || 'Status Milestone Poster'}
+                </span>
               </div>
-              <p className="lp-comp-name">{c.name}</p>
-              <div className="lp-comp-footer">
-                <span className="lp-comp-view">View Results <IconArrow /></span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadPoster(activeStatusPosterModal)}
+                  style={{
+                    background: '#2ed573',
+                    color: '#0e0b07',
+                    border: 'none',
+                    padding: '6px 14px',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 4px 12px rgba(46, 213, 115, 0.3)'
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download HD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveStatusPosterModal(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.12)',
+                    border: 'none',
+                    color: '#fff',
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    fontSize: 16,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ✕
+                </button>
               </div>
-            </button>
-          ))}
+            </div>
+
+            <img
+              src={activeStatusPosterModal.hd_url || activeStatusPosterModal.thumb_url}
+              alt="Points Standing Status Poster"
+              style={{
+                maxWidth: '88vw',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: 12,
+                boxShadow: '0 15px 50px rgba(0,0,0,0.8)',
+                border: '1px solid rgba(255,255,255,0.15)'
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

@@ -54,6 +54,9 @@ export default function AnnouncerFlowSection() {
   const [sortReadyByTeam, setSortReadyByTeam] = useState('')
   const [searchReady, setSearchReady] = useState('')
   const [confirmModal, setConfirmModal] = useState(null)
+  const [milestonePosters, setMilestonePosters] = useState({})
+  const [uploadingMilestone, setUploadingMilestone] = useState(null)
+  const [previewPoster, setPreviewPoster] = useState(null)
   const isSelfSavingRef = useRef(false)
   const trayItemsRef = useRef([])
 
@@ -69,6 +72,23 @@ export default function AnnouncerFlowSection() {
     let judgeDebounceTimer = null
 
     const ch = supabase.channel(`rt-announcer-flow-${rand}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, async () => {
+        try {
+          const { data: milestoneMedia } = await supabase
+            .from('gallery_media')
+            .select('id, type, caption, thumb_url, hd_url, milestone, created_at')
+            .eq('type', 'poster')
+            .not('milestone', 'is', null)
+
+          const posterMap = {}
+          ;(milestoneMedia || []).forEach(p => {
+            posterMap[p.milestone] = p
+          })
+          setMilestonePosters(posterMap)
+        } catch (e) {
+          console.error("Error refreshing milestone posters:", e)
+        }
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, async () => {
         try {
           const { data: pubResults } = await supabase
@@ -159,22 +179,30 @@ export default function AnnouncerFlowSection() {
       setSuspenseActive(activeSetting ? activeSetting.value === 'true' : true)
       setRevealedMilestone(parseInt(revealedSetting?.value || '0', 10))
 
-      // 3. Fetch Competitions, Judge Results, Reports, Placements, Grades, Results
+      // 3. Fetch Competitions, Judge Results, Reports, Placements, Grades, Results, Milestone Posters
       const [
         { data: comps },
         { data: judgeRes },
         { data: reports },
         { data: placements },
         { data: grades },
-        { data: pubResults }
+        { data: pubResults },
+        { data: milestoneMedia }
       ] = await Promise.all([
         supabase.from('competitions').select('*, categories(name)').order('name'),
         supabase.from('judge_results').select('competition_id, judge_id, code_letter, points_raw, grade'),
         supabase.from('competition_reports').select('competition_id, code_letter, participant_id, participants(id, name, team_id)'),
         supabase.from('placement_points').select('*'),
         supabase.from('point_settings').select('*'),
-        supabase.from('competition_results').select('competition_id, participant_id, placement_points, grade_points, published, participants(team_id)')
+        supabase.from('competition_results').select('competition_id, participant_id, placement_points, grade_points, published, participants(team_id)'),
+        supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone, created_at').eq('type', 'poster').not('milestone', 'is', null)
       ])
+
+      const posterMap = {}
+      ;(milestoneMedia || []).forEach(p => {
+        if (p.milestone) posterMap[p.milestone] = p
+      })
+      setMilestonePosters(posterMap)
 
       const judgedSet = new Set((judgeRes || []).map(r => r.competition_id))
       const publishedMap = {}
@@ -682,6 +710,141 @@ export default function AnnouncerFlowSection() {
     setTrayItems([])
   }
 
+  // ── Milestone Poster Image Compressor & Uploader ──
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          // Full / HD resolution canvas
+          const fullCanvas = document.createElement('canvas')
+          fullCanvas.width = img.width
+          fullCanvas.height = img.height
+          const ctxFull = fullCanvas.getContext('2d')
+          ctxFull.drawImage(img, 0, 0)
+          const fullUrl = fullCanvas.toDataURL('image/jpeg', 0.92)
+
+          // Thumbnail canvas (max 800px)
+          const thumbCanvas = document.createElement('canvas')
+          const maxDim = 800
+          let tw = img.width
+          let th = img.height
+          if (tw > th) {
+            if (tw > maxDim) {
+              th = Math.round((th * maxDim) / tw)
+              tw = maxDim
+            }
+          } else {
+            if (th > maxDim) {
+              tw = Math.round((tw * maxDim) / th)
+              th = maxDim
+            }
+          }
+          thumbCanvas.width = tw
+          thumbCanvas.height = th
+          const ctxThumb = thumbCanvas.getContext('2d')
+          ctxThumb.imageSmoothingEnabled = true
+          ctxThumb.imageSmoothingQuality = 'high'
+          ctxThumb.drawImage(img, 0, 0, tw, th)
+          const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.85)
+
+          resolve({ fullUrl, thumbUrl })
+        }
+        img.onerror = reject
+        img.src = e.target.result
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const dataURLtoBlob = (url) => {
+    const [header, data] = url.split(',')
+    const mime = header.match(/:(.*?);/)[1]
+    const binary = atob(data)
+    const array = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      array[i] = binary.charCodeAt(i)
+    }
+    return new Blob([array], { type: mime })
+  }
+
+  async function handleUploadMilestonePoster(milestone, file) {
+    if (!file || !milestone) return
+    setUploadingMilestone(milestone)
+    try {
+      const { fullUrl, thumbUrl } = await compressImage(file)
+      const fid = `status-milestone-${milestone}-${Date.now()}`
+
+      const blobHd = dataURLtoBlob(fullUrl)
+      const fpHd = `hd/${fid}.jpg`
+      const resHd = await supabase.storage.from('event-media').upload(fpHd, blobHd, { contentType: 'image/jpeg', upsert: true })
+      const hdUrl = resHd.error ? fullUrl : supabase.storage.from('event-media').getPublicUrl(fpHd).data.publicUrl
+
+      const blobTh = dataURLtoBlob(thumbUrl)
+      const fpTh = `thumbs/${fid}.jpg`
+      const resTh = await supabase.storage.from('event-media').upload(fpTh, blobTh, { contentType: 'image/jpeg', upsert: true })
+      const thUrl = resTh.error ? thumbUrl : supabase.storage.from('event-media').getPublicUrl(fpTh).data.publicUrl
+
+      // Delete previous poster for this milestone
+      await supabase.from('gallery_media').delete().eq('type', 'poster').eq('milestone', milestone)
+
+      // Insert new milestone poster row
+      const { error } = await supabase.from('gallery_media').insert([{
+        id: fid,
+        type: 'poster',
+        caption: `Points Standing Status (after Result #${milestone})`,
+        milestone: milestone,
+        thumb_url: thUrl,
+        hd_url: hdUrl,
+        uploader_name: 'Admin'
+      }])
+
+      if (error) throw error
+
+      setMilestonePosters(prev => ({
+        ...prev,
+        [milestone]: {
+          id: fid,
+          type: 'poster',
+          caption: `Points Standing Status (after Result #${milestone})`,
+          milestone: milestone,
+          thumb_url: thUrl,
+          hd_url: hdUrl
+        }
+      }))
+
+      setSuccess(`✓ Status poster for milestone #${milestone} uploaded!`)
+      setTimeout(() => setSuccess(''), 3500)
+    } catch (err) {
+      console.error("Error uploading milestone poster:", err)
+      alert("Failed to upload poster: " + (err.message || err))
+    } finally {
+      setUploadingMilestone(null)
+    }
+  }
+
+  async function handleDeleteMilestonePoster(milestone, posterId) {
+    if (!window.confirm(`Are you sure you want to delete the status poster for milestone #${milestone}?`)) return
+    try {
+      if (posterId) {
+        await supabase.from('gallery_media').delete().eq('id', posterId)
+      } else {
+        await supabase.from('gallery_media').delete().eq('type', 'poster').eq('milestone', milestone)
+      }
+      setMilestonePosters(prev => {
+        const copy = { ...prev }
+        delete copy[milestone]
+        return copy
+      })
+      setSuccess(`Status poster for milestone #${milestone} removed.`)
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      console.error("Error deleting milestone poster:", err)
+    }
+  }
+
   if (fetching) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '70vh' }}>
@@ -1092,6 +1255,160 @@ export default function AnnouncerFlowSection() {
                           </span>
                         ))}
                       </div>
+
+                      {/* ── Status Poster Attachment Widget ── */}
+                      {item.compCountAtDivider > 0 && (
+                        <div>
+                          {milestonePosters[item.compCountAtDivider] ? (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 12,
+                              background: 'rgba(0, 0, 0, 0.45)',
+                              border: '1px solid rgba(46, 213, 115, 0.3)',
+                              borderRadius: 8,
+                              padding: '8px 12px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                <img
+                                  src={milestonePosters[item.compCountAtDivider].thumb_url}
+                                  alt="Milestone Poster"
+                                  style={{
+                                    width: 38,
+                                    height: 50,
+                                    objectFit: 'cover',
+                                    borderRadius: 4,
+                                    border: '1px solid rgba(255,255,255,0.2)',
+                                    cursor: 'pointer'
+                                  }}
+                                  onClick={() => setPreviewPoster(milestonePosters[item.compCountAtDivider])}
+                                  title="Click to view poster full-screen"
+                                />
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 800,
+                                      color: '#2ed573',
+                                      background: 'rgba(46, 213, 115, 0.15)',
+                                      padding: '1.5px 6px',
+                                      borderRadius: 4,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: 0.5
+                                    }}>
+                                      ✓ Poster Attached
+                                    </span>
+                                  </div>
+                                  <p style={{ margin: '2px 0 0 0', fontSize: 11, color: '#ddd', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {milestonePosters[item.compCountAtDivider].caption}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewPoster(milestonePosters[item.compCountAtDivider])}
+                                  style={{
+                                    background: 'rgba(79, 156, 249, 0.15)',
+                                    border: '1px solid rgba(79, 156, 249, 0.35)',
+                                    color: 'var(--accent-light, #4f9cf9)',
+                                    fontSize: 10.5,
+                                    fontWeight: 700,
+                                    padding: '4px 8px',
+                                    borderRadius: 5,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  View
+                                </button>
+                                <label style={{
+                                  background: 'rgba(255,255,255,0.08)',
+                                  border: '1px solid rgba(255,255,255,0.18)',
+                                  color: '#fff',
+                                  fontSize: 10.5,
+                                  fontWeight: 600,
+                                  padding: '4px 8px',
+                                  borderRadius: 5,
+                                  cursor: 'pointer'
+                                }}>
+                                  Replace
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => {
+                                      if (e.target.files?.[0]) {
+                                        handleUploadMilestonePoster(item.compCountAtDivider, e.target.files[0])
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMilestonePoster(item.compCountAtDivider, milestonePosters[item.compCountAtDivider]?.id)}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    color: '#ef4444',
+                                    fontSize: 10.5,
+                                    fontWeight: 600,
+                                    padding: '4px 8px',
+                                    borderRadius: 5,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              background: 'rgba(255, 255, 255, 0.02)',
+                              border: '1px dashed rgba(255, 255, 255, 0.12)',
+                              borderRadius: 8,
+                              padding: '7px 12px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 13 }}>🖼️</span>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  No status poster attached for after #{item.compCountAtDivider}
+                                </span>
+                              </div>
+                              <label style={{
+                                background: 'rgba(247, 201, 72, 0.12)',
+                                border: '1px solid rgba(247, 201, 72, 0.3)',
+                                color: '#f7c948',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: '4px 10px',
+                                borderRadius: 6,
+                                cursor: uploadingMilestone === item.compCountAtDivider ? 'wait' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5
+                              }}>
+                                {uploadingMilestone === item.compCountAtDivider ? 'Uploading...' : '+ Upload Poster'}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  disabled={uploadingMilestone === item.compCountAtDivider}
+                                  style={{ display: 'none' }}
+                                  onChange={(e) => {
+                                    if (e.target.files?.[0]) {
+                                      handleUploadMilestonePoster(item.compCountAtDivider, e.target.files[0])
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 }
@@ -1395,6 +1712,87 @@ export default function AnnouncerFlowSection() {
                 {confirmModal.confirmText || 'Confirm'}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Status Poster Preview Modal ── */}
+      {previewPoster && createPortal(
+        <div
+          className="dash-modal-overlay"
+          style={{ background: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(8px)', zIndex: 99999 }}
+          onClick={() => setPreviewPoster(null)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10 }}>
+              <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>
+                {previewPoster.caption || 'Status Poster Preview'}
+              </span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <a
+                  href={previewPoster.hd_url || previewPoster.thumb_url}
+                  download={`status-poster-${previewPoster.milestone || 'milestone'}.jpg`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    background: 'var(--accent-light, #4f9cf9)',
+                    color: '#0e0b07',
+                    padding: '5px 12px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  Download HD
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPoster(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#fff',
+                    borderRadius: '50%',
+                    width: 28,
+                    height: 28,
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <img
+              src={previewPoster.hd_url || previewPoster.thumb_url}
+              alt="Status Poster Full Preview"
+              style={{
+                maxWidth: '85vw',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: 8,
+                boxShadow: '0 10px 40px rgba(0,0,0,0.8)',
+                border: '1px solid rgba(255,255,255,0.15)'
+              }}
+            />
           </div>
         </div>,
         document.body

@@ -95,6 +95,7 @@ export default function MediaDashboard() {
   const [caption, setCaption] = useState('')
   const [link, setLink] = useState('')
   const [compTag, setCompTag] = useState('')
+  const [milestoneTag, setMilestoneTag] = useState('')
   const [uploading, setUploading] = useState(false)
   const [overlays, setOverlays] = useState({ overlay43: '', overlay34: '' })
   const [applyOverlay, setApplyOverlay] = useState(true)
@@ -504,15 +505,33 @@ export default function MediaDashboard() {
           const resTh = await supabase.storage.from('event-media').upload(fpTh, blobTh, { contentType: 'image/jpeg' })
           if (!resTh.error) thUrl = supabase.storage.from('event-media').getPublicUrl(fpTh).data.publicUrl
           
-          rows.push({ id: fid, type: mediaType, caption: caption.trim(), thumb_url: thUrl, hd_url: hdUrl, competition_id: compTag || null, uploader_name: user?.name || user?.username || 'Media' })
+          rows.push({
+            id: fid,
+            type: mediaType,
+            caption: caption.trim(),
+            thumb_url: thUrl,
+            hd_url: hdUrl,
+            competition_id: compTag || null,
+            milestone: (mediaType === 'poster' && milestoneTag) ? parseInt(milestoneTag, 10) : null,
+            uploader_name: user?.name || user?.username || 'Media'
+          })
         }
       } else {
-        rows = [{ id: Math.random().toString(36).slice(2, 9) + '-' + Date.now(), type: mediaType, caption: caption.trim(), thumb_url: link.trim(), hd_url: link.trim(), competition_id: compTag || null, uploader_name: user?.name || user?.username || 'Media' }]
+        rows = [{
+          id: Math.random().toString(36).slice(2, 9) + '-' + Date.now(),
+          type: mediaType,
+          caption: caption.trim(),
+          thumb_url: link.trim(),
+          hd_url: link.trim(),
+          competition_id: compTag || null,
+          milestone: null,
+          uploader_name: user?.name || user?.username || 'Media'
+        }]
       }
       
       const { error } = await supabase.from('gallery_media').insert(rows)
       if (error) throw error
-      setCaption(''); setLink(''); setEditFiles([]); setCompTag(''); setActiveEditId(null)
+      setCaption(''); setLink(''); setEditFiles([]); setCompTag(''); setMilestoneTag(''); setActiveEditId(null)
       fetchMedia()
       showToast(`${rows.length} item${rows.length > 1 ? 's' : ''} published.`)
       
@@ -1050,6 +1069,29 @@ export default function MediaDashboard() {
                     <div className="med-field">
                       <label className="med-label">YouTube URL</label>
                       <input type="url" className="med-input" placeholder="https://youtube.com/…" value={link} onChange={e => setLink(e.target.value)} required />
+                    </div>
+                  )}
+
+                  {mediaType === 'poster' && (
+                    <div className="med-field">
+                      <label className="med-label">Link to Points Standing Milestone (Optional)</label>
+                      <select
+                        className="med-input"
+                        value={milestoneTag}
+                        onChange={e => setMilestoneTag(e.target.value)}
+                        style={{ background: 'var(--bg-card, #1c2128)', color: '#fff', cursor: 'pointer' }}
+                      >
+                        <option value="">None (General Event Poster)</option>
+                        <option value="5">After Result #5</option>
+                        <option value="10">After Result #10</option>
+                        <option value="15">After Result #15</option>
+                        <option value="20">After Result #20</option>
+                        <option value="25">After Result #25</option>
+                        <option value="30">After Result #30</option>
+                        <option value="35">After Result #35</option>
+                        <option value="40">After Result #40</option>
+                        <option value="50">After Result #50</option>
+                      </select>
                     </div>
                   )}
 
