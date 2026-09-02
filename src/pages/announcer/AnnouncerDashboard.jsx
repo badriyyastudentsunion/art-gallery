@@ -290,18 +290,27 @@ export default function AnnouncerDashboard() {
           published_at: c.published_at || null,
         }))
 
+        // 1. Assign official announcement numbers to all published competitions (sorted by published_at ASC)
         const publishedSorted = mapped.filter(c => c.published && c.published_at)
           .sort((a, b) => new Date(a.published_at) - new Date(b.published_at))
+        
+        publishedSorted.forEach((c, idx) => {
+          c.announcementNumber = idx + 1
+        })
         const publishedCount = publishedSorted.length
 
+        // 2. Assign upcoming announcement numbers to pending competitions in sequence
+        const seqSet = new Set(seqCompIds)
+        let pendingSeqIdx = 0
+        seqCompIds.forEach(id => {
+          const item = mapped.find(c => c.id === id)
+          if (item && !item.published) {
+            item.announcementNumber = publishedCount + pendingSeqIdx + 1
+            pendingSeqIdx++
+          }
+        })
+
         if (seqCompIds.length > 0) {
-          const seqSet = new Set(seqCompIds)
-          seqCompIds.forEach((id, i) => {
-            const item = mapped.find(c => c.id === id)
-            if (item && !item.announcementNumber) {
-              item.announcementNumber = publishedCount + i + 1
-            }
-          })
           mapped.sort((a, b) => {
             const aInSeq = seqSet.has(a.id)
             const bInSeq = seqSet.has(b.id)
@@ -327,15 +336,9 @@ export default function AnnouncerDashboard() {
   async function openCompetition(comp, isInitial = true) {
     if (!comp.hasJudgeResults) return
 
-    // Strict Sequence Enforcement: Cannot announce ahead of the sequence
-    if (comp.isVirtual && comp.isSequenceLocked) {
+    // Strict Sequence Enforcement: Cannot announce ahead of the sequence or pending status dividers
+    if (!comp.published && comp.isSequenceLocked) {
       return
-    }
-    if (!comp.published && sequenceIds.length > 0 && sequenceIds.includes(comp.id)) {
-      const activeUnpublishedId = sequenceIds.find(id => competitions.some(c => c.id === id && !c.published))
-      if (activeUnpublishedId && activeUnpublishedId !== comp.id) {
-        return
-      }
     }
 
     setSelected(comp)
@@ -441,19 +444,60 @@ export default function AnnouncerDashboard() {
   }
 
   // Build pending and completed queues from rawSequence (including Status Dividers)
-  const pendingComps = []
-  const completedComps = competitions.filter(c => c.published)
-  const publishedCount = completedComps.length
+  const publishedCompsOnly = competitions.filter(c => c.published && !c.isVirtual)
+    .sort((a, b) => {
+      if (!a.published_at) return 1
+      if (!b.published_at) return -1
+      return new Date(a.published_at) - new Date(b.published_at)
+    })
+    .map((c, idx) => ({ ...c, announcementNumber: idx + 1 }))
 
-  let runningCompNum = 0
+  const publishedCount = publishedCompsOnly.length
+  const completedComps = [...publishedCompsOnly]
+  const pendingComps = []
+
+  // 1. Find the exact first uncompleted/unrevealed item in rawSequence
+  let activeSequenceItem = null
+  let seqCompCount = 0
+
+  for (const item of rawSequence) {
+    const isDivider = (typeof item === 'object' && item.isDivider) || (typeof item === 'string' && item.startsWith('__divider'))
+    if (isDivider) {
+      const milestone = seqCompCount
+      const isRevealed = revealedMilestone >= milestone && milestone > 0
+      if (!isRevealed) {
+        activeSequenceItem = {
+          id: typeof item === 'object' && item.id ? item.id : 'divider',
+          isDivider: true,
+          milestone
+        }
+        break
+      }
+    } else {
+      seqCompCount++
+      const compId = typeof item === 'string' ? item : item.id
+      const comp = competitions.find(c => c.id === compId)
+      if (comp && !comp.published) {
+        activeSequenceItem = {
+          id: compId,
+          isDivider: false
+        }
+        break
+      }
+    }
+  }
+
+  // 2. Build queues with strict sequence lock flags
+  let runningPendingIndex = 0
   if (rawSequence.length > 0) {
+    let runningSequenceCount = 0
     rawSequence.forEach((item, idx) => {
       const isDivider = (typeof item === 'object' && item.isDivider) || (typeof item === 'string' && item.startsWith('__divider'))
       if (isDivider) {
-        const milestoneLimit = runningCompNum
-        const isRevealed = revealedMilestone >= milestoneLimit
-        const isReady = publishedCount >= milestoneLimit && !isRevealed
-        const isLocked = publishedCount < milestoneLimit
+        const milestoneLimit = runningSequenceCount
+        const isRevealed = revealedMilestone >= milestoneLimit && milestoneLimit > 0
+        const isReady = publishedCount >= milestoneLimit && !isRevealed && milestoneLimit > 0
+        const isLocked = !isReady
 
         const dividerCard = {
           id: typeof item === 'object' && item.id ? item.id : `divider-${idx}`,
@@ -468,25 +512,40 @@ export default function AnnouncerDashboard() {
 
         if (isRevealed) {
           if (!completedComps.some(c => c.id === dividerCard.id)) {
-            completedComps.push(dividerCard)
+            const insertIdx = completedComps.findIndex(c => !c.isVirtual && c.announcementNumber === milestoneLimit)
+            if (insertIdx !== -1) {
+              completedComps.splice(insertIdx + 1, 0, dividerCard)
+            } else {
+              completedComps.push(dividerCard)
+            }
           }
         } else {
           pendingComps.push(dividerCard)
         }
       } else {
-        runningCompNum++
+        runningSequenceCount++
         const compId = typeof item === 'string' ? item : item.id
         const comp = competitions.find(c => c.id === compId)
         if (comp && !comp.published) {
+          runningPendingIndex++
+          // A competition is sequence locked if it is NOT the activeSequenceItem (e.g. if a prior divider or comp is pending)
+          const isSequenceLocked = activeSequenceItem ? (activeSequenceItem.isDivider || activeSequenceItem.id !== comp.id) : false
           pendingComps.push({
             ...comp,
-            announcementNumber: runningCompNum
+            announcementNumber: publishedCount + runningPendingIndex,
+            isSequenceLocked
           })
         }
       }
     })
   } else {
-    competitions.filter(c => !c.published && c.hasJudgeResults).forEach(c => pendingComps.push(c))
+    competitions.filter(c => !c.published && c.hasJudgeResults).forEach((c, idx) => {
+      pendingComps.push({
+        ...c,
+        announcementNumber: publishedCount + idx + 1,
+        isSequenceLocked: false
+      })
+    })
   }
 
   const displayedComps = anncTab === 'pending' ? pendingComps : completedComps

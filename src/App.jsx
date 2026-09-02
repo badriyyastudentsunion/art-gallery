@@ -15,6 +15,7 @@ import AwardDashboard from './pages/award/AwardDashboard'
 import PWAInstallPrompt from './components/PWAInstallPrompt'
 import MaintenanceScreen from './components/MaintenanceScreen'
 import LogoLoader from './components/LogoLoader'
+import VersionUpdateNotifier from './components/VersionUpdateNotifier'
 
 function AppRoutes() {
   const { user } = useAuth()
@@ -122,6 +123,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
+      <VersionUpdateNotifier />
       <AppRoutes />
     </AuthProvider>
   )

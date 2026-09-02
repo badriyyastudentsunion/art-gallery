@@ -255,13 +255,22 @@ export default function TeamsSection({ navigateTo }) {
     setFetching(false)
   }
 
-  function startEdit(team) {
+  async function startEdit(team) {
     setEditing(team)
-    setName(team.name)
-    setPassword(team.password)
+    setName(team.name || '')
+    setPassword(team.password || '')
     setColor(teamColors[team.id] || team.color || '')
     setError(''); setSuccess('')
     setPanelOpen(true)
+
+    // Fallback if team.password was missing from stale cache
+    if (!team.password && team.id) {
+      const { data } = await supabase.from('teams').select('password').eq('id', team.id).maybeSingle()
+      if (data?.password) {
+        setPassword(data.password)
+        setTeams(prev => prev.map(t => t.id === team.id ? { ...t, password: data.password } : t))
+      }
+    }
   }
 
   function cancelEdit() {

@@ -1,6 +1,7 @@
 // src/pages/admin/sections/AppSettingsSection.jsx
 import { useState, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { APP_VERSION } from '../../../version'
 import './competitions.css'
 
 const IconCheck = () => (
@@ -135,12 +136,116 @@ export default function AppSettingsSection() {
     handleSave(updated)
   }
 
+  const broadcastClientUpdate = async (target = 'all', forceImmediate = false) => {
+    setSaving(true)
+    try {
+      const payload = {
+        version: APP_VERSION,
+        timestamp: Date.now(),
+        target, // 'public' | 'all'
+        forceImmediate
+      }
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({ key: 'app_client_broadcast', value: JSON.stringify(payload) })
+
+      if (error) throw error
+      showToast(target === 'public' ? '⚡ Public site refresh triggered!' : '📢 Update broadcasted to all portals!')
+    } catch (err) {
+      console.error(err)
+      showToast(`Broadcast failed: ${err.message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="section-root" style={{ gap: 20 }}>
       <div className="section-list">
         {/* Top Header */}
         <div className="sect-header" style={{ marginBottom: 16 }}>
           <h2 className="sect-title">App Maintenance & Access Settings</h2>
+        </div>
+
+        {/* Live Client Sync & Version Updates */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(79, 156, 249, 0.08) 0%, rgba(13, 17, 23, 0.8) 100%)',
+          border: '1px solid rgba(79, 156, 249, 0.25)',
+          borderRadius: 14,
+          padding: '16px 20px',
+          marginBottom: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>🚀</span>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff' }}>
+                  Live Client Sync & Version Updates
+                </h3>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  background: 'rgba(79, 156, 249, 0.15)',
+                  color: 'var(--accent-light, #4f9cf9)',
+                  border: '1px solid rgba(79, 156, 249, 0.3)'
+                }}>
+                  {APP_VERSION}
+                </span>
+              </div>
+              <p style={{ margin: '4px 0 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                When you deploy changes, sync all open visitor browsers and active staff portals with 1 click.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <button
+              type="button"
+              onClick={() => broadcastClientUpdate('public', true)}
+              disabled={saving}
+              style={{
+                background: 'rgba(79, 156, 249, 0.12)',
+                border: '1px solid rgba(79, 156, 249, 0.3)',
+                color: 'var(--accent-light, #4f9cf9)',
+                padding: '7px 14px',
+                borderRadius: 6,
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              🔄 Refresh Public Viewers
+            </button>
+
+            <button
+              type="button"
+              onClick={() => broadcastClientUpdate('all', false)}
+              disabled={saving}
+              style={{
+                background: 'rgba(247, 201, 72, 0.12)',
+                border: '1px solid rgba(247, 201, 72, 0.3)',
+                color: '#f7c948',
+                padding: '7px 14px',
+                borderRadius: 6,
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              📢 Notify All Portals (Staff & Judges)
+            </button>
+          </div>
         </div>
 
         {/* Master Maintenance Switch Hero Banner */}

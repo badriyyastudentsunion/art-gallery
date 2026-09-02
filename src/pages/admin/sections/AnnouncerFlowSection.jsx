@@ -46,6 +46,8 @@ export default function AnnouncerFlowSection() {
   const [baselinePoints, setBaselinePoints] = useState({})
   
   const [suspenseActive, setSuspenseActive] = useState(true)
+  const [revealedMilestone, setRevealedMilestone] = useState(0)
+  const [officialNumberMap, setOfficialNumberMap] = useState({})
   const [fetching, setFetching] = useState(true)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
@@ -54,10 +56,24 @@ export default function AnnouncerFlowSection() {
   const [confirmModal, setConfirmModal] = useState(null)
 
   useEffect(() => {
-    fetchInitialData()
+    fetchInitialData(true)
+
+    // Realtime subscriptions for live stage announcements and settings
+    const rand = Math.random().toString(36).substring(2, 7)
+    const ch = supabase.channel(`rt-announcer-flow-${rand}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, () => fetchInitialData(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, () => fetchInitialData(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, () => fetchInitialData(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_reports' }, () => fetchInitialData(false))
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(ch)
+    }
   }, [])
 
-  async function fetchInitialData() {
+  async function fetchInitialData(isInitial = false) {
+    if (isInitial && allComps.length === 0) setFetching(true)
     try {
       // 1. Fetch Teams
       const { data: teamsData } = await supabase.from('teams').select('id, name').order('name')
@@ -67,12 +83,14 @@ export default function AnnouncerFlowSection() {
       const { data: settings } = await supabase
         .from('app_settings')
         .select('key, value')
-        .in('key', ['leaderboard_suspense_active', 'announcer_sequence'])
+        .in('key', ['leaderboard_suspense_active', 'announcer_sequence', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones'])
       
       const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
       const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
+      const revealedSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
 
       setSuspenseActive(activeSetting ? activeSetting.value === 'true' : true)
+      setRevealedMilestone(parseInt(revealedSetting?.value || '0', 10))
 
       // 3. Fetch Competitions, Judge Results, Reports, Placements, Grades, Results
       const [
@@ -93,9 +111,30 @@ export default function AnnouncerFlowSection() {
 
       const judgedSet = new Set((judgeRes || []).map(r => r.competition_id))
       const publishedMap = {}
+      const publishedCompsMap = {}
+      const uniquePubComps = []
       ;(pubResults || []).forEach(r => {
-        if (r.published) publishedMap[r.competition_id] = true
+        if (r.published) {
+          publishedMap[r.competition_id] = true
+          if (!publishedCompsMap[r.competition_id]) {
+            publishedCompsMap[r.competition_id] = {
+              id: r.competition_id,
+              published_at: r.published_at
+            }
+            uniquePubComps.push(publishedCompsMap[r.competition_id])
+          }
+        }
       })
+      uniquePubComps.sort((a, b) => {
+        if (!a.published_at) return 1
+        if (!b.published_at) return -1
+        return new Date(a.published_at) - new Date(b.published_at)
+      })
+      const numMap = {}
+      uniquePubComps.forEach((c, idx) => {
+        numMap[c.id] = idx + 1
+      })
+      setOfficialNumberMap(numMap)
 
       // Fast Indexing using Hash Maps
       const judgeResByComp = {}
@@ -177,6 +216,8 @@ export default function AnnouncerFlowSection() {
       const enhancedComps = (comps || []).map(c => ({
         ...c,
         published: !!publishedMap[c.id],
+        published_at: publishedCompsMap[c.id]?.published_at || null,
+        officialNumber: numMap[c.id] || null,
         isJudged: judgedSet.has(c.id),
         simulatedPoints: compPointsMap[c.id] || []
       }))
@@ -193,15 +234,15 @@ export default function AnnouncerFlowSection() {
         console.error("Error parsing announcer sequence setting:", err)
       }
 
-      // Published competitions sorted by announcement/published time
+      // Published competitions sorted strictly by official announcement / published time
       const publishedComps = enhancedComps
         .filter(c => c.published)
-        .sort((a, b) => new Date(a.published_at || 0) - new Date(b.published_at || 0))
+        .sort((a, b) => (a.officialNumber || 9999) - (b.officialNumber || 9999))
 
       const seqCompIds = new Set()
       const initialTray = []
 
-      // Place already published competitions at the top
+      // Place already published competitions at the top in exact Result Number order
       publishedComps.forEach(c => {
         initialTray.push({ ...c, isDivider: false, isPublished: true })
         seqCompIds.add(c.id)
@@ -250,10 +291,13 @@ export default function AnnouncerFlowSection() {
     }
   }
 
-  // ── Calculate cumulative standings at every step of the tray ──
+  // ── Calculate cumulative standings and completion status at every step of the tray ──
   const trayWithStandings = useMemo(() => {
     let runningPoints = { ...baselinePoints }
     let compCount = 0
+    let publishedCount = 0
+    let pendingCount = 0
+    const totalPublished = Object.keys(officialNumberMap).length
 
     const teamMap = {}
     teams.forEach(t => { teamMap[t.id] = t.name })
@@ -264,23 +308,70 @@ export default function AnnouncerFlowSection() {
           .map(([id, pts]) => ({ id, name: teamMap[id] || '—', points: pts }))
           .sort((a, b) => b.points - a.points)
 
+        const milestone = compCount
+        const isRevealed = revealedMilestone >= milestone && milestone > 0
+        const isReady = publishedCount >= milestone && !isRevealed && milestone > 0
+        const isLocked = publishedCount < milestone || milestone === 0
+
         return {
           ...item,
-          compCountAtDivider: compCount,
+          compCountAtDivider: milestone,
+          publishedCountBeforeDivider: publishedCount,
+          isRevealed,
+          isReady,
+          isLocked,
           standings
         }
       } else {
         compCount++
+        const isPub = item.isPublished || item.published
+        let displayNumber = 0
+        if (isPub) {
+          publishedCount++
+          displayNumber = officialNumberMap[item.id] || compCount
+        } else {
+          pendingCount++
+          displayNumber = totalPublished + pendingCount
+        }
         ;(item.simulatedPoints || []).forEach(p => {
           runningPoints[p.teamId] = (runningPoints[p.teamId] || 0) + p.points
         })
         return {
           ...item,
-          runningCompIndex: compCount
+          runningCompIndex: compCount,
+          displayNumber
         }
       }
     })
-  }, [trayItems, baselinePoints, teams])
+  }, [trayItems, baselinePoints, teams, revealedMilestone, officialNumberMap])
+
+  // Force reveal status divider to public
+  async function handleForceRevealDivider(dividerMilestone) {
+    if (!dividerMilestone) return
+    try {
+      await supabase.from('app_settings').upsert({
+        key: 'leaderboard_revealed_milestone',
+        value: String(dividerMilestone)
+      })
+      setRevealedMilestone(dividerMilestone)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // Revert status divider to hide or step back
+  async function handleRevertDivider(dividerMilestone) {
+    const nextVal = Math.max(0, dividerMilestone - 1)
+    try {
+      await supabase.from('app_settings').upsert({
+        key: 'leaderboard_revealed_milestone',
+        value: String(nextVal)
+      })
+      setRevealedMilestone(nextVal)
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   // Ready competitions filtered and sorted
   const sortedReadyComps = useMemo(() => {
@@ -414,6 +505,17 @@ export default function AnnouncerFlowSection() {
     newTray[index] = newTray[targetIdx]
     newTray[targetIdx] = temp
     setTrayItems(newTray)
+  }
+
+  // Sort Tray by Result Number (published competitions ordered #1..#N, followed by dividers and pending queue)
+  function sortTrayByResultNumber() {
+    setTrayItems(prev => {
+      const pubItems = prev.filter(item => !item.isDivider && (item.isPublished || item.published))
+        .sort((a, b) => (officialNumberMap[a.id] || 9999) - (officialNumberMap[b.id] || 9999))
+      
+      const otherItems = prev.filter(item => item.isDivider || !(item.isPublished || item.published))
+      return [...pubItems, ...otherItems]
+    })
   }
 
   // Clear Tray with confirmation
@@ -658,31 +760,104 @@ export default function AnnouncerFlowSection() {
                 
                 // ── CASE A: STATUS DIVIDER CARD ──
                 if (item.isDivider) {
+                  const isRevealed = item.isRevealed
+                  const isReady = item.isReady
+                  const isLocked = item.isLocked
+
                   return (
                     <div key={item.id} style={{
-                      background: 'linear-gradient(135deg, rgba(247, 201, 72, 0.08) 0%, rgba(79, 156, 249, 0.05) 100%)',
-                      border: '1.5px dashed rgba(247, 201, 72, 0.4)',
+                      background: isRevealed
+                        ? 'linear-gradient(135deg, rgba(46, 213, 115, 0.12) 0%, rgba(13, 17, 23, 0.85) 100%)'
+                        : isReady
+                        ? 'linear-gradient(135deg, rgba(247, 201, 72, 0.14) 0%, rgba(13, 17, 23, 0.85) 100%)'
+                        : 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(13, 17, 23, 0.85) 100%)',
+                      border: isRevealed
+                        ? '1.5px solid #2ed573'
+                        : isReady
+                        ? '1.5px dashed #f7c948'
+                        : '1px dashed rgba(255, 255, 255, 0.18)',
                       borderRadius: 10,
-                      padding: '12px 14px',
+                      padding: '14px 16px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 8
+                      gap: 10,
+                      boxShadow: isRevealed ? '0 0 15px rgba(46, 213, 115, 0.1)' : isReady ? '0 0 15px rgba(247, 201, 72, 0.1)' : 'none'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 800, color: '#0e0b07',
-                            background: '#f7c948', padding: '2px 8px', borderRadius: 12,
-                            textTransform: 'uppercase', letterSpacing: 0.5
-                          }}>
-                            STATUS DIVIDER
-                          </span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                            Standings after {item.compCountAtDivider} Competitions
+                      {/* Top Header */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          {isRevealed ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 800, color: '#0e0b07',
+                              background: '#2ed573', padding: '2.5px 9px', borderRadius: 12,
+                              textTransform: 'uppercase', letterSpacing: 0.5, display: 'inline-flex', alignItems: 'center', gap: 4
+                            }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0e0b07' }} />
+                              ✓ REVEALED TO PUBLIC
+                            </span>
+                          ) : isReady ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 800, color: '#0e0b07',
+                              background: '#f7c948', padding: '2.5px 9px', borderRadius: 12,
+                              textTransform: 'uppercase', letterSpacing: 0.5, display: 'inline-flex', alignItems: 'center', gap: 4
+                            }}>
+                              ⚡ READY TO ANNOUNCE
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
+                              background: 'rgba(255,255,255,0.08)', padding: '2.5px 8px', borderRadius: 12,
+                              textTransform: 'uppercase', letterSpacing: 0.5
+                            }}>
+                              ⏳ QUEUED ({item.publishedCountBeforeDivider}/{item.compCountAtDivider})
+                            </span>
+                          )}
+
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
+                            Standings after {item.compCountAtDivider} {item.compCountAtDivider === 1 ? 'Competition' : 'Competitions'}
                           </span>
                         </div>
 
-                        <div style={{ display: 'flex', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {/* Admin Quick Action Button */}
+                          {isReady && (
+                            <button
+                              type="button"
+                              onClick={() => handleForceRevealDivider(item.compCountAtDivider)}
+                              style={{
+                                background: '#f7c948',
+                                color: '#0e0b07',
+                                border: 'none',
+                                padding: '4px 10px',
+                                borderRadius: 6,
+                                fontSize: 11,
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              📢 Release Now
+                            </button>
+                          )}
+                          {isRevealed && (
+                            <button
+                              type="button"
+                              onClick={() => handleRevertDivider(item.compCountAtDivider)}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                color: '#ef4444',
+                                padding: '3px 8px',
+                                borderRadius: 6,
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                              title="Revert status to previous milestone"
+                            >
+                              ↺ Revert
+                            </button>
+                          )}
+
                           <button
                             className="btn-icon"
                             onClick={() => moveInTray(idx, 'up')}
@@ -712,18 +887,30 @@ export default function AnnouncerFlowSection() {
                         </div>
                       </div>
 
+                      {/* Mini progress bar if locked */}
+                      {isLocked && item.compCountAtDivider > 0 && (
+                        <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${Math.min(100, (item.publishedCountBeforeDivider / item.compCountAtDivider) * 100)}%`,
+                            height: '100%',
+                            background: '#60a5fa',
+                            borderRadius: 2
+                          }} />
+                        </div>
+                      )}
+
                       {/* Standings preview strip */}
                       <div style={{
                         display: 'flex',
                         gap: 6,
                         flexWrap: 'wrap',
-                        background: 'rgba(0,0,0,0.2)',
-                        padding: '6px 10px',
+                        background: 'rgba(0,0,0,0.3)',
+                        padding: '7px 12px',
                         borderRadius: 6
                       }}>
                         {(item.standings || []).map((s, sIdx) => (
                           <span key={s.id} style={{
-                            fontSize: 11,
+                            fontSize: 11.5,
                             color: sIdx === 0 ? '#f7c948' : 'var(--text-secondary)',
                             fontWeight: sIdx === 0 ? 800 : 500
                           }}>
@@ -759,7 +946,7 @@ export default function AnnouncerFlowSection() {
                       flexShrink: 0,
                       letterSpacing: '-0.5px'
                     }}>
-                      #{String(item.runningCompIndex).padStart(2, '0')}
+                      #{String(item.displayNumber || item.runningCompIndex).padStart(2, '0')}
                     </span>
 
                     <div style={{ flex: 1, minWidth: 0 }}>

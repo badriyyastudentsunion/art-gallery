@@ -37,7 +37,11 @@ const IconMic = () => (
 
 export default function AnnouncersSection() {
   const [rows, setRows] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('cache_announcers') || '[]') } catch { return [] }
+    try {
+      const cached = JSON.parse(localStorage.getItem('cache_announcers') || '[]')
+      if (cached.length > 0 && !('password' in cached[0])) return []
+      return cached
+    } catch { return [] }
   })
   const [fetching, setFetching] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -82,11 +86,24 @@ export default function AnnouncersSection() {
     setFetching(false)
   }
 
-  function startEdit(row, e) {
+  async function startEdit(row, e) {
     e?.stopPropagation()
-    setEditing(row); setName(row.name); setUsername(row.username); setPassword(row.password)
-    setError(''); setSuccess('')
+    setEditing(row)
+    setName(row.name || '')
+    setUsername(row.username || '')
+    setPassword(row.password || '')
+    setError('')
+    setSuccess('')
     setPanelOpen(true)
+
+    // Fallback if row.password was missing from stale cache
+    if (!row.password && row.id) {
+      const { data } = await supabase.from('announcers').select('password').eq('id', row.id).maybeSingle()
+      if (data?.password) {
+        setPassword(data.password)
+        setRows(prev => prev.map(r => r.id === row.id ? { ...r, password: data.password } : r))
+      }
+    }
   }
 
   function cancelEdit() {
