@@ -301,47 +301,74 @@ export default function AnnouncerFlowSection() {
         console.error("Error parsing announcer sequence setting:", err)
       }
 
-      // Published competitions sorted strictly by official announcement / published time
+      // 1. Published competitions sorted strictly by official announcement time / Result Number
       const publishedComps = enhancedComps
         .filter(c => c.published)
         .sort((a, b) => (a.officialNumber || 9999) - (b.officialNumber || 9999))
 
+      // 2. Extract dividers and pending competitions from saved rawSequence
+      const rawDividers = []
+      const pendingSequenceComps = []
       const seqCompIds = new Set()
-      const initialTray = []
 
-      // If rawSequence exists, build initialTray respecting exact saved sequence order (dividers and comps alike)
       if (rawSequence && rawSequence.length > 0) {
+        let compCounter = 0
         rawSequence.forEach((item, idx) => {
           const isDivider = (typeof item === 'object' && item.isDivider) || (typeof item === 'string' && item.startsWith('__divider'))
           if (isDivider) {
-            initialTray.push({
+            rawDividers.push({
               id: typeof item === 'object' && item.id ? item.id : `divider-${idx}-${Date.now()}`,
               isDivider: true,
-              title: typeof item === 'object' && item.title ? item.title : 'Points Standing Status'
+              title: typeof item === 'object' && item.title ? item.title : 'Points Standing Status',
+              milestone: compCounter
             })
           } else {
+            compCounter++
             const compId = typeof item === 'string' ? item : item.id
-            if (!seqCompIds.has(compId)) {
-              const found = enhancedComps.find(c => c.id === compId)
-              if (found) {
-                initialTray.push({
-                  ...found,
-                  isDivider: false,
-                  isPublished: !!found.published
-                })
-                seqCompIds.add(compId)
-              }
+            const found = enhancedComps.find(c => c.id === compId)
+            if (found && !found.published && !seqCompIds.has(compId)) {
+              pendingSequenceComps.push(found)
+              seqCompIds.add(compId)
             }
           }
         })
       }
 
-      // Add any published competitions that were not yet in the sequence
+      // Ensure standard milestone 10 divider is present
+      if (!rawDividers.some(d => d.milestone === 10)) {
+        rawDividers.push({
+          id: 'divider-10',
+          isDivider: true,
+          title: 'Points Standing Status',
+          milestone: 10
+        })
+      }
+
+      // 3. Assemble initialTray: Published Comps (#1..#N) + Dividers + Pending Comps
+      const initialTray = []
+      let pCount = 0
+
+      // Add zero-milestone dividers if any
+      rawDividers.filter(d => d.milestone === 0).forEach(div => initialTray.push(div))
+
       publishedComps.forEach(c => {
-        if (!seqCompIds.has(c.id)) {
-          initialTray.push({ ...c, isDivider: false, isPublished: true })
-          seqCompIds.add(c.id)
-        }
+        pCount++
+        initialTray.push({ ...c, isDivider: false, isPublished: true })
+        seqCompIds.add(c.id)
+
+        // Insert dividers belonging after this published count
+        rawDividers.filter(d => d.milestone === pCount).forEach(div => {
+          initialTray.push(div)
+        })
+      })
+
+      // Add upcoming pending competitions and trailing dividers
+      pendingSequenceComps.forEach(c => {
+        pCount++
+        initialTray.push({ ...c, isDivider: false, isPublished: false })
+        rawDividers.filter(d => d.milestone === pCount).forEach(div => {
+          initialTray.push(div)
+        })
       })
 
       const currentReady = enhancedComps.filter(c => c.isJudged && !seqCompIds.has(c.id))
