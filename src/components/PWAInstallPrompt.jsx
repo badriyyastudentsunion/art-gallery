@@ -1,6 +1,19 @@
 // src/components/PWAInstallPrompt.jsx
 import { useState, useEffect } from 'react'
 
+export async function triggerGlobalPWAInstall() {
+  const prompt = window.deferredPWAInstallPrompt;
+  if (prompt) {
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') {
+      window.deferredPWAInstallPrompt = null;
+    }
+    return { success: true, outcome };
+  }
+  return { success: false };
+}
+
 export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showPrompt, setShowPrompt] = useState(false)
@@ -19,12 +32,27 @@ export default function PWAInstallPrompt() {
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIosDevice);
 
+    // If prompt was already captured at early page load in index.html
+    if (window.deferredPWAInstallPrompt) {
+      setDeferredPrompt(window.deferredPWAInstallPrompt);
+      setShowPrompt(true);
+    }
+
+    const handlePromptReady = () => {
+      if (window.deferredPWAInstallPrompt) {
+        setDeferredPrompt(window.deferredPWAInstallPrompt);
+        setShowPrompt(true);
+      }
+    };
+
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
+      window.deferredPWAInstallPrompt = e;
       setDeferredPrompt(e);
       setShowPrompt(true);
     };
 
+    window.addEventListener('pwa_prompt_ready', handlePromptReady);
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     // Show prompt after a small delay for iOS devices where beforeinstallprompt doesn't exist
@@ -35,6 +63,7 @@ export default function PWAInstallPrompt() {
     }, 1500);
 
     return () => {
+      window.removeEventListener('pwa_prompt_ready', handlePromptReady);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       clearTimeout(timer);
     };
@@ -48,6 +77,7 @@ export default function PWAInstallPrompt() {
         setShowPrompt(false);
       }
       setDeferredPrompt(null);
+      window.deferredPWAInstallPrompt = null;
     } else {
       alert("To install, tap your browser's menu (⋮ or Share) and select 'Add to Home Screen' or 'Install App'.");
     }
@@ -64,7 +94,7 @@ export default function PWAInstallPrompt() {
     <div
       style={{
         position: 'fixed',
-        bottom: '24px',
+        bottom: '84px',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 8000,

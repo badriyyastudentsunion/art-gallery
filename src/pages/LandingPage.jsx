@@ -3539,6 +3539,37 @@ function ParticipantProfileTab({ participant, registrations, loading, onClear, o
   const [compResults, setCompResults] = useState([])
   const [loadingCompResults, setLoadingCompResults] = useState(false)
 
+  // PWA installation state
+  const [isStandalone] = useState(() => {
+    return typeof window !== 'undefined' && (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true ||
+      document.referrer.includes('android-app://')
+    )
+  })
+  const [isIOS] = useState(() => {
+    return typeof window !== 'undefined' && /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase())
+  })
+  const [showInstallGuide, setShowInstallGuide] = useState(false)
+
+  async function handleInstallApp() {
+    const prompt = window.deferredPWAInstallPrompt
+    if (prompt) {
+      try {
+        prompt.prompt()
+        const { outcome } = await prompt.userChoice
+        if (outcome === 'accepted') {
+          window.deferredPWAInstallPrompt = null
+        }
+        return
+      } catch (err) {
+        console.warn('PWA prompt failed:', err)
+      }
+    }
+    // Fallback guide for iOS or browsers without direct prompt
+    setShowInstallGuide(true)
+  }
+
   // Fetch published status for all registered competitions
   useEffect(() => {
     if (!participant?.id || !registrations || registrations.length === 0) {
@@ -3793,6 +3824,68 @@ function ParticipantProfileTab({ participant, registrations, loading, onClear, o
             </div>
           </div>
 
+          {/* ── Ultra-Compact Single Install App Banner ── */}
+          {!isStandalone && (
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'center', padding: '0 16px', boxSizing: 'border-box' }}>
+              <div
+                onClick={handleInstallApp}
+                style={{
+                  margin: '12px 0 4px 0',
+                  maxWidth: 420,
+                  width: '100%',
+                  padding: '8px 12px 8px 14px',
+                  background: 'linear-gradient(135deg, rgba(79, 156, 249, 0.1) 0%, rgba(247, 201, 72, 0.04) 100%)',
+                  border: '1px solid rgba(79, 156, 249, 0.28)',
+                  borderRadius: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 18px rgba(0, 0, 0, 0.25)',
+                  transition: 'all 0.2s ease',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <div style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    background: 'rgba(79, 156, 249, 0.2)',
+                    border: '1px solid rgba(79, 156, 249, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <img src="/inspico-logo.svg" alt="Inspico" style={{ width: 15, height: 15, filter: 'brightness(0) invert(1)' }} />
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap' }}>
+                    Install Inspico App
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  style={{
+                    background: 'var(--accent-light, #4f9cf9)',
+                    color: '#0e0b07',
+                    border: 'none',
+                    borderRadius: 7,
+                    padding: '5px 12px',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                >
+                  Install
+                </button>
+              </div>
+            </div>
+          )}
+
             {/* ── Competitions List ── */}
             <div className="lp-profile-comps">
               <div className="lp-profile-comps-header">
@@ -3989,7 +4082,7 @@ function ParticipantProfileTab({ participant, registrations, loading, onClear, o
                               alignItems: 'center',
                               gap: 4
                             }}>
-                              View Result 🏆 <IconArrow />
+                              View Result <IconArrow />
                             </span>
                           ) : (
                             <span className="lp-comp-view" style={{ fontSize: 11.5 }}>
@@ -4191,6 +4284,119 @@ function ParticipantProfileTab({ participant, registrations, loading, onClear, o
                 Yes, Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PWA Install Guide Modal (iOS & Android fallback) ── */}
+      {showInstallGuide && (
+        <div
+          className="lp-modal-backdrop"
+          onClick={() => setShowInstallGuide(false)}
+          style={{ zIndex: 999999 }}
+        >
+          <div
+            className="lp-modal-card"
+            style={{ maxWidth: 380, padding: '24px 20px', borderRadius: 16, textAlign: 'center' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+              <div style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, rgba(79, 156, 249, 0.2), rgba(247, 201, 72, 0.1))',
+                border: '1px solid rgba(79, 156, 249, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <img src="/inspico-logo.svg" alt="Inspico" style={{ width: 26, height: 26, filter: 'brightness(0) invert(1)' }} />
+              </div>
+            </div>
+
+            <h3 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 6px 0', color: '#fff' }}>
+              Install Inspico App
+            </h3>
+            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', margin: '0 0 18px 0', lineHeight: 1.5 }}>
+              {isIOS
+                ? 'Follow these 2 simple steps to add Inspico to your iPhone Home Screen:'
+                : 'Follow these steps to add Inspico to your Home Screen:'}
+            </p>
+
+            <div style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 12,
+              padding: '14px 16px',
+              textAlign: 'left',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              marginBottom: 20
+            }}>
+              {isIOS ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{
+                      width: 24, height: 24, borderRadius: '50%', background: 'rgba(79, 156, 249, 0.2)',
+                      color: '#4f9cf9', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>1</span>
+                    <span style={{ fontSize: 12.5, color: '#e2e8f0', lineHeight: 1.4 }}>
+                      Tap the <strong>Share button (📤)</strong> at the bottom of Safari.
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{
+                      width: 24, height: 24, borderRadius: '50%', background: 'rgba(79, 156, 249, 0.2)',
+                      color: '#4f9cf9', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>2</span>
+                    <span style={{ fontSize: 12.5, color: '#e2e8f0', lineHeight: 1.4 }}>
+                      Scroll down and tap <strong>"Add to Home Screen" (➕)</strong>.
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{
+                      width: 24, height: 24, borderRadius: '50%', background: 'rgba(79, 156, 249, 0.2)',
+                      color: '#4f9cf9', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>1</span>
+                    <span style={{ fontSize: 12.5, color: '#e2e8f0', lineHeight: 1.4 }}>
+                      Tap the <strong>Browser menu (⋮)</strong> at top right.
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{
+                      width: 24, height: 24, borderRadius: '50%', background: 'rgba(79, 156, 249, 0.2)',
+                      color: '#4f9cf9', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>2</span>
+                    <span style={{ fontSize: 12.5, color: '#e2e8f0', lineHeight: 1.4 }}>
+                      Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowInstallGuide(false)}
+              style={{
+                width: '100%',
+                padding: '10px 0',
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: '#fff',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}

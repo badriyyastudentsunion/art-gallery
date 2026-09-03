@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
+import HeaderInstallButton from '../../components/HeaderInstallButton'
 import './judge.css'
 
 // ── SVG Icons ──
@@ -276,7 +277,10 @@ export default function JudgeDashboard() {
               </p>
             </div>
           </div>
-          <button className="judge-logout" onClick={logout}>Logout</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <HeaderInstallButton />
+            <button className="judge-logout" onClick={logout}>Logout</button>
+          </div>
         </div>
       </header>
 

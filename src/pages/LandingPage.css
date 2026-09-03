@@ -2351,6 +2351,36 @@
 }
 .lp-scan-btn--large svg { width: 20px; height: 20px; }
 
+.lp-install-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  background: rgba(79, 156, 249, 0.12);
+  border: 1px solid rgba(79, 156, 249, 0.3);
+  color: #4f9cf9;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.lp-install-btn svg { width: 16px; height: 16px; }
+.lp-install-btn:hover { background: rgba(79, 156, 249, 0.22); border-color: rgba(79, 156, 249, 0.55); }
+
+.lp-install-btn--large {
+  padding: 13px 26px;
+  font-size: 14px;
+  border-radius: 14px;
+  gap: 10px;
+  background: rgba(79, 156, 249, 0.12);
+  border: 1px solid rgba(79, 156, 249, 0.35);
+  color: #4f9cf9;
+  font-weight: 700;
+}
+.lp-install-btn--large:hover { background: rgba(79, 156, 249, 0.2); border-color: rgba(79, 156, 249, 0.6); }
+
 .lp-logout-btn {
   display: flex;
   align-items: center;

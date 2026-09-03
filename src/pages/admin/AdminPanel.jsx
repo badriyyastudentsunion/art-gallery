@@ -20,6 +20,7 @@ import AppSettingsSection from './sections/AppSettingsSection'
 import AwardUsersSection from './sections/AwardUsersSection'
 import AwardsSection from './sections/AwardsSection'
 import PosterTemplatesSection from './sections/PosterTemplatesSection'
+import HeaderInstallButton from '../../components/HeaderInstallButton'
 import { APP_VERSION } from '../../version'
 
 // ── Icons ──
@@ -114,6 +115,7 @@ export default function AdminPanel() {
           {user?.role && user?.role.toLowerCase() !== user?.username?.toLowerCase() && (
             <span className="topbar-role">{user?.role}</span>
           )}
+          <HeaderInstallButton />
           <button className="topbar-logout" onClick={logout}>
             {icons.logout}
             Sign Out

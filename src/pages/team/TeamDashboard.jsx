@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import PublicSchedule from '../../components/PublicSchedule'
+import HeaderInstallButton from '../../components/HeaderInstallButton'
 import './TeamDashboard.css'
 
 const IconUser = () => (
@@ -922,6 +923,7 @@ export default function TeamDashboard() {
           <span className="team-topbar-name">{user?.username}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <HeaderInstallButton />
           <button className="team-logout-btn" onClick={() => setShowSignoutConfirm(true)}>Sign Out</button>
         </div>
       </div>

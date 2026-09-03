@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../lib/supabase'
+import HeaderInstallButton from '../../components/HeaderInstallButton'
 import './invigilator.css'
 
 // ── jsQR loader ──
@@ -436,7 +437,10 @@ export default function InvigilatorDashboard() {
               </p>
             </div>
           </div>
-          <button className="inv-logout" onClick={logout}>Logout</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <HeaderInstallButton />
+            <button className="inv-logout" onClick={logout}>Logout</button>
+          </div>
         </div>
       </header>
 
