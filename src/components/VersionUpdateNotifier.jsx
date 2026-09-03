@@ -114,55 +114,65 @@ export default function VersionUpdateNotifier() {
 
   const isStaff = !!user && user.role !== 'Admin'
 
-  // CASE 1: Auto-refresh countdown for Public site visitors
+  // CASE 1: Compact minimal auto-refresh pill for Public site visitors
   if (countdown !== null) {
     return (
       <div style={{
         position: 'fixed',
-        bottom: 24,
+        bottom: 'max(80px, calc(16px + env(safe-area-inset-bottom)))',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 999999,
-        background: 'linear-gradient(135deg, #1e293b, #0f172a)',
-        border: '1px solid rgba(79, 156, 249, 0.4)',
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(79, 156, 249, 0.2)',
-        borderRadius: 30,
-        padding: '10px 22px',
+        maxWidth: 'calc(100vw - 28px)',
+        width: 'max-content',
+        background: 'rgba(15, 23, 42, 0.92)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid rgba(79, 156, 249, 0.35)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 16px rgba(79, 156, 249, 0.15)',
+        borderRadius: 999,
+        padding: '6px 10px 6px 14px',
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 10,
         color: '#fff',
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: 600,
-        animation: 'fadeInUp 0.3s ease'
+        whiteSpace: 'nowrap',
+        boxSizing: 'border-box',
+        animation: 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
       }}>
         <span style={{
-          width: 8, height: 8, borderRadius: '50%',
+          width: 7, height: 7, borderRadius: '50%',
           background: '#4f9cf9',
-          boxShadow: '0 0 10px #4f9cf9',
+          boxShadow: '0 0 8px #4f9cf9',
+          flexShrink: 0,
           animation: 'pulse 1s infinite'
         }} />
-        <span>✨ New update available ({newVersionLabel}) — Refreshing in {countdown}s...</span>
+        <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.2px' }}>
+          Updating in {countdown}s...
+        </span>
         <button
           onClick={triggerReload}
           style={{
             background: 'var(--accent-light, #4f9cf9)',
-            color: '#0e0b07',
+            color: '#0b1120',
             border: 'none',
-            borderRadius: 16,
-            padding: '4px 12px',
+            borderRadius: 999,
+            padding: '4px 10px',
             fontSize: 11,
-            fontWeight: 800,
-            cursor: 'pointer'
+            fontWeight: 700,
+            cursor: 'pointer',
+            flexShrink: 0
           }}
         >
-          Refresh Now
+          Refresh
         </button>
       </div>
     )
   }
 
-  // CASE 2: Safe top floating banner for Logged-in Staff (Judges, Invigilators, Teams)
+  // CASE 2: Clean floating banner for Logged-in Staff (Judges, Invigilators, Teams)
   return (
     <div style={{
       position: 'fixed',
@@ -170,57 +180,60 @@ export default function VersionUpdateNotifier() {
       left: '50%',
       transform: 'translateX(-50%)',
       zIndex: 999999,
-      maxWidth: '92%',
-      width: 480,
-      background: 'linear-gradient(135deg, #1e293b, #111827)',
+      maxWidth: 'calc(100vw - 24px)',
+      width: 440,
+      background: 'rgba(15, 23, 42, 0.94)',
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
       border: '1px solid rgba(247, 201, 72, 0.35)',
       boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
       borderRadius: 12,
-      padding: '10px 16px',
+      padding: '8px 12px 8px 14px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: 10,
       color: '#fff',
+      boxSizing: 'border-box',
       animation: 'fadeInDown 0.3s ease'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 16 }}>✨</span>
-        <div>
-          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: '#f7c948' }}>
-            New System Update Available
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+        <span style={{ fontSize: 15, flexShrink: 0 }}>✨</span>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#f7c948', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            New update ({newVersionLabel})
           </p>
-          <p style={{ margin: '2px 0 0 0', fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
-            Update to {newVersionLabel} when your current evaluation is complete.
+          <p style={{ margin: '1px 0 0 0', fontSize: 10.5, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Refresh when evaluation is complete
           </p>
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <button
           onClick={triggerReload}
           style={{
             background: '#f7c948',
             color: '#0e0b07',
             border: 'none',
-            borderRadius: 6,
-            padding: '6px 12px',
-            fontSize: 11.5,
+            borderRadius: 999,
+            padding: '5px 12px',
+            fontSize: 11,
             fontWeight: 800,
             cursor: 'pointer'
           }}
         >
-          Update Now
+          Update
         </button>
         <button
           onClick={() => setDismissed(true)}
           style={{
             background: 'none',
             border: 'none',
-            color: 'rgba(255,255,255,0.5)',
-            fontSize: 16,
+            color: 'rgba(255,255,255,0.4)',
+            fontSize: 14,
             cursor: 'pointer',
-            padding: '0 4px'
+            padding: '2px 4px'
           }}
           title="Dismiss"
         >
