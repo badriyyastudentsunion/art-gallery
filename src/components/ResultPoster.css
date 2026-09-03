@@ -46,14 +46,12 @@
   cursor: not-allowed;
 }
 
-/* Scaling Container for preview */
 .result-poster-viewport {
   position: relative;
   width: 100%;
-  aspect-ratio: 1162 / 1353;
   overflow: hidden;
   border-radius: 12px;
-  background: #033a2e;
+  background: transparent;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
   cursor: pointer;
 }

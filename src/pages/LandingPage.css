@@ -585,6 +585,17 @@
   letter-spacing: 2px;
 }
 
+@keyframes lpPillFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ══════════ ULTRA-SLEEK LIVE PILL ══════════ */
 .lp-live-pill {
   display: inline-flex;
@@ -603,6 +614,7 @@
   transition: all 0.25s ease;
   font-family: 'Inter', sans-serif;
   text-decoration: none;
+  animation: lpPillFadeIn 0.35s ease-out forwards;
 }
 
 .lp-live-pill:hover {

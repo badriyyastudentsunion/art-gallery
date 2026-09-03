@@ -618,11 +618,18 @@ export default function AnnouncerFlowSection() {
       setTrayItems(prev => prev.filter((_, i) => i !== index))
     } else {
       if (item.published || item.isPublished) {
-        const confirmed = window.confirm(`⚠️ Notice: "${item.name}" is already published to the public.\n\nAre you sure you want to remove it from the announcer sequence?`)
-        if (!confirmed) return
+        setConfirmModal({
+          title: 'Remove Published Result?',
+          message: `"${item.name}" is already published to the public. Are you sure you want to remove it from the announcer sequence?`,
+          onConfirm: () => {
+            setTrayItems(prev => prev.filter((_, i) => i !== index))
+            setReadyComps(prev => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)))
+          }
+        })
+      } else {
+        setTrayItems(prev => prev.filter((_, i) => i !== index))
+        setReadyComps(prev => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)))
       }
-      setTrayItems(prev => prev.filter((_, i) => i !== index))
-      setReadyComps(prev => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)))
     }
   }
 
@@ -699,15 +706,18 @@ export default function AnnouncerFlowSection() {
 
   // Clear Tray with confirmation
   function clearTray() {
-    const confirmed = window.confirm("⚠️ Are you sure you want to clear the tray? (Published results will remain published to the public).")
-    if (!confirmed) return
-
-    const compsInTray = trayItems.filter(i => !i.isDivider)
-    setReadyComps(prev => {
-      const combined = [...prev, ...compsInTray]
-      return combined.sort((a, b) => a.name.localeCompare(b.name))
+    setConfirmModal({
+      title: 'Clear Tray?',
+      message: 'Are you sure you want to clear the tray? Published results will remain published to the public.',
+      onConfirm: () => {
+        const compsInTray = trayItems.filter(i => !i.isDivider)
+        setReadyComps(prev => {
+          const combined = [...prev, ...compsInTray]
+          return combined.sort((a, b) => a.name.localeCompare(b.name))
+        })
+        setTrayItems([])
+      }
     })
-    setTrayItems([])
   }
 
   // ── Milestone Poster Image Compressor & Uploader ──
@@ -826,23 +836,28 @@ export default function AnnouncerFlowSection() {
   }
 
   async function handleDeleteMilestonePoster(milestone, posterId) {
-    if (!window.confirm(`Are you sure you want to delete the status poster for milestone #${milestone}?`)) return
-    try {
-      if (posterId) {
-        await supabase.from('gallery_media').delete().eq('id', posterId)
-      } else {
-        await supabase.from('gallery_media').delete().eq('type', 'poster').eq('milestone', milestone)
+    setConfirmModal({
+      title: 'Delete Status Poster?',
+      message: `Are you sure you want to delete the status poster for milestone #${milestone}?`,
+      onConfirm: async () => {
+        try {
+          if (posterId) {
+            await supabase.from('gallery_media').delete().eq('id', posterId)
+          } else {
+            await supabase.from('gallery_media').delete().eq('type', 'poster').eq('milestone', milestone)
+          }
+          setMilestonePosters(prev => {
+            const copy = { ...prev }
+            delete copy[milestone]
+            return copy
+          })
+          setSuccess(`Status poster for milestone #${milestone} removed.`)
+          setTimeout(() => setSuccess(''), 3000)
+        } catch (err) {
+          console.error("Error deleting milestone poster:", err)
+        }
       }
-      setMilestonePosters(prev => {
-        const copy = { ...prev }
-        delete copy[milestone]
-        return copy
-      })
-      setSuccess(`Status poster for milestone #${milestone} removed.`)
-      setTimeout(() => setSuccess(''), 3000)
-    } catch (err) {
-      console.error("Error deleting milestone poster:", err)
-    }
+    })
   }
 
   if (fetching) {
@@ -858,6 +873,7 @@ export default function AnnouncerFlowSection() {
   const publishedCompsCount = allComps.filter(c => c.published).length
 
   return (
+    <>
     <div style={{ padding: '24px 32px', overflowY: 'auto', height: '100%', boxSizing: 'border-box' }}>
       
       {/* ── Top Header & Actions ── */}
@@ -1798,5 +1814,30 @@ export default function AnnouncerFlowSection() {
         document.body
       )}
     </div>
+
+      {confirmModal && createPortal(
+        <div className="dash-modal-overlay" onClick={() => setConfirmModal(null)}>
+          <div className="dash-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: '#e07c7c' }}>
+              {confirmModal.title || 'Confirm'}
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 20 }}>
+              {confirmModal.message}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-cancel-edit"
+                style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}
+                onClick={() => setConfirmModal(null)}
+              >Cancel</button>
+              <button type="button" className="btn-delete"
+                style={{ padding: '8px 16px', background: '#e07c7c', color: '#0e0b07', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                onClick={async () => { await confirmModal.onConfirm(); setConfirmModal(null) }}
+              >Confirm</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   )
 }

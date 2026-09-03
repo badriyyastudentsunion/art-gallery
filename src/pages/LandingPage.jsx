@@ -273,13 +273,18 @@ function HeroStageStatus({ setTab }) {
 
     async function fetchOngoingStageEvent() {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('competition_schedule')
           .select(`
             id, status, scheduled_time, actual_start_time,
             competitions (id, name, stage_id, stages (id, name, location), categories (name))
           `)
-          .eq('status', 'ongoing')
+          .ilike('status', 'ongoing')
+
+        if (error) {
+          console.error("Failed to fetch ongoing stage event:", error)
+          return
+        }
 
         if (data && data.length > 0) {
           // Prioritize Main Stage if multiple ongoing
@@ -311,11 +316,19 @@ function HeroStageStatus({ setTab }) {
     fetchOngoingStageEvent()
 
     // Realtime listener for invigilator live updates
-    const ch = supabase.channel('hero-live-stage-channel')
+    const rand = Math.random().toString(36).substring(2, 7)
+    const ch = supabase.channel(`hero-live-stage-${rand}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_schedule' }, fetchOngoingStageEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competitions' }, fetchOngoingStageEvent)
       .subscribe()
 
-    return () => supabase.removeChannel(ch)
+    // Periodic safety poll every 15s to keep live status in sync
+    const interval = setInterval(fetchOngoingStageEvent, 15000)
+
+    return () => {
+      clearInterval(interval)
+      supabase.removeChannel(ch)
+    }
   }, [])
 
   if (loading) return null
@@ -333,7 +346,7 @@ function HeroStageStatus({ setTab }) {
 
     return (
       <div 
-        className="lp-live-pill lp-scroll-reveal" 
+        className="lp-live-pill" 
         onClick={() => setTab && setTab('schedule')}
         role="button"
         tabIndex={0}
@@ -356,7 +369,7 @@ function HeroStageStatus({ setTab }) {
   // 2. If no competition is ongoing, but event is upcoming (daysLeft > 0):
   if (daysLeft !== null && daysLeft > 0) {
     return (
-      <div className="lp-countdown lp-scroll-reveal" aria-label="Event Countdown">
+      <div className="lp-countdown" aria-label="Event Countdown">
         <span className="lp-cd-val">{daysLeft}</span>
         <span className="lp-cd-lbl">{daysLeft === 1 ? 'DAY TO GO' : 'DAYS TO GO'}</span>
       </div>
@@ -1271,26 +1284,30 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
       {activePoster && (
         <div className="result-poster-wrapper" style={{ margin: '0 auto 20px auto', maxWidth: 480 }}>
           <div
-            className="result-poster-viewport"
             onClick={() => onOpenStatusPoster?.(activePoster)}
             style={{
-              width: '100%',
+              width: 'fit-content',
+              maxWidth: '100%',
+              margin: '0 auto',
               borderRadius: 12,
               overflow: 'hidden',
-              background: '#0e0b07',
+              background: 'transparent',
               border: '1px solid rgba(255, 255, 255, 0.12)',
               boxShadow: '0 8px 28px rgba(0, 0, 0, 0.6)',
-              cursor: onOpenStatusPoster ? 'pointer' : 'default'
+              cursor: onOpenStatusPoster ? 'pointer' : 'default',
+              lineHeight: 0
             }}
           >
             <img
               src={activePoster.hd_url || activePoster.thumb_url}
               alt={activePoster.caption || 'Status Poster'}
               style={{
-                width: '100%',
-                height: 'auto',
                 display: 'block',
-                objectFit: 'contain'
+                maxWidth: '100%',
+                maxHeight: '74vh',
+                width: 'auto',
+                height: 'auto',
+                borderRadius: 12
               }}
             />
           </div>
@@ -1396,6 +1413,66 @@ function ResultsTab() {
   const [downloadingPoster, setDownloadingPoster] = useState(false)
 
   const selectedRef = useRef(selected)
+  const scrollYRef = useRef(0)
+  const clickedCompIdRef = useRef(null)
+  const clickedCardOffsetRef = useRef(null)
+
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual'
+    }
+  }, [])
+
+  const closeResults = () => {
+    const savedY = scrollYRef.current
+    const compId = clickedCompIdRef.current
+    const targetOffset = clickedCardOffsetRef.current
+
+    setSelected(null)
+
+    const restore = () => {
+      const mainEl = document.querySelector('.lp-main')
+      if (!mainEl) return
+
+      // Precision anchoring: position the clicked card at the exact same screen position
+      if (compId) {
+        const cardEl = document.getElementById(`comp-card-${compId}`)
+        if (cardEl) {
+          if (targetOffset !== null) {
+            const cardRect = cardEl.getBoundingClientRect()
+            const mainRect = mainEl.getBoundingClientRect()
+            const currentOffset = cardRect.top - mainRect.top
+            const diff = currentOffset - targetOffset
+            if (Math.abs(diff) > 0.5) {
+              mainEl.scrollTop += diff
+            }
+            return
+          } else {
+            cardEl.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+            return
+          }
+        }
+      }
+
+      mainEl.scrollTop = savedY
+      window.scrollTo({ top: savedY, behavior: 'instant' })
+    }
+
+    requestAnimationFrame(restore)
+    setTimeout(restore, 25)
+    setTimeout(restore, 80)
+    setTimeout(restore, 200)
+    setTimeout(restore, 400)
+  }
+
+  const goBack = () => {
+    if (window.history.state?.view === 'result-detail') {
+      window.history.back()
+    } else {
+      closeResults()
+    }
+  }
+
   useEffect(() => {
     selectedRef.current = selected
   }, [selected])
@@ -1472,18 +1549,25 @@ function ResultsTab() {
     }
   }, [])
 
-  // Handle mobile swipe-back gesture for result details modal view
+  // Handle mobile swipe-back gesture & Escape key for result details modal view
   useEffect(() => {
     const handlePopState = () => {
-      if (selected) {
-        setSelected(null)
+      if (selectedRef.current) {
+        closeResults()
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && selectedRef.current) {
+        goBack()
       }
     }
     window.addEventListener('popstate', handlePopState)
+    window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('popstate', handlePopState)
+      window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selected])
+  }, [])
 
   async function fetchCompetitions(isInitial = false) {
     if (isInitial && competitions.length === 0) setLoading(true)
@@ -1580,11 +1664,31 @@ function ResultsTab() {
     }
   }
 
-  async function openResults(comp, isInitial = true) {
-    setSelected(comp)
+  async function openResults(comp, isInitial = true, targetCardEl = null) {
     if (isInitial) {
+      const mainEl = document.querySelector('.lp-main')
+      scrollYRef.current = mainEl ? mainEl.scrollTop : (window.scrollY || 0)
+      clickedCompIdRef.current = comp.id
+
+      if (targetCardEl && mainEl) {
+        const cardRect = targetCardEl.getBoundingClientRect()
+        const mainRect = mainEl.getBoundingClientRect()
+        clickedCardOffsetRef.current = cardRect.top - mainRect.top
+      } else {
+        clickedCardOffsetRef.current = null
+      }
+
       window.history.pushState({ view: 'result-detail' }, '')
       setLoadingResults(true)
+    }
+    setSelected(comp)
+
+    if (isInitial) {
+      requestAnimationFrame(() => {
+        const mainEl = document.querySelector('.lp-main')
+        if (mainEl) mainEl.scrollTop = 0
+        window.scrollTo({ top: 0, behavior: 'instant' })
+      })
     }
 
     try {
@@ -1625,7 +1729,7 @@ function ResultsTab() {
     return (
       <div className="lp-tab-content">
         <div className="lp-results-header" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <button className="lp-back-btn" onClick={() => window.history.back()}>
+          <button className="lp-back-btn" onClick={goBack}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -1744,7 +1848,11 @@ function ResultsTab() {
 
             return (
               <Fragment key={c.id}>
-                <button className="lp-comp-card" onClick={() => openResults(c)}>
+                <button
+                  id={`comp-card-${c.id}`}
+                  className="lp-comp-card"
+                  onClick={(e) => openResults(c, true, e.currentTarget)}
+                >
                   <div className="lp-comp-card-top">
                     <span className="lp-comp-cat">{c.categories?.name || 'General'}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
@@ -1930,29 +2038,31 @@ function ResultsTab() {
 
             {/* Poster Image Viewport */}
             <div
-              className="result-poster-viewport"
               style={{
-                width: '100%',
-                maxHeight: '74vh',
+                width: 'fit-content',
+                maxWidth: '100%',
+                margin: '0 auto',
                 borderRadius: 12,
                 overflow: 'hidden',
-                background: '#0e0b07',
+                background: 'transparent',
                 border: '1px solid rgba(255,255,255,0.15)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 12px 36px rgba(0,0,0,0.7)'
+                boxShadow: '0 12px 36px rgba(0,0,0,0.7)',
+                lineHeight: 0
               }}
             >
               <img
                 src={activeStatusPosterModal.hd_url || activeStatusPosterModal.thumb_url}
                 alt={activeStatusPosterModal.caption || 'Status Poster'}
                 style={{
-                  width: '100%',
-                  height: '100%',
+                  display: 'block',
+                  maxWidth: '100%',
                   maxHeight: '74vh',
-                  objectFit: 'contain',
-                  display: 'block'
+                  width: 'auto',
+                  height: 'auto',
+                  borderRadius: 12
                 }}
               />
             </div>
@@ -3424,6 +3534,123 @@ function QrScanner({ onScan, onClose }) {
 function ParticipantProfileTab({ participant, registrations, loading, onClear, onScanResult, user, onLogout, setViewingRules, rulesMap }) {
   const [showScanner, setShowScanner] = useState(false)
   const [confirmLogoutActive, setConfirmLogoutActive] = useState(false)
+  const [publishedMap, setPublishedMap] = useState({})
+  const [viewingResultComp, setViewingResultComp] = useState(null)
+  const [compResults, setCompResults] = useState([])
+  const [loadingCompResults, setLoadingCompResults] = useState(false)
+
+  // Fetch published status for all registered competitions
+  useEffect(() => {
+    if (!participant?.id || !registrations || registrations.length === 0) {
+      setPublishedMap({})
+      return
+    }
+
+    const compIds = registrations
+      .map(r => r.competition_id || r.competitions?.id)
+      .filter(Boolean)
+
+    if (compIds.length === 0) return
+
+    async function loadPublishedStatus() {
+      try {
+        const { data, error } = await supabase
+          .from('competition_results')
+          .select('id, competition_id, participant_id, position, grade, avg_points, published, published_at')
+          .in('competition_id', compIds)
+          .eq('published', true)
+
+        if (!error && data) {
+          const map = {}
+          data.forEach(row => {
+            if (!map[row.competition_id]) {
+              map[row.competition_id] = {
+                isPublished: true,
+                publishedAt: row.published_at,
+                myResult: null
+              }
+            }
+            if (row.participant_id === participant.id) {
+              map[row.competition_id].myResult = row
+            }
+          })
+          setPublishedMap(map)
+        }
+      } catch (e) {
+        console.error('Error fetching published status in profile:', e)
+      }
+    }
+
+    loadPublishedStatus()
+
+    const ch = supabase.channel(`profile-results-${participant.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'competition_results' }, () => {
+        loadPublishedStatus()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(ch)
+    }
+  }, [participant?.id, registrations])
+
+  // Open competition result details modal
+  async function openCompResult(comp) {
+    if (!comp) return
+    setViewingResultComp(comp)
+    setLoadingCompResults(true)
+    try {
+      const [resultsRes, publishedSeqRes] = await Promise.all([
+        supabase
+          .from('competition_results')
+          .select(`
+            id, position, grade, avg_points, placement_points, grade_points, participant_id,
+            participants(id, name, chess_number, teams(name))
+          `)
+          .eq('competition_id', comp.id)
+          .eq('published', true),
+        supabase
+          .from('competition_results')
+          .select('competition_id, published_at')
+          .eq('published', true)
+      ])
+
+      let announcementNumber = null
+      if (publishedSeqRes.data) {
+        const compMap = {}
+        publishedSeqRes.data.forEach(r => {
+          if (r.competition_id) {
+            if (!compMap[r.competition_id] || (r.published_at && r.published_at < compMap[r.competition_id])) {
+              compMap[r.competition_id] = r.published_at
+            }
+          }
+        })
+        const sortedIds = Object.keys(compMap).sort((a, b) => new Date(compMap[a]) - new Date(compMap[b]))
+        const idx = sortedIds.indexOf(comp.id)
+        if (idx !== -1) {
+          announcementNumber = idx + 1
+        }
+      }
+
+      setViewingResultComp(prev => ({
+        ...prev,
+        announcementNumber: announcementNumber || prev?.announcementNumber
+      }))
+
+      const list = (resultsRes.data || []).map(r => ({ ...r }))
+      list.sort((a, b) => {
+        const posA = a.position || 999
+        const posB = b.position || 999
+        if (posA !== posB) return posA - posB
+        return (b.avg_points || 0) - (a.avg_points || 0)
+      })
+      setCompResults(list)
+    } catch (err) {
+      console.error('Failed to load competition results in profile:', err)
+    } finally {
+      setLoadingCompResults(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -3581,54 +3808,195 @@ function ParticipantProfileTab({ participant, registrations, loading, onClear, o
                 <div className="lp-profile-comps-list">
                   {registrations.map((r, i) => {
                     const c = r.competitions
+                    const pubInfo = c ? publishedMap[c.id] : null
+                    const isPublished = !!pubInfo?.isPublished
+                    const myRes = pubInfo?.myResult
                     const sched = Array.isArray(c?.competition_schedule) ? c.competition_schedule[0] : c?.competition_schedule
                     const schedDate = sched?.scheduled_date
                       ? new Date(sched.scheduled_date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })
                       : null
                     const schedTime = sched?.estimated_duration_mins ? `${sched.estimated_duration_mins} min` : null
                     const isStage = c?.competition_type === 'stage'
+
+                    const handleCardClick = () => {
+                      if (isPublished) {
+                        openCompResult(c)
+                      } else if (c) {
+                        const ruleObj = (rulesMap && rulesMap[c.id]) || {}
+                        setViewingRules({
+                          ...c,
+                          rules_description: c.rules_description || ruleObj.description || '',
+                          rules_duration: c.rules_duration || ruleObj.duration || '',
+                          mark_criteria: c.mark_criteria || ruleObj.mark_criteria || ''
+                        })
+                      }
+                    }
+
+                    const handleRulesClick = (e) => {
+                      e.stopPropagation()
+                      if (c) {
+                        const ruleObj = (rulesMap && rulesMap[c.id]) || {}
+                        setViewingRules({
+                          ...c,
+                          rules_description: c.rules_description || ruleObj.description || '',
+                          rules_duration: c.rules_duration || ruleObj.duration || '',
+                          mark_criteria: c.mark_criteria || ruleObj.mark_criteria || ''
+                        })
+                      }
+                    }
+
                     return (
                       <div
-                        key={i}
+                        key={c?.id || i}
                         className="lp-comp-card"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => {
-                          if (c) {
-                            const ruleObj = (rulesMap && rulesMap[c.id]) || {}
-                            setViewingRules({
-                              ...c,
-                              rules_description: c.rules_description || ruleObj.description || '',
-                              rules_duration: c.rules_duration || ruleObj.duration || '',
-                              mark_criteria: c.mark_criteria || ruleObj.mark_criteria || ''
-                            })
-                          }
+                        style={{
+                          cursor: 'pointer',
+                          position: 'relative',
+                          border: isPublished ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255,255,255,0.08)',
+                          background: isPublished
+                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(255,255,255,0.02) 100%)'
+                            : 'rgba(255,255,255,0.02)',
+                          transition: 'all 0.25s ease'
                         }}
+                        onClick={handleCardClick}
                       >
                         <div className="lp-comp-card-body">
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                            <p className="lp-comp-name">{c?.name}</p>
-                            <span style={{ fontSize: 11, color: '#B8193C', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+                          {/* Top Tag Row: Category, Stage, and Published Status */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span className={`lp-comp-type-badge ${isStage ? 'stage' : 'offstage'}`}>
+                                {isStage ? `Stage · ${c?.stages?.name || 'Assigned'}` : 'Off-Stage'}
+                              </span>
+                              {c?.categories?.name && (
+                                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: 4, fontWeight: 600 }}>
+                                  {c.categories.name}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Status Tag */}
+                            {isPublished ? (
+                              <span style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#34d399',
+                                background: 'rgba(16, 185, 129, 0.16)',
+                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                padding: '2px 8px',
+                                borderRadius: 6,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
+                                Result Published
+                              </span>
+                            ) : (
+                              <span style={{
+                                fontSize: 10,
+                                fontWeight: 600,
+                                color: 'rgba(255,255,255,0.4)',
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                padding: '2px 7px',
+                                borderRadius: 6,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}>
+                                ⏳ Result Pending
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Competition Name & Rules Trigger */}
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                            <p className="lp-comp-name" style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
+                              {c?.name}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleRulesClick}
+                              style={{
+                                background: 'rgba(184, 25, 60, 0.1)',
+                                border: '1px solid rgba(184, 25, 60, 0.25)',
+                                color: '#f43f5e',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                cursor: 'pointer',
+                                padding: '3px 8px',
+                                borderRadius: 5,
+                                flexShrink: 0
+                              }}
+                              title="View Rules"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 11, height: 11 }}>
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                 <polyline points="14 2 14 8 20 8" />
                                 <line x1="16" y1="13" x2="8" y2="13" />
                                 <line x1="16" y1="17" x2="8" y2="17" />
                               </svg>
                               നിയമാവലി
-                            </span>
+                            </button>
                           </div>
-                          <div className="lp-comp-meta">
-                            <span className={`lp-comp-type-badge ${isStage ? 'stage' : 'offstage'}`}>
-                              {isStage ? `Stage · ${c?.stages?.name || 'Assigned'}` : 'Off-Stage'}
-                            </span>
-                          </div>
+
+                          {/* Award / Position Highlight for current participant */}
+                          {myRes && (myRes.position || myRes.grade) && (
+                            <div style={{
+                              marginTop: 8,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              background: myRes.position === 1 ? 'rgba(247, 201, 72, 0.14)' : 'rgba(255,255,255,0.06)',
+                              border: `1px solid ${myRes.position === 1 ? 'rgba(247, 201, 72, 0.4)' : 'rgba(255,255,255,0.12)'}`,
+                              padding: '3px 9px',
+                              borderRadius: 6
+                            }}>
+                              <span style={{
+                                fontSize: 12,
+                                fontWeight: 800,
+                                color: myRes.position === 1 ? '#f7c948' : myRes.position === 2 ? '#e2e8f0' : myRes.position === 3 ? '#fb923c' : '#38bdf8'
+                              }}>
+                                {myRes.position === 1 ? '🥇 1st Place' : myRes.position === 2 ? '🥈 2nd Place' : myRes.position === 3 ? '🥉 3rd Place' : `Rank #${myRes.position}`}
+                              </span>
+                              {myRes.grade && myRes.grade !== '—' && (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>
+                                  · Grade {myRes.grade}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {(schedDate || schedTime) && (
-                          <div className="lp-comp-schedule">
-                            {schedDate && <span className="lp-comp-date">{schedDate}</span>}
-                            {schedTime && <span className="lp-comp-dur">{schedTime}</span>}
-                          </div>
-                        )}
+
+                        {/* Footer Row */}
+                        <div className="lp-comp-footer" style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 8 }}>
+                          {(schedDate || schedTime) ? (
+                            <div className="lp-comp-schedule" style={{ margin: 0 }}>
+                              {schedDate && <span className="lp-comp-date">{schedDate}</span>}
+                              {schedTime && <span className="lp-comp-dur">{schedTime}</span>}
+                            </div>
+                          ) : <div />}
+
+                          {isPublished ? (
+                            <span style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: '#f7c948',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}>
+                              View Result 🏆 <IconArrow />
+                            </span>
+                          ) : (
+                            <span className="lp-comp-view" style={{ fontSize: 11.5 }}>
+                              View Rules <IconArrow />
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -3644,6 +4012,146 @@ function ParticipantProfileTab({ participant, registrations, loading, onClear, o
           onScan={onScanResult}
           onClose={() => setShowScanner(false)}
         />
+      )}
+
+      {/* ── Competition Result Modal for Profile ── */}
+      {viewingResultComp && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(0, 0, 0, 0.88)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflowY: 'auto'
+          }}
+          onClick={() => setViewingResultComp(null)}
+        >
+          <div
+            style={{
+              maxWidth: 520,
+              width: '100%',
+              margin: '0 auto',
+              padding: '24px 16px 80px 16px',
+              minHeight: '100%'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Top Bar with Back & Close */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <button
+                type="button"
+                className="lp-back-btn"
+                onClick={() => setViewingResultComp(null)}
+                style={{ margin: 0 }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}>
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                Back to Profile
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewingResultComp(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: 'none',
+                  color: '#fff',
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  fontSize: 16,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Competition Title Header */}
+            <div style={{ marginBottom: 20, textAlign: 'center' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                {viewingResultComp.announcementNumber && (
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#f7c948' }}>
+                    #{String(viewingResultComp.announcementNumber).padStart(2, '0')}
+                  </span>
+                )}
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-light, #4f9cf9)', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                  Competition Result
+                </span>
+              </div>
+              <h2 style={{ margin: '4px 0 0 0', fontSize: 22, fontWeight: 800, color: '#fff' }}>
+                {viewingResultComp.name}
+              </h2>
+              {viewingResultComp.categories?.name && (
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4, display: 'inline-block' }}>
+                  {viewingResultComp.categories.name}
+                </span>
+              )}
+            </div>
+
+            {loadingCompResults ? (
+              <LogoLoader text="Loading results..." />
+            ) : compResults.length === 0 ? (
+              <div className="lp-empty"><IconAward /><p>No published results found</p></div>
+            ) : (
+              <>
+                {/* Result Poster if template exists */}
+                <ResultPoster competition={viewingResultComp} results={compResults} />
+
+                {/* Published Winners List */}
+                <div className="lp-results-list" style={{ maxWidth: 480, margin: '18px auto 0 auto' }}>
+                  {compResults.map((r, i) => {
+                    const pos = r.position || (i + 1)
+                    const isTied = compResults.filter(x => x.position === pos).length > 1
+                    const isMe = r.participant_id === participant.id || r.participants?.id === participant.id
+                    return (
+                      <div
+                        key={r.id}
+                        className={`lp-result-row ${pos === 1 ? 'lp-result-first' : pos === 2 ? 'lp-result-second' : pos === 3 ? 'lp-result-third' : ''}`}
+                        style={isMe ? {
+                          border: '2px solid #f7c948',
+                          background: 'rgba(247, 201, 72, 0.12)',
+                          boxShadow: '0 0 18px rgba(247, 201, 72, 0.25)'
+                        } : undefined}
+                      >
+                        <div className="lp-result-rank-medal">
+                          <span className="lp-result-num">{pos}</span>
+                        </div>
+                        <div className="lp-result-info">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="lp-result-name" style={isMe ? { color: '#f7c948', fontWeight: 800 } : undefined}>
+                              {r.participants?.name} {isMe && '(You)'}
+                            </span>
+                            {isTied && (
+                              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent-light)', background: 'rgba(79, 156, 249, 0.12)', border: '1px solid rgba(79, 156, 249, 0.3)', padding: '1px 5px', borderRadius: 4 }}>
+                                TIED
+                              </span>
+                            )}
+                          </div>
+                          <span className="lp-result-meta">
+                            {r.participants?.teams?.name && <span className="lp-result-team">{r.participants.teams.name}</span>}
+                            {r.participants?.chess_number && <span className="lp-result-chess">#{r.participants.chess_number}</span>}
+                          </span>
+                        </div>
+                        <span className="lp-result-score" style={{ fontSize: 15, fontWeight: 800 }}>
+                          {r.grade && r.grade !== '—' ? r.grade : '—'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Custom Logout Confirmation Dialog */}

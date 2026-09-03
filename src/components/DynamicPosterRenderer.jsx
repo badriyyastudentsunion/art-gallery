@@ -1,66 +1,102 @@
 // src/components/DynamicPosterRenderer.jsx
-import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react'
+import React, { useRef, useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { toPng } from 'html-to-image'
 
 export function extractTextLayers(htmlContent) {
   if (!htmlContent) return []
-  const layers = []
-  
-  // Find all <div id="text_X"...> blocks
-  const layerBlockRegex = /<div\s+id=["'](text_\d+)["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi
-  let match
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(htmlContent, 'text/html')
+    const textDivs = doc.querySelectorAll('[id^="text_"]')
+    const layers = []
 
-  while ((match = layerBlockRegex.exec(htmlContent)) !== null) {
-    const id = match[1]
-    const fullBlock = match[0]
+    textDivs.forEach(div => {
+      // Skip if this text container only wraps a <style> or <script> tag
+      if (div.querySelector('style') || div.querySelector('script')) return
 
-    // Extract styles from innermost text div
-    const fsMatch = fullBlock.match(/font-size:\s*(\d+)px/i)
-    const fwMatch = fullBlock.match(/font-weight:\s*(\w+)/i)
-    const lhMatch = fullBlock.match(/line-height:\s*([\d.]+)/i)
+      const id = div.id
+      const innerDiv = div.querySelector('div div') || div.querySelector('div') || div
+      const cleanText = innerDiv.textContent.trim()
 
-    const fontSize = fsMatch ? parseInt(fsMatch[1], 10) : 16
-    const fontWeight = fwMatch ? fwMatch[1] : 'normal'
-    const lineHeight = lhMatch ? parseFloat(lhMatch[1]) : 1.0
+      // Ignore if text is purely CSS declarations (e.g. starts with # or contains { })
+      if (!cleanText || cleanText.startsWith('#el-') || cleanText.includes('{ /') || cleanText.includes('margin:') || cleanText.includes('padding:')) {
+        return
+      }
 
-    // Extract raw text inside innermost tags
-    const cleanText = fullBlock
-      .replace(/<[^>]+>/g, '\n')
-      .replace(/\n+/g, '\n')
-      .trim()
+      const styleStr = (innerDiv.getAttribute('style') || '') + ' ' + (div.getAttribute('style') || '')
 
-    let defaultField = 'static'
-    if (/^\d{1,3}$/.test(cleanText) || fontSize >= 90) {
-      defaultField = 'code_number'
-    } else if (fullBlock.includes('<br') && (lineHeight >= 1.8 && lineHeight <= 2.8 || /Althaf|Name|Participant/i.test(cleanText))) {
-      defaultField = 'winners_names'
-    } else if (fullBlock.includes('<br') && (lineHeight >= 2.9 || /Zahrawi|Sharqawi|Team/i.test(cleanText))) {
-      defaultField = 'winners_teams'
-    } else if (/Zone|Senior|Junior|Category/i.test(cleanText) || fontWeight === '300') {
-      defaultField = 'category_name'
-    } else if (fontWeight === 'bold' || fontWeight === '700' || /Song|Madh|Calligraphy|Essay|Speech|Quiz|Article/i.test(cleanText)) {
-      defaultField = 'competition_name'
-    }
+      const fsMatch = styleStr.match(/font-size:\s*(\d+)px/i)
+      const fwMatch = styleStr.match(/font-weight:\s*(\w+)/i)
+      const lhMatch = styleStr.match(/line-height:\s*([\d.]+)/i)
 
-    layers.push({
-      id,
-      sampleText: cleanText.replace(/\n/g, ' / '),
-      fontSize,
-      fontWeight,
-      defaultField
+      const fontSize = fsMatch ? parseInt(fsMatch[1], 10) : 16
+      const fontWeight = fwMatch ? fwMatch[1] : 'normal'
+      const lineHeight = lhMatch ? parseFloat(lhMatch[1]) : 1.0
+
+      let defaultField = 'static'
+      if (/^\d{1,3}$/.test(cleanText) || fontSize >= 90) {
+        defaultField = 'code_number'
+      } else if (innerDiv.innerHTML.includes('<br') && (lineHeight >= 1.8 && lineHeight <= 2.8 || /Althaf|Name|Participant/i.test(cleanText))) {
+        defaultField = 'winners_names'
+      } else if (innerDiv.innerHTML.includes('<br') && (lineHeight >= 2.9 || /Zahrawi|Sharqawi|Team/i.test(cleanText))) {
+        defaultField = 'winners_teams'
+      } else if (/Zone|Senior|Junior|Category/i.test(cleanText) || fontWeight === '300') {
+        defaultField = 'category_name'
+      } else if (fontWeight === 'bold' || fontWeight === '700' || /Song|Madh|Calligraphy|Essay|Speech|Quiz|Article/i.test(cleanText)) {
+        defaultField = 'competition_name'
+      }
+
+      layers.push({
+        id,
+        sampleText: cleanText.replace(/\n/g, ' / '),
+        fontSize,
+        fontWeight,
+        defaultField
+      })
     })
+
+    return layers
+  } catch (e) {
+    console.error('Fast extract error:', e)
+    return []
   }
-  return layers
 }
 
-// Replace ONLY the text content inside the innermost div of a text layer, keeping all CSS intact
+// Fast targeted replacement that keeps entire HTML document structure, fonts, and inline CSS intact
+// Structure in PSD-to-HTML: <div id="text_X" style="..."> <- outer (absolute position)
+//                             <div style="position: relative; ..."> <- middle wrapper
+//                               <div style="font-size:...; line-height:..."> <- innermost (TEXT HERE)
+//                             </div></div></div>
 function replaceLayerText(html, layerId, newText) {
-  // Regex that targets: <div id="text_X" ...><div ...><div style="...">OLD_CONTENT</div></div></div>
-  const layerRegex = new RegExp(
-    `(<div\\s+id=["']${layerId}["'][^>]*>[\\s\\S]*?<div[^>]*>[\\s\\S]*?<div[^>]*style=["'][^"']*["'][^>]*>)([\\s\\S]*?)(<\\/div>\\s*<\\/div>\\s*<\\/div>)`,
-    'i'
-  )
-  return html.replace(layerRegex, `$1${newText}$3`)
+  if (!html) return ''
+  const startMarker = `id="${layerId}"`
+  const startIdx = html.indexOf(startMarker)
+  if (startIdx === -1) return html
+
+  const endBound = startIdx + 1400
+
+  // Skip past the outer div opening tag (the one with id="text_X")
+  const outerEnd = html.indexOf('>', startIdx)
+  if (outerEnd === -1 || outerEnd > endBound) return html
+
+  // Find the first nested <div> = the middle position:relative wrapper
+  const middleDivStart = html.indexOf('<div', outerEnd + 1)
+  if (middleDivStart === -1 || middleDivStart > endBound) return html
+  const middleEnd = html.indexOf('>', middleDivStart)
+  if (middleEnd === -1 || middleEnd > endBound) return html
+
+  // Find the second nested <div> = the innermost text div with font-size, line-height etc.
+  const innerDivStart = html.indexOf('<div', middleEnd + 1)
+  if (innerDivStart === -1 || innerDivStart > endBound) return html
+  const innerOpenEnd = html.indexOf('>', innerDivStart)
+  if (innerOpenEnd === -1 || innerOpenEnd > endBound) return html
+
+  // Find the closing </div> of the innermost div
+  const innerCloseStart = html.indexOf('</div>', innerOpenEnd + 1)
+  if (innerCloseStart === -1 || innerCloseStart > endBound) return html
+
+  // Only replace the text content between innermost div's open tag and its close tag
+  return html.substring(0, innerOpenEnd + 1) + newText + html.substring(innerCloseStart)
 }
 
 export function replacePosterLayers(html, { compName, catName, codeNum, winnersNamesStr, winnersTeamsStr, winners = [] }, customMapping = {}) {
@@ -154,6 +190,7 @@ const DynamicPosterRenderer = forwardRef(function DynamicPosterRenderer({
   competition = null,
   results = [],
   customMapping = null,
+  isHovered = false,
   onDownloadStart,
   onDownloadEnd
 }, ref) {
@@ -180,6 +217,21 @@ const DynamicPosterRenderer = forwardRef(function DynamicPosterRenderer({
     return () => observer.disconnect()
   }, [width])
 
+  // Inject required Google Fonts from template HTML into document.head
+  useEffect(() => {
+    if (!template?.html_content) return
+    const fontMatches = template.html_content.match(/https:\/\/fonts\.googleapis\.com\/css[^\s"'>]+/gi) || []
+    fontMatches.forEach(fontUrl => {
+      const existing = document.querySelector(`link[href="${fontUrl}"]`)
+      if (!existing) {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = fontUrl
+        document.head.appendChild(link)
+      }
+    })
+  }, [template?.html_content])
+
   // Prepare dynamic data values
   const compName = competition?.name || mockData?.competition_name || 'Article Preveiw'
   const catName = competition?.categories?.name || mockData?.category_name || 'A ZONE'
@@ -187,46 +239,57 @@ const DynamicPosterRenderer = forwardRef(function DynamicPosterRenderer({
     ? String(competition.announcementNumber).padStart(2, '0')
     : mockData?.code_number || '01'
 
-  // Extract top 3 winners
-  let winners = []
-  if (results && results.length > 0) {
-    winners = results.slice(0, 3).map((r, idx) => ({
-      rank: r.position ? String(r.position).padStart(2, '0') + '.' : `0${idx + 1}.`,
-      name: r.participants?.name || 'Participant',
-      team: r.participants?.teams?.name || '—'
-    }))
-  } else if (mockData?.winners) {
-    winners = mockData.winners
-  } else {
-    winners = [
-      { rank: '01.', name: 'Suhail Kp', team: 'Zahrawi' },
-      { rank: '02.', name: 'Sinan A', team: 'Zahrawi' },
-      { rank: '03.', name: 'Hudaifath', team: 'Zahrawi' }
-    ]
-  }
+  // Extract top 3 winners (memoized)
+  const winners = useMemo(() => {
+    let list = []
+    if (results && results.length > 0) {
+      list = results.slice(0, 3).map((r, idx) => ({
+        rank: r.position ? String(r.position).padStart(2, '0') + '.' : `0${idx + 1}.`,
+        name: r.participants?.name || 'Participant',
+        team: r.participants?.teams?.name || '—'
+      }))
+    } else if (mockData?.winners) {
+      list = [...mockData.winners]
+    } else {
+      list = [
+        { rank: '01.', name: 'Suhail Kp', team: 'Zahrawi' },
+        { rank: '02.', name: 'Sinan A', team: 'Zahrawi' },
+        { rank: '03.', name: 'Hudaifath', team: 'Zahrawi' }
+      ]
+    }
 
-  while (winners.length < 3) {
-    winners.push({ rank: `0${winners.length + 1}.`, name: '—', team: '—' })
-  }
+    while (list.length < 3) {
+      list.push({ rank: `0${list.length + 1}.`, name: '—', team: '—' })
+    }
+    return list
+  }, [results, mockData?.winners])
 
-  const winnersNamesStr = winners.map(w => w.name).join('<br />')
-  const winnersTeamsStr = winners.map(w => w.team).join('<br />')
-
-  // Generate dynamic HTML by binding placeholders and layer mapping
+  // Generate dynamic HTML by binding placeholders and layer mapping (memoized to avoid expensive regex on large HTML)
   const activeMapping = customMapping || template?.layer_mapping || {}
 
-  const processedHtml = replacePosterLayers(
-    template?.html_content || '',
-    {
-      compName,
-      catName,
-      codeNum,
-      winnersNamesStr,
-      winnersTeamsStr,
-      winners
-    },
-    activeMapping
-  )
+  const processedHtml = useMemo(() => {
+    const winnersNamesStr = winners.map(w => w.name).join('<br />')
+    const winnersTeamsStr = winners.map(w => w.team).join('<br />')
+
+    let baseHtml = template?.html_content || ''
+    if (isHovered) {
+      baseHtml = baseHtml.replace(/color:\s*(rgb\(255,\s*255,\s*255\)|#ffffff|#fff|white)/gi, 'color: #f7c948')
+      baseHtml = baseHtml.replace(/color:\s*(rgb\(0,\s*0,\s*0\)|#000000|#000|black)/gi, 'color: #3b82f6')
+    }
+
+    return replacePosterLayers(
+      baseHtml,
+      {
+        compName,
+        catName,
+        codeNum,
+        winnersNamesStr,
+        winnersTeamsStr,
+        winners
+      },
+      activeMapping
+    )
+  }, [template?.html_content, compName, catName, codeNum, winners, activeMapping, isHovered])
 
   // Export high-res PNG handler
   const handleExportPng = async (e) => {
@@ -242,7 +305,7 @@ const DynamicPosterRenderer = forwardRef(function DynamicPosterRenderer({
 
       const dataUrl = await toPng(posterCanvasRef.current, {
         cacheBust: true,
-        pixelRatio: 2,
+        pixelRatio: 1,
         width: width,
         height: height,
         backgroundColor: '#ffffff',
@@ -314,4 +377,4 @@ const DynamicPosterRenderer = forwardRef(function DynamicPosterRenderer({
   )
 })
 
-export default DynamicPosterRenderer
+export default React.memo(DynamicPosterRenderer)

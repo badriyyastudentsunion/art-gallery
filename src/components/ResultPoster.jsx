@@ -1,86 +1,152 @@
 // src/components/ResultPoster.jsx
 import React, { useRef, useState, useEffect } from 'react'
-import { toPng } from 'html-to-image'
+import { supabase } from '../lib/supabase'
+import DynamicPosterRenderer from './DynamicPosterRenderer'
 import './ResultPoster.css'
 
-export default function ResultPoster({ competition, results = [] }) {
-  const posterRef = useRef(null)
-  const containerRef = useRef(null)
-  const [scale, setScale] = useState(0.4)
-  const [downloading, setDownloading] = useState(false)
+/**
+ * Checks if a given number matches a comma-separated range string.
+ * Supports: "1-10, 30-40", "5, 12, 20-25", "all", "*" etc.
+ */
+export function matchesResultRange(rangeStr, num) {
+  if (!rangeStr || !rangeStr.trim()) return false
+  const cleanStr = rangeStr.trim().toLowerCase()
+  if (cleanStr === 'all' || cleanStr === '*') return true
+  if (num === null || num === undefined || isNaN(num)) return false
 
-  // Measure preview container and compute scale factor relative to 1162px canvas
-  useEffect(() => {
-    if (!containerRef.current) return
-    const updateScale = () => {
-      if (containerRef.current) {
-        const width = containerRef.current.clientWidth
-        setScale(width / 1162)
+  const target = parseInt(num, 10)
+  const parts = cleanStr.split(',').map(s => s.trim()).filter(Boolean)
+
+  for (const part of parts) {
+    if (part.includes('-')) {
+      const [startStr, endStr] = part.split('-').map(s => s.trim())
+      const start = parseInt(startStr, 10)
+      const end = parseInt(endStr, 10)
+      if (!isNaN(start) && !isNaN(end)) {
+        const min = Math.min(start, end)
+        const max = Math.max(start, end)
+        if (target >= min && target <= max) return true
       }
+    } else {
+      const single = parseInt(part, 10)
+      if (!isNaN(single) && single === target) return true
     }
-    updateScale()
-    const observer = new ResizeObserver(updateScale)
-    observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [])
+  }
 
-  const categoryName = competition?.categories?.name || 'General'
-  const competitionName = competition?.name || 'Competition'
+  return false
+}
+
+// In-memory cache across component mounts for instant zero-latency renders
+let cachedTemplates = null
+
+export default function ResultPoster({ competition, results = [] }) {
   const codeNumber = competition?.announcementNumber
-    ? String(competition.announcementNumber).padStart(2, '0')
-    : '01'
+    ? parseInt(competition.announcementNumber, 10)
+    : null
 
-  // Extract top 3 positions / winners
-  const topWinners = (results || []).slice(0, 3).map((r, idx) => {
-    const rankNum = r.position ? String(r.position).padStart(2, '0') : String(idx + 1).padStart(2, '0')
-    return {
-      rank: `${rankNum}.`,
-      name: r.participants?.name || 'Participant',
-      team: r.participants?.teams?.name || '—'
+  const [template, setTemplate] = useState(() => {
+    // Optimistic initial render from memory/localStorage
+    if (cachedTemplates && codeNumber !== null) {
+      return cachedTemplates.find(t => matchesResultRange(t.result_range, codeNumber)) || null
     }
+    try {
+      const local = localStorage.getItem('inspico_poster_templates_cache')
+      if (local) {
+        const parsed = JSON.parse(local)
+        cachedTemplates = parsed
+        if (codeNumber !== null) {
+          return parsed.find(t => matchesResultRange(t.result_range, codeNumber)) || null
+        }
+      }
+    } catch (_) {}
+    return null
   })
 
-  // Fill in blanks if fewer than 3 winners
-  while (topWinners.length < 3) {
-    const nextRank = String(topWinners.length + 1).padStart(2, '0')
-    topWinners.push({
-      rank: `${nextRank}.`,
-      name: '—',
-      team: '—'
-    })
+  const [loadingTemplate, setLoadingTemplate] = useState(() => !template)
+  const [downloading, setDownloading] = useState(false)
+  const dynamicRendererRef = useRef(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function fetchActiveTemplate() {
+      try {
+        // Always query Supabase as source of truth to avoid stale or deleted templates
+        const { data: allTemplates, error } = await supabase
+          .from('poster_templates')
+          .select('id, name, html_content, canvas_width, canvas_height, layer_mapping, result_range, is_default, created_at')
+          .order('created_at', { ascending: false })
+
+        if (!error && allTemplates) {
+          cachedTemplates = allTemplates
+          try {
+            localStorage.setItem('inspico_poster_templates_cache', JSON.stringify(allTemplates))
+          } catch (_) {}
+
+          let matched = null
+          if (allTemplates.length > 0 && codeNumber !== null) {
+            matched = allTemplates.find(t => matchesResultRange(t.result_range, codeNumber)) || null
+          }
+
+          if (isMounted) {
+            setTemplate(matched && matched.html_content ? matched : null)
+            setLoadingTemplate(false)
+          }
+          return
+        }
+      } catch (err) {
+        console.error('Error fetching poster templates from Supabase:', err)
+      }
+
+      // Offline or network error fallback
+      try {
+        const localStr = localStorage.getItem('inspico_poster_templates_cache')
+        if (localStr) {
+          const parsed = JSON.parse(localStr)
+          cachedTemplates = parsed
+          if (isMounted) {
+            const matched = codeNumber !== null ? parsed.find(t => matchesResultRange(t.result_range, codeNumber)) : null
+            setTemplate(matched && matched.html_content ? matched : null)
+          }
+        }
+      } catch (_) {}
+
+      if (isMounted) setLoadingTemplate(false)
+    }
+
+    fetchActiveTemplate()
+
+    // Realtime listener for template additions / deletions / edits
+    const ch = supabase.channel(`rt-templates-${Math.random().toString(36).substring(2, 7)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'poster_templates' }, () => {
+        fetchActiveTemplate()
+      })
+      .subscribe()
+
+    // Local event listener when admin updates templates in the same session
+    const handleLocalUpdate = () => fetchActiveTemplate()
+    window.addEventListener('poster_templates_updated', handleLocalUpdate)
+
+    return () => {
+      isMounted = false
+      supabase.removeChannel(ch)
+      window.removeEventListener('poster_templates_updated', handleLocalUpdate)
+    }
+  }, [codeNumber])
+
+  // If no template uploaded/found, return null gracefully
+  if (!loadingTemplate && !template) {
+    return null
   }
 
   const handleDownload = async (e) => {
     if (e) e.stopPropagation()
-    if (!posterRef.current || downloading) return
+    if (downloading || !dynamicRendererRef.current) return
     try {
       setDownloading(true)
-      if (document.fonts) {
-        await document.fonts.ready
-      }
-      // Render canvas at full 1162x1353 px
-      const dataUrl = await toPng(posterRef.current, {
-        cacheBust: true,
-        pixelRatio: 2, // High resolution rendering
-        width: 1162,
-        height: 1353,
-        backgroundColor: '#033a2e',
-        style: {
-          transform: 'none',
-          position: 'static',
-          display: 'block'
-        }
-      })
-      const link = document.createElement('a')
-      const cleanName = competitionName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-      link.download = `${cleanName}-result-poster.png`
-      link.href = dataUrl
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      await dynamicRendererRef.current.exportPng()
     } catch (err) {
-      console.error('Failed to export poster image:', err)
-      alert('Could not download poster. Please try again.')
+      console.error('Download error:', err)
     } finally {
       setDownloading(false)
     }
@@ -88,82 +154,74 @@ export default function ResultPoster({ competition, results = [] }) {
 
   return (
     <div className="result-poster-wrapper">
-      {/* Scaled Preview */}
-      <div
-        ref={containerRef}
-        className="result-poster-viewport"
-        style={{ cursor: 'default' }}
-      >
+      {loadingTemplate ? (
         <div
-          className="result-poster-scale-box"
-          style={{ transform: `scale(${scale})` }}
+          style={{
+            width: '100%',
+            maxWidth: 480,
+            aspectRatio: '1 / 1',
+            background: 'linear-gradient(135deg, rgba(247,201,72,0.04) 0%, rgba(13,17,23,0.95) 100%)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12
+          }}
         >
-          {/* Main 1162x1353 Canvas */}
-          <div ref={posterRef} className="result-poster-canvas">
-            {/* Background Graphic */}
-            <img
-              src="/result-poster-bg.png"
-              alt="Poster Background"
-              className="rp-bg-image"
-              crossOrigin="anonymous"
-              loading="eager"
-            />
-
-            {/* Category Tag */}
-            <div className="rp-layer-category">
-              {categoryName}
-            </div>
-
-            {/* Competition Title */}
-            <div className="rp-layer-competition">
-              {competitionName}
-            </div>
-
-            {/* Announcement / Code Number */}
-            <div className="rp-layer-code">
-              {codeNumber}
-            </div>
-
-            {/* Winners List (Ranks 01, 02, 03) */}
-            <div className="rp-winners-container">
-              {topWinners.map((winner, idx) => (
-                <div key={idx} className="rp-winner-item">
-                  <div className="rp-winner-rank">{winner.rank}</div>
-                  <div className="rp-winner-details">
-                    <div className="rp-winner-name">{winner.name}</div>
-                    <div className="rp-winner-team">{winner.team}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              border: '3px solid rgba(247,201,72,0.3)',
+              borderTopColor: '#f7c948',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite'
+            }}
+          />
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Loading poster...</span>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
-      </div>
+      ) : (
+        <>
+          <div style={{ width: '100%', maxWidth: 480, margin: '0 auto' }}>
+            <DynamicPosterRenderer
+              ref={dynamicRendererRef}
+              template={template}
+              competition={competition}
+              results={results}
+              customMapping={template.layer_mapping}
+            />
+          </div>
 
-      <button
-        type="button"
-        className="result-poster-download-btn"
-        onClick={handleDownload}
-        disabled={downloading}
-      >
-        {downloading ? (
-          <>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
-              <circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="3" strokeDasharray="45 25" strokeLinecap="round" />
-            </svg>
-            <span>Generating Poster...</span>
-          </>
-        ) : (
-          <>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            <span>Download Poster</span>
-          </>
-        )}
-      </button>
+          <button
+            type="button"
+            className="result-poster-download-btn"
+            onClick={handleDownload}
+            disabled={downloading}
+          >
+            {downloading ? (
+              <>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+                  <circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="3" strokeDasharray="45 25" strokeLinecap="round" />
+                </svg>
+                <span>Generating Poster...</span>
+              </>
+            ) : (
+              <>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Download Result Poster</span>
+              </>
+            )}
+          </button>
+        </>
+      )}
     </div>
   )
 }
+

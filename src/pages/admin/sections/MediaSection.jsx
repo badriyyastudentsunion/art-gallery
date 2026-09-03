@@ -1,5 +1,6 @@
 // src/pages/admin/sections/MediaSection.jsx
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import './competitions.css' // Reuse general admin forms and list styles
 
@@ -26,6 +27,7 @@ export default function MediaSection() {
   const [activeTab, setActiveTab] = useState('uploaders') // 'uploaders' | 'moderation'
   const [uploaders, setUploaders] = useState([])
   const [mediaItems, setMediaItems] = useState([])
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
   
   // New Uploader form state
   const [name, setName] = useState('')
@@ -138,77 +140,74 @@ export default function MediaSection() {
   }
 
   const handleDeleteUploader = async (uploaderId) => {
-    if (!window.confirm('Are you sure you want to delete this account?')) return
+    setDeleteConfirm({
+      message: 'Are you sure you want to delete this media uploader account?',
+      onConfirm: async () => {
+        try {
+          const { data } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'media_uploaders')
+            .maybeSingle()
 
-    try {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'media_uploaders')
-        .maybeSingle()
+          if (!data?.value) return
 
-      if (!data?.value) return
+          const currentUploaders = JSON.parse(data.value)
+          const filteredUploaders = currentUploaders.filter(u => u.id !== uploaderId)
 
-      const currentUploaders = JSON.parse(data.value)
-      const filteredUploaders = currentUploaders.filter(u => u.id !== uploaderId)
+          const adminPassword = localStorage.getItem('ag_pass') || ''
+          const { error } = await supabase.rpc('update_sensitive_setting', {
+            p_key: 'media_uploaders',
+            p_value: JSON.stringify(filteredUploaders),
+            p_admin_password: adminPassword
+          })
 
-      const adminPassword = localStorage.getItem('ag_pass') || ''
-      const { error } = await supabase.rpc('update_sensitive_setting', {
-        p_key: 'media_uploaders',
-        p_value: JSON.stringify(filteredUploaders),
-        p_admin_password: adminPassword
-      })
-
-      if (error) throw error
-
-      setUploaders(filteredUploaders)
-      showToast('Account deleted successfully.')
-    } catch (err) {
-      console.error(err)
-      showToast('Failed to delete account.', 'error')
-    }
+          if (error) throw error
+          setUploaders(filteredUploaders)
+          showToast('Account deleted successfully.')
+        } catch (err) {
+          console.error(err)
+          showToast('Failed to delete account.', 'error')
+        }
+      }
+    })
   }
 
   const handleDeleteMedia = async (itemId) => {
-    if (!window.confirm('Are you sure you want to delete this media item?')) return
+    const targetItem = mediaItems.find(m => m.id === itemId)
+    setDeleteConfirm({
+      message: 'Are you sure you want to permanently delete this media item from the gallery?',
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase.from('gallery_media').delete().eq('id', itemId)
+          if (error) throw error
 
-    try {
-      const targetItem = mediaItems.find(m => m.id === itemId)
-
-      const { error } = await supabase
-        .from('gallery_media')
-        .delete()
-        .eq('id', itemId)
-
-      if (error) throw error
-
-      // Clean up files from Supabase Storage bucket
-      const storagePaths = []
-      if (targetItem?.hd_url?.includes('/event-media/')) {
-        const hdPath = targetItem.hd_url.split('/event-media/')[1]?.split('?')[0]
-        if (hdPath) storagePaths.push(hdPath)
-      } else {
-        storagePaths.push(`hd/${itemId}.jpg`)
+          const storagePaths = []
+          if (targetItem?.hd_url?.includes('/event-media/')) {
+            const hdPath = targetItem.hd_url.split('/event-media/')[1]?.split('?')[0]
+            if (hdPath) storagePaths.push(hdPath)
+          } else {
+            storagePaths.push(`hd/${itemId}.jpg`)
+          }
+          if (targetItem?.thumb_url?.includes('/event-media/')) {
+            const thumbPath = targetItem.thumb_url.split('/event-media/')[1]?.split('?')[0]
+            if (thumbPath) storagePaths.push(thumbPath)
+          } else {
+            storagePaths.push(`thumbs/${itemId}.jpg`)
+          }
+          if (storagePaths.length > 0) {
+            supabase.storage.from('event-media').remove(storagePaths).catch(e => console.warn('Storage delete error:', e))
+          }
+          setMediaItems(prev => prev.filter(m => m.id !== itemId))
+          showToast('Media item deleted.')
+        } catch (err) {
+          console.error(err)
+          showToast('Failed to delete media item.', 'error')
+        }
       }
-
-      if (targetItem?.thumb_url?.includes('/event-media/')) {
-        const thumbPath = targetItem.thumb_url.split('/event-media/')[1]?.split('?')[0]
-        if (thumbPath) storagePaths.push(thumbPath)
-      } else {
-        storagePaths.push(`thumbs/${itemId}.jpg`)
-      }
-
-      if (storagePaths.length > 0) {
-        supabase.storage.from('event-media').remove(storagePaths).catch(e => console.warn('Storage delete error:', e))
-      }
-
-      setMediaItems(prev => prev.filter(item => item.id !== itemId))
-      showToast('Media item deleted.')
-    } catch (err) {
-      console.error(err)
-      showToast('Failed to delete media item.', 'error')
-    }
+    })
   }
+
 
   const filteredMedia = mediaItems.filter(item =>
     item.caption.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -217,6 +216,7 @@ export default function MediaSection() {
   )
 
   return (
+    <>
     <div className={`section-root${formOpen ? ' panel-open' : ''}`}>
       <div className="section-list">
         {/* Header bar */}
@@ -416,5 +416,28 @@ export default function MediaSection() {
         </div>
       )}
     </div>
+
+      {deleteConfirm && createPortal(
+        <div className="dash-modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="dash-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: '#e07c7c' }}>Confirm Delete</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 20 }}>
+              {deleteConfirm.message}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-cancel-edit"
+                style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}
+                onClick={() => setDeleteConfirm(null)}
+              >Cancel</button>
+              <button type="button" className="btn-delete"
+                style={{ padding: '8px 16px', background: '#e07c7c', color: '#0e0b07', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                onClick={async () => { await deleteConfirm.onConfirm(); setDeleteConfirm(null) }}
+              >Delete</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   )
 }

@@ -1,5 +1,6 @@
 // src/pages/admin/sections/PosterTemplatesSection.jsx
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import DynamicPosterRenderer, { extractTextLayers } from '../../../components/DynamicPosterRenderer'
 import './posterTemplates.css'
@@ -19,9 +20,115 @@ const FIELD_OPTIONS = [
   { value: 'static', label: '🔒 Keep Static (Original Text)' }
 ]
 
+const STORAGE_KEY = 'inspico_poster_templates_cache'
+
+function RangeChips({ template, updateRange }) {
+  const [inputValue, setInputValue] = useState('');
+  
+  const ranges = template.result_range 
+    ? template.result_range.split(',').map(s => s.trim()).filter(Boolean) 
+    : [];
+
+  const handleAdd = () => {
+    const val = inputValue.trim();
+    if (!val) return;
+    if (!/^\d+(-\d+)?$/.test(val)) {
+       alert("Please enter a valid range (e.g. 1-10 or 5)");
+       return;
+    }
+    if (!ranges.includes(val)) {
+      const newRanges = [...ranges, val];
+      updateRange(template.id, newRanges.join(', '));
+    }
+    setInputValue('');
+  };
+
+  const handleRemove = (rangeToRemove) => {
+    const newRanges = ranges.filter(r => r !== rangeToRemove);
+    updateRange(template.id, newRanges.join(', '));
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {ranges.length === 0 && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', padding: '2px 0' }}>No ranges assigned</span>}
+        {ranges.map(r => (
+          <span key={r} style={{ 
+            background: 'rgba(184, 25, 60, 0.2)', 
+            color: '#fb7185', 
+            border: '1px solid rgba(184, 25, 60, 0.5)',
+            fontSize: 10.5, 
+            padding: '2px 6px', 
+            borderRadius: 4,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4
+          }}>
+            {r}
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleRemove(r); }}
+              style={{ background: 'none', border: 'none', color: '#fb7185', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                 <line x1="18" y1="6" x2="6" y2="18" />
+                 <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <input 
+          type="text" 
+          value={inputValue}
+          onChange={e => setInputValue(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleAdd()}
+          placeholder="Add range (e.g. 1-10)"
+          style={{
+            flex: 1,
+            fontSize: 11, 
+            padding: '4px 6px', 
+            background: 'rgba(255,255,255,0.05)', 
+            border: '1px solid rgba(255,255,255,0.1)', 
+            color: '#e2e8f0', 
+            borderRadius: 4, 
+            outline: 'none',
+            minWidth: 0
+          }}
+        />
+        <button 
+          onClick={(e) => { e.stopPropagation(); handleAdd(); }}
+          style={{
+            background: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff',
+            borderRadius: 4,
+            padding: '0 8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function PosterTemplatesSection() {
-  const [templates, setTemplates] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [templates, setTemplates] = useState(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY)
+      if (cached) return JSON.parse(cached)
+    } catch (_) {}
+    return []
+  })
+  const [loading, setLoading] = useState(() => templates.length === 0)
   const [activePreviewTpl, setActivePreviewTpl] = useState(null)
   const [editingTpl, setEditingTpl] = useState(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -30,10 +137,15 @@ export default function PosterTemplatesSection() {
   const [mappingSuccess, setMappingSuccess] = useState(false)
   const fileInputRef = useRef(null)
   const previewRendererRef = useRef(null)
+  const [hoveredCard, setHoveredCard] = useState(null)
+  const [renamingTplId, setRenamingTplId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
 
-  // Real Database Judged Competitions & Computed Winners State
-  const [realCompetitions, setRealCompetitions] = useState([])
-  const [selectedCompId, setSelectedCompId] = useState('')
+  const getStartingNumber = (rangeStr) => {
+    if (!rangeStr) return '01'
+    const match = rangeStr.match(/\d+/)
+    return match ? String(match[0]).padStart(2, '0') : '01'
+  }
 
   // Dynamic values bound to renderer
   const [currentCompName, setCurrentCompName] = useState('Article Preveiw')
@@ -45,18 +157,125 @@ export default function PosterTemplatesSection() {
     { rank: '03.', name: 'Hudaifath', team: 'Zahrawi' }
   ])
 
-  // Current active template's extracted layers & active custom mapping
+  // Current active template's extracted layers, mapping & result range
   const [detectedLayers, setDetectedLayers] = useState([])
   const [currentMapping, setCurrentMapping] = useState({})
+  const [currentResultRange, setCurrentResultRange] = useState('')
+
+  const [loadingModalTpl, setLoadingModalTpl] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const prefetchedIds = useRef(new Set())
+
+  const totalCovered = useMemo(() => {
+    let count = 0
+    templates.forEach(t => {
+      const rangeStr = t.result_range
+      if (!rangeStr) return
+      const parts = rangeStr.split(',').map(s => s.trim()).filter(Boolean)
+      for (const part of parts) {
+        if (part.includes('-')) {
+          const [start, end] = part.split('-').map(Number)
+          if (!isNaN(start) && !isNaN(end)) {
+            count += (Math.max(start, end) - Math.min(start, end) + 1)
+          }
+        } else {
+          if (!isNaN(Number(part))) count += 1
+        }
+      }
+    })
+    return count
+  }, [templates])
+
+  // Save templates cache to localStorage and notify other components
+  const updateCachedTemplates = (newTemplates) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newTemplates))
+      localStorage.setItem('inspico_poster_templates_version', Date.now().toString())
+      window.dispatchEvent(new CustomEvent('poster_templates_updated'))
+    } catch (_) {}
+  }
+
+  const updateTemplateRange = async (id, newRange) => {
+    try {
+      const { error } = await supabase
+        .from('poster_templates')
+        .update({ result_range: newRange, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (!error) {
+        setTemplates(prev => {
+          const updated = prev.map(t => t.id === id ? { ...t, result_range: newRange } : t);
+          updateCachedTemplates(updated);
+          return updated;
+        });
+        if (activePreviewTpl?.id === id) {
+          setCurrentResultRange(newRange);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update range:', err);
+    }
+  }
 
   useEffect(() => {
     fetchTemplates()
-    fetchRealJudgedCompetitions()
   }, [])
 
-  // When active preview template changes, extract its layers and load its mapping
+  // Listen for Escape and Enter keys for modal actions
   useEffect(() => {
-    if (activePreviewTpl) {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (deleteConfirm) {
+          setDeleteConfirm(null)
+        } else if (editingTpl) {
+          setEditingTpl(null)
+        } else if (activePreviewTpl) {
+          setActivePreviewTpl(null)
+        }
+      } else if (e.key === 'Enter') {
+        // Avoid submitting if user is typing inside textarea or a button is actively focused
+        if (e.target.tagName === 'TEXTAREA') return
+
+        if (deleteConfirm) {
+          e.preventDefault()
+          deleteConfirm.onConfirm()
+          setDeleteConfirm(null)
+        } else if (activePreviewTpl && !savingMapping) {
+          e.preventDefault()
+          handleSaveLayerMapping()
+        } else if (editingTpl) {
+          e.preventDefault()
+          handleSaveCodeEdit()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activePreviewTpl, editingTpl, deleteConfirm, currentMapping, currentResultRange, savingMapping])
+
+  // Prefetch HTML in background on card hover so click is instant
+  const handlePrefetch = async (tpl) => {
+    if (tpl.html_content || prefetchedIds.current.has(tpl.id)) return
+    prefetchedIds.current.add(tpl.id)
+    try {
+      const { data } = await supabase
+        .from('poster_templates')
+        .select('html_content')
+        .eq('id', tpl.id)
+        .single()
+      if (data?.html_content) {
+        const fullTpl = { ...tpl, html_content: data.html_content }
+        setTemplates(prev => prev.map(t => t.id === tpl.id ? fullTpl : t))
+        // If this template is currently shown in modal, update it too
+        setActivePreviewTpl(prev => prev?.id === tpl.id ? { ...prev, html_content: data.html_content } : prev)
+      }
+    } catch (err) {
+      prefetchedIds.current.delete(tpl.id) // allow retry
+    }
+  }
+
+  // When active preview template changes, extract its layers and load its mapping + range
+  useEffect(() => {
+    if (activePreviewTpl && activePreviewTpl.html_content) {
       const layers = extractTextLayers(activePreviewTpl.html_content)
       setDetectedLayers(layers)
 
@@ -68,25 +287,32 @@ export default function PosterTemplatesSection() {
       })
 
       setCurrentMapping(initialMap)
+      setCurrentResultRange(activePreviewTpl.result_range || '')
       setMappingSuccess(false)
     } else {
       setDetectedLayers([])
       setCurrentMapping({})
+      setCurrentResultRange('')
     }
   }, [activePreviewTpl])
 
   async function fetchTemplates() {
-    setLoading(true)
+    // If we don't have templates yet, show loader
+    if (templates.length === 0) setLoading(true)
+
     try {
       const { data, error } = await supabase
         .from('poster_templates')
-        .select('*')
+        .select('id, name, result_range, is_default, canvas_width, canvas_height, layer_mapping, html_content, created_at, updated_at')
         .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error fetching templates:', error)
       } else {
-        setTemplates(data || [])
+        const fetched = data || []
+        setTemplates(fetched)
+        updateCachedTemplates(fetched)
+        fetched.forEach(t => prefetchedIds.current.add(t.id))
       }
     } catch (err) {
       console.error('Error:', err)
@@ -95,96 +321,72 @@ export default function PosterTemplatesSection() {
     }
   }
 
-  async function fetchRealJudgedCompetitions() {
+  // Open modal INSTANTLY with metadata, load HTML in background if needed
+  const handleOpenPreview = async (tpl) => {
+    setActivePreviewTpl(tpl)
+    setActiveModalTab('mapping')
+
+    if (tpl.html_content) return
+
     try {
-      const [
-        { data: comps, error: compErr },
-        { data: jResults, error: jErr },
-        { data: reports, error: repErr }
-      ] = await Promise.all([
-        supabase.from('competitions').select('*, categories(id, name)').order('name'),
-        supabase.from('judge_results').select('competition_id, code_letter, points_raw, grade'),
-        supabase.from('competition_reports').select('competition_id, code_letter, participant_id, participants(id, name, chess_number, team_id, teams(name))')
-      ])
+      setLoadingModalTpl(true)
+      const { data, error } = await supabase
+        .from('poster_templates')
+        .select('html_content')
+        .eq('id', tpl.id)
+        .single()
 
-      if (compErr || jErr || repErr) {
-        console.error('Error fetching judge results:', compErr || jErr || repErr)
-        return
-      }
-
-      const compScores = {}
-      ;(jResults || []).forEach(r => {
-        if (!compScores[r.competition_id]) compScores[r.competition_id] = {}
-        if (!compScores[r.competition_id][r.code_letter]) {
-          compScores[r.competition_id][r.code_letter] = []
-        }
-        compScores[r.competition_id][r.code_letter].push(Number(r.points_raw) || 0)
-      })
-
-      const compParticipants = {}
-      ;(reports || []).forEach(r => {
-        if (!compParticipants[r.competition_id]) compParticipants[r.competition_id] = {}
-        compParticipants[r.competition_id][r.code_letter] = r.participants
-      })
-
-      const judgedList = []
-
-      ;(comps || []).forEach(c => {
-        const rawScores = compScores[c.id]
-        if (!rawScores) return
-
-        const nameMap = compParticipants[c.id] || {}
-
-        const aggregated = Object.entries(rawScores).map(([code, ptsArr]) => {
-          const avg = ptsArr.reduce((sum, v) => sum + v, 0) / ptsArr.length
-          const participant = nameMap[code]
-          return {
-            code_letter: code,
-            avg_points: avg,
-            name: participant?.name || `Code ${code}`,
-            team: participant?.teams?.name || '—'
-          }
-        }).sort((a, b) => b.avg_points - a.avg_points)
-
-        if (aggregated.length > 0) {
-          const winners = aggregated.slice(0, 3).map((w, idx) => ({
-            rank: `0${idx + 1}.`,
-            name: w.name,
-            team: w.team
-          }))
-
-          while (winners.length < 3) {
-            winners.push({ rank: `0${winners.length + 1}.`, name: '—', team: '—' })
-          }
-
-          judgedList.push({
-            id: c.id,
-            name: c.name,
-            category_name: c.categories?.name || 'General',
-            announcementNumber: c.announcementNumber || '',
-            winners: winners,
-            totalJudgedCount: aggregated.length
-          })
-        }
-      })
-
-      setRealCompetitions(judgedList)
-
-      if (judgedList.length > 0) {
-        setSelectedCompId(judgedList[0].id)
-        applyJudgedCompetition(judgedList[0])
+      if (data?.html_content) {
+        const fullTpl = { ...tpl, html_content: data.html_content }
+        setActivePreviewTpl(fullTpl)
+        setTemplates(prev => {
+          const updated = prev.map(t => t.id === tpl.id ? fullTpl : t)
+          updateCachedTemplates(updated)
+          return updated
+        })
+        prefetchedIds.current.add(tpl.id)
+      } else if (error) {
+        console.error('Failed to load template content:', error.message)
       }
     } catch (err) {
-      console.error('Error calculating judged competitions:', err)
+      console.error(err)
+    } finally {
+      setLoadingModalTpl(false)
     }
   }
 
-  function applyJudgedCompetition(comp) {
-    if (!comp) return
-    setCurrentCompName(comp.name)
-    setCurrentCatName(comp.category_name)
-    setCurrentCodeNumber(comp.announcementNumber ? String(comp.announcementNumber).padStart(2, '0') : '01')
-    setCurrentWinners(comp.winners)
+  // Load single template HTML on demand when edit code modal is opened
+  const handleOpenEdit = async (tpl) => {
+    if (tpl.html_content) {
+      setEditingTpl(tpl)
+      return
+    }
+
+    try {
+      setLoadingModalTpl(true)
+      const { data, error } = await supabase
+        .from('poster_templates')
+        .select('html_content')
+        .eq('id', tpl.id)
+        .single()
+
+      if (data?.html_content) {
+        const fullTpl = { ...tpl, html_content: data.html_content }
+        setEditingTpl(fullTpl)
+        setTemplates(prev => {
+          const updated = prev.map(t => t.id === tpl.id ? fullTpl : t)
+          updateCachedTemplates(updated)
+          return updated
+        })
+        prefetchedIds.current.add(tpl.id)
+      } else if (error) {
+        alert('Failed to load template content: ' + error.message)
+      }
+    } catch (err) {
+      alert('Error: ' + err.message)
+    } finally {
+      setLoadingModalTpl(false)
+    }
   }
 
   // Handle File Upload (.html)
@@ -228,7 +430,7 @@ export default function PosterTemplatesSection() {
               html_content: htmlContent,
               canvas_width: width,
               canvas_height: height,
-              is_default: templates.length === 0,
+              is_default: false,
               layer_mapping: initialMap
             }
           ])
@@ -254,52 +456,86 @@ export default function PosterTemplatesSection() {
     reader.readAsText(file)
   }
 
-  // Save Layer Mapping to Supabase
+  // Save Layer Mapping and Result Range to Supabase
   async function handleSaveLayerMapping() {
     if (!activePreviewTpl) return
     setSavingMapping(true)
     try {
       const { error } = await supabase
         .from('poster_templates')
-        .update({ layer_mapping: currentMapping })
+        .update({
+          layer_mapping: currentMapping,
+          result_range: currentResultRange.trim()
+        })
         .eq('id', activePreviewTpl.id)
 
       if (error) {
-        alert('Failed to save mapping: ' + error.message)
+        alert('Failed to save settings: ' + error.message)
       } else {
-        setMappingSuccess(true)
-        // Update local template record
-        setActivePreviewTpl({ ...activePreviewTpl, layer_mapping: currentMapping })
-        setTemplates(templates.map(t => t.id === activePreviewTpl.id ? { ...t, layer_mapping: currentMapping } : t))
-        setTimeout(() => setMappingSuccess(false), 2500)
+        const updated = {
+          ...activePreviewTpl,
+          layer_mapping: currentMapping,
+          result_range: currentResultRange.trim()
+        }
+        setTemplates(prev => {
+          const next = prev.map(t => t.id === activePreviewTpl.id ? updated : t)
+          updateCachedTemplates(next)
+          return next
+        })
+        // Close modal automatically on successful save
+        setActivePreviewTpl(null)
       }
     } catch (err) {
-      alert('Error saving mapping: ' + err.message)
+      alert('Error saving settings: ' + err.message)
     } finally {
       setSavingMapping(false)
     }
   }
 
-  // Set default template
-  async function handleSetDefault(id) {
-    try {
-      await supabase.from('poster_templates').update({ is_default: false }).neq('id', id)
-      await supabase.from('poster_templates').update({ is_default: true }).eq('id', id)
-      await fetchTemplates()
-    } catch (err) {
-      console.error('Error setting default template:', err)
-    }
-  }
-
   // Delete template
   async function handleDelete(id, name) {
-    if (!window.confirm(`Are you sure you want to delete template "${name}"?`)) return
-    try {
-      await supabase.from('poster_templates').delete().eq('id', id)
-      if (activePreviewTpl?.id === id) setActivePreviewTpl(null)
-      await fetchTemplates()
-    } catch (err) {
-      alert('Delete failed: ' + err.message)
+    setDeleteConfirm({
+      message: `Are you sure you want to delete the template "${name}"? This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await supabase.from('poster_templates').delete().eq('id', id)
+          if (activePreviewTpl?.id === id) {
+            setActivePreviewTpl(null)
+          }
+          setTemplates(prev => {
+            const next = prev.filter(t => t.id !== id)
+            updateCachedTemplates(next)
+            return next
+          })
+        } catch (err) {
+          console.error('Delete failed:', err.message)
+        }
+      }
+    })
+  }
+
+  const handleRenameConfirm = async (id, currentName) => {
+    const newName = renameValue.trim()
+    setRenamingTplId(null)
+    if (newName && newName !== currentName) {
+      try {
+        const { error } = await supabase
+          .from('poster_templates')
+          .update({ name: newName, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          
+        if (error) throw error
+        setTemplates(prev => {
+          const updated = prev.map(t => t.id === id ? { ...t, name: newName } : t)
+          updateCachedTemplates(updated)
+          return updated
+        })
+        if (activePreviewTpl?.id === id) {
+          setActivePreviewTpl(prev => ({ ...prev, name: newName }))
+        }
+      } catch (err) {
+        alert('Failed to rename template: ' + err.message)
+      }
     }
   }
 
@@ -329,18 +565,24 @@ export default function PosterTemplatesSection() {
     }
   }
 
-  const currentPosterData = {
+  const currentPosterData = useMemo(() => ({
     competition_name: currentCompName,
     category_name: currentCatName,
     code_number: currentCodeNumber,
     winners: currentWinners
-  }
+  }), [currentCompName, currentCatName, currentCodeNumber, currentWinners])
 
   return (
+    <>
     <div className="pt-root">
       {/* Top Header */}
       <div className="list-header" style={{ marginBottom: 8 }}>
-        <span className="list-title">Poster Templates</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="list-title">Poster Templates</span>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
+            Results Assigned: <strong style={{ color: '#f7c948' }}>{totalCovered}</strong>
+          </span>
+        </div>
         <div className="pt-header-actions" style={{ marginLeft: 'auto' }}>
           <span className="list-count" style={{ marginRight: 6 }}>{templates.length} total</span>
           <input
@@ -396,74 +638,134 @@ export default function PosterTemplatesSection() {
       ) : (
         <div className="pt-grid">
           {templates.map(tpl => (
-            <div key={tpl.id} className="pt-card">
+            <div key={tpl.id} className="pt-card" onMouseEnter={() => { handlePrefetch(tpl); setHoveredCard(tpl.id); }} onMouseLeave={() => setHoveredCard(null)}>
               <div
                 className="pt-card-preview-wrap"
-                onClick={() => {
-                  setActivePreviewTpl(tpl)
-                  setActiveModalTab('mapping')
-                }}
+                onClick={() => handleOpenPreview(tpl)}
                 title="Click to configure layer mapping & live preview"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(247, 201, 72, 0.04) 0%, rgba(13, 17, 23, 0.95) 100%)',
+                  aspectRatio: '1 / 1',
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  cursor: 'pointer',
+                  padding: '16px',
+                  borderRadius: '10px 10px 0 0',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+                }}
               >
-                {tpl.is_default && <span className="pt-card-badge">Default</span>}
                 <span className="pt-card-dim">{tpl.canvas_width}x{tpl.canvas_height}</span>
 
-                <div style={{ pointerEvents: 'none', width: '100%', display: 'flex', justifyContent: 'center' }}>
-                  <DynamicPosterRenderer
-                    template={tpl}
-                    mockData={currentPosterData}
-                    customMapping={tpl.layer_mapping}
-                  />
-                </div>
+                {tpl.html_content ? (
+                  <div style={{ pointerEvents: 'none', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <DynamicPosterRenderer
+                      template={tpl}
+                      mockData={
+                        hoveredCard === tpl.id
+                          ? { ...currentPosterData, code_number: getStartingNumber(tpl.result_range) }
+                          : { code_number: getStartingNumber(tpl.result_range) }
+                      }
+                      customMapping={
+                        hoveredCard === tpl.id
+                          ? tpl.layer_mapping
+                          : Object.fromEntries(
+                              Object.entries(tpl.layer_mapping || {}).filter(([_, field]) => field === 'code_number')
+                            )
+                      }
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
+                    <div style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 14,
+                      background: 'rgba(247, 201, 72, 0.12)',
+                      border: '1px solid rgba(247, 201, 72, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 24,
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
+                    }}>
+                      🖼️
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff', display: 'block' }}>
+                        {tpl.name}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: 6 }}>
+                          {Object.keys(tpl.layer_mapping || {}).length} Layers Mapped
+                        </span>
+                        <span style={{ fontSize: 11, color: '#f7c948', fontWeight: 700 }}>
+                          Preview ›
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="pt-card-body">
-                <h3 className="pt-card-title">{tpl.name}</h3>
-
-                <div className="pt-card-actions">
-                  <button
-                    className="pt-btn-sm pt-btn-primary"
-                    onClick={() => {
-                      setActivePreviewTpl(tpl)
-                      setActiveModalTab('mapping')
-                    }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="22" y1="12" x2="18" y2="12" />
-                      <line x1="6" y1="12" x2="2" y2="12" />
-                      <line x1="12" y1="6" x2="12" y2="2" />
-                      <line x1="12" y1="22" x2="12" y2="18" />
-                    </svg>
-                    Map Layers & Preview
-                  </button>
-
-                  <button
-                    className="pt-btn-sm"
-                    onClick={() => setEditingTpl(tpl)}
-                    title="Edit HTML code"
-                  >
-                    Edit Code
-                  </button>
-
-                  {!tpl.is_default && (
-                    <button
-                      className="pt-btn-sm"
-                      onClick={() => handleSetDefault(tpl.id)}
-                      title="Set as default result poster template"
-                    >
-                      Set Default
-                    </button>
+                <div className="pt-card-header-row">
+                  {renamingTplId === tpl.id ? (
+                    <input
+                      autoFocus
+                      className="pt-input"
+                      style={{ flex: 1, padding: '2px 6px', fontSize: 13, minWidth: 0, height: 26, background: 'rgba(255,255,255,0.1)' }}
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => {
+                        e.stopPropagation()
+                        if (e.key === 'Enter') handleRenameConfirm(tpl.id, tpl.name)
+                        if (e.key === 'Escape') setRenamingTplId(null)
+                      }}
+                      onBlur={() => handleRenameConfirm(tpl.id, tpl.name)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  ) : (
+                    <h3 className="pt-card-title" title={tpl.name}>{tpl.name}</h3>
                   )}
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      type="button"
+                      className="pt-btn-icon"
+                      onClick={(e) => { 
+                        e.stopPropagation()
+                        setRenamingTplId(tpl.id)
+                        setRenameValue(tpl.name)
+                      }}
+                      title="Rename template"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="pt-btn-icon delete"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(tpl.id, tpl.name) }}
+                      title="Delete template"
+                      aria-label="Delete template"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <line x1="10" y1="11" x2="10" y2="17" />
+                        <line x1="14" y1="11" x2="14" y2="17" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
 
-                  <button
-                    className="pt-btn-sm"
-                    style={{ color: '#ef4444' }}
-                    onClick={() => handleDelete(tpl.id, tpl.name)}
-                    title="Delete template"
-                  >
-                    Delete
-                  </button>
+                <div className="pt-card-actions" onClick={e => e.stopPropagation()}>
+                  <RangeChips template={tpl} updateRange={updateTemplateRange} />
                 </div>
               </div>
             </div>
@@ -495,12 +797,38 @@ export default function PosterTemplatesSection() {
             <div className="pt-modal-body">
               {/* Scaled Live Preview Canvas */}
               <div className="pt-preview-pane">
-                <DynamicPosterRenderer
-                  ref={previewRendererRef}
-                  template={activePreviewTpl}
-                  mockData={currentPosterData}
-                  customMapping={currentMapping}
-                />
+                {activePreviewTpl.html_content ? (
+                  <DynamicPosterRenderer
+                    ref={previewRendererRef}
+                    template={activePreviewTpl}
+                    mockData={currentPosterData}
+                    customMapping={currentMapping}
+                  />
+                ) : (
+                  <div style={{
+                    width: '100%',
+                    aspectRatio: `${activePreviewTpl.canvas_width} / ${activePreviewTpl.canvas_height}`,
+                    background: 'linear-gradient(135deg, rgba(247,201,72,0.04) 0%, rgba(13,17,23,0.95) 100%)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: 8,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 12
+                  }}>
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      border: '3px solid rgba(247,201,72,0.3)',
+                      borderTopColor: '#f7c948',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite'
+                    }} />
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Loading poster…</span>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  </div>
+                )}
 
                 <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
                   <button
@@ -513,7 +841,7 @@ export default function PosterTemplatesSection() {
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
-                    Download Rendered PNG (High-Res 2x)
+                    Download Rendered PNG
                   </button>
                 </div>
               </div>
@@ -531,20 +859,59 @@ export default function PosterTemplatesSection() {
                     className={`pt-tab-btn ${activeModalTab === 'competition' ? 'active' : ''}`}
                     onClick={() => setActiveModalTab('competition')}
                   >
-                    🏆 Test Competition
+                    📝 Test Sample Data
+                  </button>
+                  <button
+                    className={`pt-tab-btn ${activeModalTab === 'code' ? 'active' : ''}`}
+                    onClick={() => {
+                      setEditingTpl(activePreviewTpl)
+                      setActivePreviewTpl(null)
+                    }}
+                    style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.05)' }}
+                  >
+                    &lt;/&gt; Edit Code
                   </button>
                 </div>
 
-                {/* TAB 1: VISUAL LAYER MAPPING */}
+                {/* TAB 1: VISUAL LAYER MAPPING & RANGE */}
                 {activeModalTab === 'mapping' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Result Range Setting Box */}
+                    <div style={{
+                      background: 'rgba(247, 201, 72, 0.04)',
+                      border: '1px solid rgba(247, 201, 72, 0.15)',
+                      borderRadius: 8,
+                      padding: '12px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label className="pt-form-label" style={{ color: '#f7c948', margin: 0 }}>
+                          🔢 Result Code Range
+                        </label>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>e.g. 1-10, 30-40</span>
+                      </div>
+                      <input
+                        type="text"
+                        className="pt-input"
+                        placeholder="e.g. 1-10, 30-40"
+                        value={currentResultRange}
+                        onChange={e => setCurrentResultRange(e.target.value)}
+                        style={{ fontSize: 13, padding: '7px 10px' }}
+                      />
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>
+                        Specify the announcement numbers where this template applies (e.g. <code>1-10, 30-40</code>). If left blank, this template will remain inactive.
+                      </span>
+                    </div>
+
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
                         Assign Dynamic Fields to Template Layers
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '50vh', overflowY: 'auto', paddingRight: 4 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {detectedLayers.length === 0 ? (
                         <div style={{ padding: 20, textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
                           No text layers detected automatically in this template.
@@ -586,44 +953,35 @@ export default function PosterTemplatesSection() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
                       <button
                         className="pt-upload-btn"
-                        style={{ flex: 1, justifyContent: 'center' }}
+                        style={{ flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 6 }}
                         onClick={handleSaveLayerMapping}
                         disabled={savingMapping}
                       >
-                        {savingMapping ? 'Saving...' : mappingSuccess ? '✓ Mapping Saved!' : '💾 Save Layer Mapping'}
+                        {savingMapping ? (
+                          <>
+                            <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                              <polyline points="17 21 17 13 7 13 7 21" />
+                              <polyline points="7 3 7 8 15 8" />
+                            </svg>
+                            <span>Save Mapping & Range</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* TAB 2: COMPETITION SELECTOR */}
+                {/* TAB 2: TEST SAMPLE DATA */}
                 {activeModalTab === 'competition' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div className="pt-form-group">
-                      <label className="pt-form-label" style={{ color: '#fb7185', fontWeight: 700 }}>
-                        🏆 Select Judged Competition ({realCompetitions.length} Available)
-                      </label>
-                      <select
-                        className="pt-input"
-                        value={selectedCompId}
-                        onChange={e => {
-                          const cId = e.target.value
-                          setSelectedCompId(cId)
-                          const comp = realCompetitions.find(c => c.id === cId)
-                          if (comp) applyJudgedCompetition(comp)
-                        }}
-                        style={{ fontWeight: 600, background: '#1e293b' }}
-                      >
-                        {realCompetitions.map(c => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} ({c.category_name})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="pt-form-group">
-                      <label className="pt-form-label">Competition Name</label>
+                      <label className="pt-form-label">Competition Title</label>
                       <input
                         type="text"
                         className="pt-input"
@@ -812,5 +1170,28 @@ export default function PosterTemplatesSection() {
         </div>
       )}
     </div>
+
+      {deleteConfirm && createPortal(
+        <div className="dash-modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="dash-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: '#e07c7c' }}>Confirm Delete</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 20 }}>
+              {deleteConfirm.message}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-cancel-edit"
+                style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}
+                onClick={() => setDeleteConfirm(null)}
+              >Cancel</button>
+              <button type="button" className="btn-delete"
+                style={{ padding: '8px 16px', background: '#e07c7c', color: '#0e0b07', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                onClick={async () => { await deleteConfirm.onConfirm(); setDeleteConfirm(null) }}
+              >Delete</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   )
 }

@@ -1,5 +1,6 @@
 // src/pages/admin/sections/AwardUsersSection.jsx
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../../lib/supabase'
 import '../sections.css'
 
@@ -36,6 +37,7 @@ export default function AwardUsersSection() {
   const [rows, setRows] = useState([])
   const [fetching, setFetching] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [editing, setEditing] = useState(null)
@@ -122,14 +124,17 @@ export default function AwardUsersSection() {
 
   async function handleDelete(id, e) {
     e?.stopPropagation()
-    if (!window.confirm('Are you sure you want to delete this distributor?')) return
-    const { error: err } = await supabase.from('award_users').delete().eq('id', id)
-    if (err) {
-      alert(err.message)
-    }
+    setDeleteConfirm({
+      message: 'Are you sure you want to delete this distributor account? This cannot be undone.',
+      onConfirm: async () => {
+        const { error: err } = await supabase.from('award_users').delete().eq('id', id)
+        if (err) console.error(err.message)
+      }
+    })
   }
 
   return (
+    <>
     <div className={`section-root${panelOpen ? ' panel-open' : ''}`}>
       <div className="section-list">
         <div className="list-header">
@@ -210,5 +215,28 @@ export default function AwardUsersSection() {
         </form>
       </div>
     </div>
+
+      {deleteConfirm && createPortal(
+        <div className="dash-modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="dash-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: '#e07c7c' }}>Confirm Delete</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 20 }}>
+              {deleteConfirm.message}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-cancel-edit"
+                style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}
+                onClick={() => setDeleteConfirm(null)}
+              >Cancel</button>
+              <button type="button" className="btn-delete"
+                style={{ padding: '8px 16px', background: '#e07c7c', color: '#0e0b07', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                onClick={async () => { await deleteConfirm.onConfirm(); setDeleteConfirm(null) }}
+              >Delete</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   )
 }
