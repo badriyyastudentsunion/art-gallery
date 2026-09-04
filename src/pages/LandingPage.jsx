@@ -1064,6 +1064,7 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
   const [loading, setLoading] = useState(true)
   const [resultsCount, setResultsCount] = useState(0)
   const [isRevealed, setIsRevealed] = useState(false)
+  const [isFinalStatus, setIsFinalStatus] = useState(false)
   const [activePoster, setActivePoster] = useState(null)
   const [downloadingPoster, setDownloadingPoster] = useState(false)
 
@@ -1086,11 +1087,13 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
       const [
         { data: teamsData },
         { data: settings },
-        { data: milestoneMedia }
+        { data: milestoneMedia },
+        { count: totalCompsCount }
       ] = await Promise.all([
         supabase.from('teams').select('id, name').order('name'),
-        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence']),
-        supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone').eq('type', 'poster').not('milestone', 'is', null)
+        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence', 'team_point_adjustments']),
+        supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone').eq('type', 'poster').not('milestone', 'is', null),
+        supabase.from('competitions').select('id', { count: 'exact', head: true })
       ])
 
       const revealedMilestoneSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
@@ -1104,6 +1107,7 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
         setResultsCount(0)
         setTeams([])
         setActivePoster(null)
+        setIsFinalStatus(false)
         return
       }
 
@@ -1119,6 +1123,10 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
       const seqCompIds = rawSeq
         .map(i => (typeof i === 'string' ? i : (i?.isDivider ? null : i?.id)))
         .filter(Boolean)
+
+      const totalEventComps = totalCompsCount || 0
+      const isFinal = (revealedMilestone > 0) && (totalEventComps > 0) && (revealedMilestone >= totalEventComps)
+      setIsFinalStatus(isFinal)
 
       // Only include competitions up to the revealed milestone
       const includedComps = seqCompIds.slice(0, revealedMilestone)
@@ -1167,6 +1175,21 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
         }
       }
 
+      if (isFinal) {
+        const adjSetting = settings?.find(s => s.key === 'team_point_adjustments')
+        let adjMap = {}
+        if (adjSetting?.value) {
+          try { adjMap = JSON.parse(adjSetting.value) } catch (e) {}
+        }
+        Object.keys(teamMap).forEach(tId => {
+          const raw = adjMap[tId]
+          const net = typeof raw === 'number'
+            ? raw
+            : ((Number(raw?.bonus) || 0) - (Number(raw?.minus) || 0))
+          teamMap[tId].points += net
+        })
+      }
+
       const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
       setTeams(sorted)
     } catch (e) {
@@ -1198,8 +1221,8 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
         marginBottom: '20px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-light)', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            Live Team Standings {resultsCount > 0 ? `(${resultsCount} Results)` : ''}
+          <span style={{ fontSize: '11px', fontWeight: 800, color: isFinalStatus ? '#f7c948' : 'var(--accent-light)', letterSpacing: '1px', textTransform: 'uppercase' }}>
+            {isFinalStatus ? '🏆 Final Team Standings' : `Live Team Standings (${resultsCount} Results)`}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px' }}>
@@ -1242,7 +1265,7 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
       const blobUrl = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = blobUrl
-      a.download = `inspico-status-after-${activePoster.milestone || 'milestone'}.jpg`
+      a.download = isFinalStatus ? 'inspico-final-status.jpg' : `inspico-status-after-${activePoster.milestone || 'milestone'}.jpg`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -1261,22 +1284,29 @@ function TeamPointsTab({ compact = false, showHeader = true, onOpenStatusPoster 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h2 className="lp-section-title" style={{ margin: 0 }}>Team Standings</h2>
             <span style={{
-              background: 'rgba(79, 156, 249, 0.12)',
-              border: '1px solid rgba(79, 156, 249, 0.25)',
-              color: 'var(--accent, #4f9cf9)',
+              background: isFinalStatus ? 'rgba(247, 201, 72, 0.15)' : 'rgba(79, 156, 249, 0.12)',
+              border: isFinalStatus ? '1px solid rgba(247, 201, 72, 0.35)' : '1px solid rgba(79, 156, 249, 0.25)',
+              color: isFinalStatus ? '#f7c948' : 'var(--accent, #4f9cf9)',
               fontSize: 11,
-              fontWeight: 700,
+              fontWeight: 800,
               padding: '3px 10px',
               borderRadius: 12,
               letterSpacing: 0.3
             }}>
-              {resultsCount > 0 ? `Points after ${resultsCount} ${resultsCount === 1 ? 'Result' : 'Results'}` : 'Initial Standings'}
+              {isFinalStatus ? '🏆 Final Status' : (resultsCount > 0 ? `Points after ${resultsCount} ${resultsCount === 1 ? 'Result' : 'Results'}` : 'Initial Standings')}
             </span>
           </div>
-          <div className="lp-live-badge">
-            <span className="lp-live-dot" />
-            Live
-          </div>
+          {isFinalStatus ? (
+            <div className="lp-live-badge" style={{ background: 'rgba(46, 213, 115, 0.15)', borderColor: 'rgba(46, 213, 115, 0.3)', color: '#2ed573' }}>
+              <span className="lp-live-dot" style={{ background: '#2ed573' }} />
+              Final Results
+            </div>
+          ) : (
+            <div className="lp-live-badge">
+              <span className="lp-live-dot" />
+              Live
+            </div>
+          )}
         </div>
       )}
 
@@ -1407,10 +1437,12 @@ function ResultsTab() {
   const [milestonePosters, setMilestonePosters] = useState({})
   const [revealedMilestone, setRevealedMilestone] = useState(0)
   const [revealMilestones, setRevealMilestones] = useState([])
+  const [totalEventComps, setTotalEventComps] = useState(0)
   const [teamsList, setTeamsList] = useState([])
   const [publishedPointsData, setPublishedPointsData] = useState([])
   const [activeStatusPosterModal, setActiveStatusPosterModal] = useState(null)
   const [downloadingPoster, setDownloadingPoster] = useState(false)
+  const [teamAdjustments, setTeamAdjustments] = useState({})
 
   const selectedRef = useRef(selected)
   const scrollYRef = useRef(0)
@@ -1517,6 +1549,17 @@ function ResultsTab() {
       }
     })
 
+    const isFinalStatus = totalEventComps > 0 && milestoneNumber >= totalEventComps
+    if (isFinalStatus) {
+      Object.keys(pointsMap).forEach(tid => {
+        const raw = teamAdjustments[tid]
+        const net = typeof raw === 'number'
+          ? raw
+          : ((Number(raw?.bonus) || 0) - (Number(raw?.minus) || 0))
+        pointsMap[tid].points += net
+      })
+    }
+
     return Object.values(pointsMap).sort((a, b) => b.points - a.points)
   }
 
@@ -1577,18 +1620,26 @@ function ResultsTab() {
         { data: settingsData },
         { data: milestoneMedia },
         { data: teamsData },
-        { data: allPubResults }
+        { data: allPubResults },
+        { count: totalCompsCount }
       ] = await Promise.all([
-        supabase.from('app_settings').select('key, value').in('key', ['show_result_poster', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones', 'team_colors']),
+        supabase.from('app_settings').select('key, value').in('key', ['show_result_poster', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones', 'team_colors', 'team_point_adjustments']),
         supabase.from('gallery_media').select('id, type, caption, thumb_url, hd_url, milestone').eq('type', 'poster').not('milestone', 'is', null),
         supabase.from('teams').select('id, name').order('name'),
-        supabase.from('competition_results').select('competition_id, placement_points, grade_points, participants(team_id)').eq('published', true)
+        supabase.from('competition_results').select('competition_id, placement_points, grade_points, participants(team_id)').eq('published', true),
+        supabase.from('competitions').select('id', { count: 'exact', head: true })
       ])
+      setTotalEventComps(totalCompsCount || 0)
 
       const posterSetting = settingsData?.find(s => s.key === 'show_result_poster')
       const revSetting = settingsData?.find(s => s.key === 'leaderboard_revealed_milestone')
       const milestonesSetting = settingsData?.find(s => s.key === 'leaderboard_reveal_milestones')
       const colorSetting = settingsData?.find(s => s.key === 'team_colors')
+      const adjSetting = settingsData?.find(s => s.key === 'team_point_adjustments')
+
+      if (adjSetting?.value) {
+        try { setTeamAdjustments(JSON.parse(adjSetting.value)) } catch (e) {}
+      }
 
       let colorMap = {}
       if (colorSetting?.value) {
@@ -1876,6 +1927,7 @@ function ResultsTab() {
                 {hasMilestoneDivider && (() => {
                   const milestoneStandings = getStandingsAtMilestone(c.announcementNumber)
                   const poster = milestonePosters[c.announcementNumber]
+                  const isFinalDivider = totalEventComps > 0 && c.announcementNumber >= totalEventComps
 
                   return (
                     <div
@@ -1886,7 +1938,7 @@ function ResultsTab() {
                       style={{
                         gridColumn: '1 / -1',
                         background: 'rgba(255, 255, 255, 0.03)',
-                        border: '1px solid rgba(247, 201, 72, 0.22)',
+                        border: isFinalDivider ? '1px solid rgba(247, 201, 72, 0.4)' : '1px solid rgba(247, 201, 72, 0.22)',
                         borderRadius: 12,
                         padding: '16px 18px',
                         cursor: poster ? 'pointer' : 'default',
@@ -1903,15 +1955,20 @@ function ResultsTab() {
                         }
                       }}
                       onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = 'rgba(247, 201, 72, 0.22)'
+                        e.currentTarget.style.borderColor = isFinalDivider ? 'rgba(247, 201, 72, 0.4)' : 'rgba(247, 201, 72, 0.22)'
                         e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'
                       }}
                     >
                       {/* Top Header Row */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span style={{ fontSize: 17, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.3px' }}>
-                            After {c.announcementNumber} Results
+                          <span style={{ fontSize: 17, fontWeight: 800, color: isFinalDivider ? '#f7c948' : '#ffffff', letterSpacing: '-0.3px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {isFinalDivider ? '🏆 Final Status' : `After ${c.announcementNumber} Results`}
+                            {isFinalDivider && c.announcementNumber > 0 && (
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', fontWeight: 500 }}>
+                                (After All {c.announcementNumber} Results)
+                              </span>
+                            )}
                           </span>
                           {poster && (
                             <span style={{ fontSize: 11, fontWeight: 600, color: '#f7c948', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1925,7 +1982,7 @@ function ResultsTab() {
                           <div style={{ flexShrink: 0 }}>
                             <img
                               src={poster.thumb_url}
-                              alt={`Status Poster after ${c.announcementNumber} Results`}
+                              alt={isFinalDivider ? 'Status Poster - Final Status' : `Status Poster after ${c.announcementNumber} Results`}
                               style={{
                                 width: 50,
                                 height: 66,

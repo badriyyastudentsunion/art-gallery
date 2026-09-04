@@ -185,10 +185,12 @@ export default function AnnouncerDashboard() {
     try {
       const [
         { data: teamsData },
-        { data: settings }
+        { data: settings },
+        { data: compsData }
       ] = await Promise.all([
         supabase.from('teams').select('id, name').order('name'),
-        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence'])
+        supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'leaderboard_suspense_active', 'leaderboard_reveal_milestones', 'leaderboard_revealed_milestone', 'announcer_sequence', 'team_point_adjustments']),
+        supabase.from('competitions').select('id')
       ])
 
       const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
@@ -217,6 +219,12 @@ export default function AnnouncerDashboard() {
         try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
       }
 
+      const adjSetting = settings?.find(s => s.key === 'team_point_adjustments')
+      let adjMap = {}
+      if (adjSetting?.value) {
+        try { adjMap = JSON.parse(adjSetting.value) } catch (e) {}
+      }
+
       const teamMap = {}
       ;(teamsData || []).forEach(t => { 
         teamMap[t.id] = { ...t, color: colorMap[t.id] || null, points: 0 } 
@@ -227,6 +235,14 @@ export default function AnnouncerDashboard() {
           teamMap[r.team_id].points = Number(r.points) || 0
         }
       })
+
+      const totalComps = (compsData || []).length
+      const isFinalStatus = totalComps > 0 && (!isSuspense || revealedMilestoneVal >= totalComps)
+      if (isFinalStatus) {
+        Object.keys(teamMap).forEach(teamId => {
+          teamMap[teamId].points += (Number(adjMap[teamId]) || 0)
+        })
+      }
 
       const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
       setLeaderboard(sorted)
@@ -353,13 +369,19 @@ export default function AnnouncerDashboard() {
           { data: settings }
         ] = await Promise.all([
           supabase.from('teams').select('id, name').order('name'),
-          supabase.from('app_settings').select('key, value').in('key', ['team_colors'])
+          supabase.from('app_settings').select('key, value').in('key', ['team_colors', 'team_point_adjustments'])
         ])
 
         const colorSetting = settings?.find(s => s.key === 'team_colors')
         let colorMap = {}
         if (colorSetting?.value) {
           try { colorMap = JSON.parse(colorSetting.value) } catch (e) {}
+        }
+
+        const adjSetting = settings?.find(s => s.key === 'team_point_adjustments')
+        let adjMap = {}
+        if (adjSetting?.value) {
+          try { adjMap = JSON.parse(adjSetting.value) } catch (e) {}
         }
 
         const excludeComps = comp.milestone ? sequenceIds.slice(comp.milestone) : []
@@ -377,6 +399,12 @@ export default function AnnouncerDashboard() {
             teamMap[r.team_id].points = Number(r.points) || 0
           }
         })
+
+        if (comp.isFinalStatus) {
+          Object.keys(teamMap).forEach(teamId => {
+            teamMap[teamId].points += (Number(adjMap[teamId]) || 0)
+          })
+        }
 
         const sorted = Object.values(teamMap).sort((a, b) => b.points - a.points)
         const mappedResults = sorted.map((t, idx) => {
@@ -491,6 +519,11 @@ export default function AnnouncerDashboard() {
   // 2. Build queues with strict sequence lock flags
   let runningPendingIndex = 0
   if (rawSequence.length > 0) {
+    const totalSeqComps = rawSequence.filter(item => {
+      const isDiv = (typeof item === 'object' && item.isDivider) || (typeof item === 'string' && item.startsWith('__divider'))
+      return !isDiv
+    }).length
+
     let runningSequenceCount = 0
     rawSequence.forEach((item, idx) => {
       const isDivider = (typeof item === 'object' && item.isDivider) || (typeof item === 'string' && item.startsWith('__divider'))
@@ -500,12 +533,16 @@ export default function AnnouncerDashboard() {
         const isReady = publishedCount >= milestoneLimit && !isRevealed && milestoneLimit > 0
         const isLocked = !isReady
 
+        const totalEventComps = competitions.length
+        const isFinalStatus = totalEventComps > 0 && milestoneLimit >= totalEventComps
+
         const dividerCard = {
           id: typeof item === 'object' && item.id ? item.id : `divider-${idx}`,
-          name: `Points Standing Status`,
+          name: isFinalStatus ? '🏆 Final Status' : `Points Standing Status`,
           hasJudgeResults: true,
           published: isRevealed,
           isVirtual: true,
+          isFinalStatus,
           milestone: milestoneLimit,
           isDivider: true,
           isSequenceLocked: isLocked
@@ -661,8 +698,8 @@ export default function AnnouncerDashboard() {
                         <div className="ann-comp-meta">
                           {c.isVirtual ? (
                             <>
-                              <span style={{ color: '#f7c948', fontWeight: 600 }}>Standings Status</span>
-                              <span>after Result #{c.milestone}</span>
+                              <span style={{ color: '#f7c948', fontWeight: 700 }}>{c.isFinalStatus ? '🏆 Final Status' : 'Standings Status'}</span>
+                              <span>{c.isFinalStatus ? `all ${c.milestone} results` : `after Result #${c.milestone}`}</span>
                             </>
                           ) : (
                             <>
@@ -689,7 +726,7 @@ export default function AnnouncerDashboard() {
                             </span>
                           ) : c.isVirtual ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#f7c948' }}>
-                              <span>Ready to Reveal</span>
+                              <span>{c.isFinalStatus ? 'Ready to Reveal Final Status' : 'Ready to Reveal'}</span>
                             </span>
                           ) : !c.hasJudgeResults ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -848,8 +885,12 @@ export default function AnnouncerDashboard() {
                 {published ? (
                   <div className="ann-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: '28px 20px', marginTop: 14 }}>
                     <IcoSuccess />
-                    <p style={{ color: '#2ed573', fontWeight: 700, fontSize: 16, margin: '8px 0 0 0' }}>Results Published Successfully</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>Results are now live on public leaderboard & team scores.</p>
+                    <p style={{ color: '#2ed573', fontWeight: 700, fontSize: 16, margin: '8px 0 0 0' }}>
+                      {selected?.isFinalStatus ? '🏆 Final Status Published Successfully' : 'Results Published Successfully'}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                      {selected?.isFinalStatus ? 'Official Final Standings are now live for all participants and public.' : 'Results are now live on public leaderboard & team scores.'}
+                    </p>
                     <button className="ann-publish-btn" style={{ marginTop: 16, width: '100%', maxWidth: 200, background: 'var(--accent-light)', color: '#0e0b07' }} onClick={() => window.history.back()}>
                       <IcoBack />
                       <span>Go Back</span>
@@ -883,7 +924,7 @@ export default function AnnouncerDashboard() {
                       ) : (
                         <>
                           <IcoSpeaker />
-                          <span>Publish Results</span>
+                          <span>{selected?.isFinalStatus ? 'Publish Final Status' : (selected?.isVirtual ? 'Publish Standings Status' : 'Publish Results')}</span>
                         </>
                       )}
                     </button>

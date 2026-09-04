@@ -57,6 +57,9 @@ export default function AnnouncerFlowSection() {
   const [milestonePosters, setMilestonePosters] = useState({})
   const [uploadingMilestone, setUploadingMilestone] = useState(null)
   const [previewPoster, setPreviewPoster] = useState(null)
+  const [teamAdjustments, setTeamAdjustments] = useState({})
+  const [showAdjustmentsModal, setShowAdjustmentsModal] = useState(false)
+  const [savingAdjustments, setSavingAdjustments] = useState(false)
   const isSelfSavingRef = useRef(false)
   const trayItemsRef = useRef([])
 
@@ -141,6 +144,8 @@ export default function AnnouncerFlowSection() {
           setRevealedMilestone(parseInt(v || '0', 10))
         } else if (k === 'leaderboard_suspense_active') {
           setSuspenseActive(v === 'true')
+        } else if (k === 'team_point_adjustments') {
+          try { setTeamAdjustments(JSON.parse(v || '{}')) } catch (e) {}
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'judge_results' }, () => {
@@ -170,14 +175,18 @@ export default function AnnouncerFlowSection() {
       const { data: settings } = await supabase
         .from('app_settings')
         .select('key, value')
-        .in('key', ['leaderboard_suspense_active', 'announcer_sequence', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones'])
+        .in('key', ['leaderboard_suspense_active', 'announcer_sequence', 'leaderboard_revealed_milestone', 'leaderboard_reveal_milestones', 'team_point_adjustments'])
       
       const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
       const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
       const revealedSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
+      const adjSetting = settings?.find(s => s.key === 'team_point_adjustments')
 
       setSuspenseActive(activeSetting ? activeSetting.value === 'true' : true)
       setRevealedMilestone(parseInt(revealedSetting?.value || '0', 10))
+      if (adjSetting?.value) {
+        try { setTeamAdjustments(JSON.parse(adjSetting.value)) } catch (e) {}
+      }
 
       // 3. Fetch Competitions, Judge Results, Reports, Placements, Grades, Results, Milestone Posters
       const [
@@ -448,16 +457,31 @@ export default function AnnouncerFlowSection() {
     const teamMap = {}
     teams.forEach(t => { teamMap[t.id] = t.name })
 
+    const trayCompsCount = trayItems.filter(i => !i.isDivider).length
+
     return trayItems.map((item, index) => {
       if (item.isDivider) {
-        const standings = Object.entries(runningPoints)
-          .map(([id, pts]) => ({ id, name: teamMap[id] || '—', points: pts }))
-          .sort((a, b) => b.points - a.points)
-
         const milestone = compCount
         const isRevealed = revealedMilestone >= milestone && milestone > 0
         const isReady = publishedCount >= milestone && !isRevealed && milestone > 0
         const isLocked = publishedCount < milestone || milestone === 0
+        const totalEventComps = allComps.length
+        const isFinalStatus = totalEventComps > 0 && milestone >= totalEventComps
+
+        const standings = Object.entries(runningPoints)
+          .map(([id, pts]) => {
+            const parsedAdj = isFinalStatus ? parseTeamAdjustment(teamAdjustments[id]) : { bonus: 0, minus: 0, net: 0 }
+            return {
+              id,
+              name: teamMap[id] || '—',
+              basePoints: pts,
+              bonus: parsedAdj.bonus,
+              minus: parsedAdj.minus,
+              adjustment: parsedAdj.net,
+              points: pts + parsedAdj.net
+            }
+          })
+          .sort((a, b) => b.points - a.points)
 
         return {
           ...item,
@@ -466,6 +490,7 @@ export default function AnnouncerFlowSection() {
           isRevealed,
           isReady,
           isLocked,
+          isFinalStatus,
           standings
         }
       } else {
@@ -489,7 +514,45 @@ export default function AnnouncerFlowSection() {
         }
       }
     })
-  }, [trayItems, baselinePoints, teams, revealedMilestone, officialNumberMap])
+  }, [trayItems, baselinePoints, teams, revealedMilestone, officialNumberMap, allComps, teamAdjustments])
+
+  const finalBasePoints = useMemo(() => {
+    let pts = { ...baselinePoints }
+    trayItems.forEach(item => {
+      if (!item.isDivider) {
+        ;(item.simulatedPoints || []).forEach(p => {
+          pts[p.teamId] = (pts[p.teamId] || 0) + p.points
+        })
+      }
+    })
+    return pts
+  }, [trayItems, baselinePoints])
+
+  const hasActiveAdj = useMemo(() => {
+    return Object.values(teamAdjustments || {}).some(adj => {
+      const p = parseTeamAdjustment(adj)
+      return p.bonus > 0 || p.minus > 0
+    })
+  }, [teamAdjustments])
+
+  async function handleSaveAdjustments(newAdjustments) {
+    setSavingAdjustments(true)
+    try {
+      await supabase.from('app_settings').upsert({
+        key: 'team_point_adjustments',
+        value: JSON.stringify(newAdjustments)
+      })
+      setTeamAdjustments(newAdjustments)
+      setShowAdjustmentsModal(false)
+      setSuccess("Team bonus & penalty points saved!")
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      console.error("Error saving adjustments:", err)
+      alert("Failed to save adjustments: " + err.message)
+    } finally {
+      setSavingAdjustments(false)
+    }
+  }
 
   // Force reveal status divider to public
   async function handleForceRevealDivider(dividerMilestone) {
@@ -1049,26 +1112,70 @@ export default function AnnouncerFlowSection() {
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => insertStatusDivider(null)}
-                style={{
-                  background: 'rgba(247, 201, 72, 0.12)',
-                  border: '1px solid rgba(247, 201, 72, 0.3)',
-                  color: '#f7c948',
-                  height: 30,
-                  fontSize: 11,
-                  padding: '0 10px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  cursor: 'pointer'
-                }}
-              >
-                <IconPlus /> Add Status Divider
-              </button>
+              {(() => {
+                const totalEventComps = allComps.length
+                const isAllCompsInTray = totalEventComps > 0 && trayCompsCount >= totalEventComps
+                const hasActiveAdj = Object.values(teamAdjustments).some(v => v !== 0)
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => insertStatusDivider(null)}
+                      style={{
+                        background: isAllCompsInTray ? 'rgba(247, 201, 72, 0.2)' : 'rgba(247, 201, 72, 0.12)',
+                        border: isAllCompsInTray ? '1px solid #f7c948' : '1px solid rgba(247, 201, 72, 0.3)',
+                        color: '#f7c948',
+                        height: 30,
+                        fontSize: 11,
+                        padding: '0 10px',
+                        borderRadius: 6,
+                        fontWeight: 800,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        cursor: 'pointer',
+                        boxShadow: isAllCompsInTray ? '0 0 10px rgba(247, 201, 72, 0.25)' : 'none'
+                      }}
+                    >
+                      <IconPlus /> {isAllCompsInTray ? '🏆 Add Final Status Divider' : 'Add Status Divider'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAdjustmentsModal(true)}
+                      style={{
+                        background: hasActiveAdj ? 'rgba(79, 156, 249, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                        border: hasActiveAdj ? '1px solid #4f9cf9' : '1px solid rgba(255, 255, 255, 0.18)',
+                        color: hasActiveAdj ? '#60a5fa' : '#fff',
+                        height: 30,
+                        fontSize: 11,
+                        padding: '0 10px',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        cursor: 'pointer'
+                      }}
+                      title="Add Bonus or Minus points to teams for Final Status"
+                    >
+                      <span>⚖️</span> Bonus / Minus
+                      {hasActiveAdj && (
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          background: '#2563eb',
+                          color: '#fff',
+                          padding: '1px 5px',
+                          borderRadius: 10
+                        }}>
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  </>
+                )
+              })()}
 
               {trayItems.length > 0 && (
                 <button
@@ -1159,7 +1266,7 @@ export default function AnnouncerFlowSection() {
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: 10, height: 10 }}>
                                 <polyline points="20 6 9 17 4 12" />
                               </svg>
-                              REVEALED TO PUBLIC
+                              {item.isFinalStatus ? '🏆 FINAL STATUS PUBLISHED' : 'REVEALED TO PUBLIC'}
                             </span>
                           ) : isReady ? (
                             <span style={{
@@ -1170,7 +1277,7 @@ export default function AnnouncerFlowSection() {
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 10, height: 10 }}>
                                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                               </svg>
-                              READY TO ANNOUNCE
+                              {item.isFinalStatus ? '🏆 FINAL STATUS READY' : 'READY TO ANNOUNCE'}
                             </span>
                           ) : (
                             <span style={{
@@ -1182,16 +1289,46 @@ export default function AnnouncerFlowSection() {
                                 <circle cx="12" cy="12" r="10" />
                                 <polyline points="12 6 12 12 16 14" />
                               </svg>
-                              QUEUED ({item.publishedCountBeforeDivider}/{item.compCountAtDivider})
+                              {item.isFinalStatus ? 'FINAL STATUS QUEUED' : 'QUEUED'} ({item.publishedCountBeforeDivider}/{item.compCountAtDivider})
                             </span>
                           )}
 
-                          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
-                            After {item.compCountAtDivider} Results
-                          </span>
+                          {item.isFinalStatus ? (
+                            <span style={{ fontSize: 13, fontWeight: 800, color: '#f7c948', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              🏆 Final Status {item.compCountAtDivider > 0 && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: 500 }}>(After All #{item.compCountAtDivider})</span>}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
+                              After {item.compCountAtDivider} Results
+                            </span>
+                          )}
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {/* Final Status Bonus / Minus Quick Button */}
+                          {item.isFinalStatus && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAdjustmentsModal(true)}
+                              style={{
+                                background: hasActiveAdj ? 'rgba(46, 213, 115, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                                border: hasActiveAdj ? '1px solid rgba(46, 213, 115, 0.4)' : '1px solid rgba(255, 255, 255, 0.2)',
+                                color: hasActiveAdj ? '#2ed573' : '#fff',
+                                padding: '3px 8px',
+                                borderRadius: 6,
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                              title="Click to view & edit bonus / minus points for each team"
+                            >
+                              <span>⚖️</span> {hasActiveAdj ? 'Bonus/Minus (Active)' : 'Bonus / Minus'}
+                            </button>
+                          )}
+
                           {/* Admin Quick Action Button */}
                           {isReady && (
                             <button
@@ -1208,7 +1345,7 @@ export default function AnnouncerFlowSection() {
                                 cursor: 'pointer'
                               }}
                             >
-                              📢 Release Now
+                              📢 {item.isFinalStatus ? 'Release Final Status' : 'Release Now'}
                             </button>
                           )}
                           {isRevealed && (
@@ -1248,7 +1385,7 @@ export default function AnnouncerFlowSection() {
                           >
                             {Array.from({ length: trayCompsCount + 1 }).map((_, cIdx) => (
                               <option key={cIdx} value={cIdx} style={{ background: '#1c2128', color: '#fff' }}>
-                                {cIdx === 0 ? 'At Start (0)' : `After #${cIdx}`}
+                                {cIdx === 0 ? 'At Start (0)' : (cIdx === trayCompsCount ? `🏆 Final Status (After #${cIdx})` : `After #${cIdx}`)}
                               </option>
                             ))}
                           </select>
@@ -1295,24 +1432,55 @@ export default function AnnouncerFlowSection() {
                       )}
 
                       {/* Standings preview strip */}
-                      <div style={{
-                        display: 'flex',
-                        gap: 6,
-                        flexWrap: 'wrap',
-                        background: 'rgba(0,0,0,0.3)',
-                        padding: '7px 12px',
-                        borderRadius: 6
-                      }}>
-                        {(item.standings || []).map((s, sIdx) => (
-                          <span key={s.id} style={{
-                            fontSize: 11.5,
-                            color: sIdx === 0 ? '#f7c948' : 'var(--text-secondary)',
-                            fontWeight: sIdx === 0 ? 800 : 500
-                          }}>
-                            {sIdx + 1}. {s.name} ({s.points} pts)
-                            {sIdx < item.standings.length - 1 && <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: 6 }}>|</span>}
+                      <div
+                        onClick={() => {
+                          if (item.isFinalStatus) setShowAdjustmentsModal(true)
+                        }}
+                        style={{
+                          display: 'flex',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                          background: 'rgba(0,0,0,0.3)',
+                          padding: '7px 12px',
+                          borderRadius: 6,
+                          cursor: item.isFinalStatus ? 'pointer' : 'default',
+                          border: item.isFinalStatus ? '1px dashed rgba(247, 201, 72, 0.3)' : 'none'
+                        }}
+                        title={item.isFinalStatus ? "Click to edit Team Bonus & Penalty points" : undefined}
+                      >
+                        {(item.standings || []).map((s, sIdx) => {
+                          const hasAdj = (s.bonus > 0 || s.minus > 0)
+                          return (
+                            <span key={s.id} style={{
+                              fontSize: 11.5,
+                              color: sIdx === 0 ? '#f7c948' : 'var(--text-secondary)',
+                              fontWeight: sIdx === 0 ? 800 : 500,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3
+                            }}>
+                              {sIdx + 1}. {s.name} ({s.points} pts)
+                              {item.isFinalStatus && hasAdj && (
+                                <span style={{
+                                  fontSize: 9.5,
+                                  color: s.adjustment > 0 ? '#2ed573' : s.adjustment < 0 ? '#ef4444' : '#fff',
+                                  background: s.adjustment > 0 ? 'rgba(46, 213, 115, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                  padding: '0 4px',
+                                  borderRadius: 4,
+                                  fontWeight: 700
+                                }}>
+                                  [{s.basePoints}{s.bonus > 0 ? ` +${s.bonus}` : ''}{s.minus > 0 ? ` -${s.minus}` : ''}]
+                                </span>
+                              )}
+                              {sIdx < item.standings.length - 1 && <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: 6 }}>|</span>}
+                            </span>
+                          )
+                        })}
+                        {item.isFinalStatus && (
+                          <span style={{ fontSize: 10, color: '#f7c948', marginLeft: 'auto', fontWeight: 700, alignSelf: 'center' }}>
+                            ✎ Edit Bonus/Minus
                           </span>
-                        ))}
+                        )}
                       </div>
 
                       {/* ── Status Poster Attachment Widget ── */}
@@ -1441,7 +1609,7 @@ export default function AnnouncerFlowSection() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ fontSize: 13 }}>🖼️</span>
                                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                  No status poster attached for after #{item.compCountAtDivider}
+                                  No status poster attached for {item.isFinalStatus ? 'Final Status' : `after #${item.compCountAtDivider}`}
                                 </span>
                               </div>
                               <label style={{
@@ -1916,6 +2084,288 @@ export default function AnnouncerFlowSection() {
         </div>,
         document.body
       )}
+
+      {/* ── Bonus & Minus Points Modal ── */}
+      {showAdjustmentsModal && (
+        <TeamAdjustmentsModal
+          teams={teams}
+          currentAdjustments={teamAdjustments}
+          baselinePoints={finalBasePoints}
+          onSave={handleSaveAdjustments}
+          onClose={() => setShowAdjustmentsModal(false)}
+          saving={savingAdjustments}
+        />
+      )}
     </>
+  )
+}
+
+export function parseTeamAdjustment(adj) {
+  if (!adj) return { bonus: 0, minus: 0, net: 0 }
+  if (typeof adj === 'number') {
+    return {
+      bonus: adj > 0 ? adj : 0,
+      minus: adj < 0 ? Math.abs(adj) : 0,
+      net: adj
+    }
+  }
+  const bonus = Math.max(0, Number(adj.bonus) || 0)
+  const minus = Math.max(0, Number(adj.minus) || 0)
+  return {
+    bonus,
+    minus,
+    net: bonus - minus
+  }
+}
+
+function TeamAdjustmentsModal({ teams, currentAdjustments, baselinePoints, onSave, onClose, saving }) {
+  const [adjustments, setAdjustments] = useState(() => {
+    const init = {}
+    teams.forEach(t => {
+      const p = parseTeamAdjustment(currentAdjustments?.[t.id])
+      init[t.id] = { bonus: p.bonus, minus: p.minus }
+    })
+    return init
+  })
+
+  const updateBonus = (teamId, val) => {
+    const num = Math.max(0, parseInt(val, 10) || 0)
+    setAdjustments(prev => ({
+      ...prev,
+      [teamId]: {
+        bonus: num,
+        minus: prev[teamId]?.minus || 0
+      }
+    }))
+  }
+
+  const updateMinus = (teamId, val) => {
+    const num = Math.max(0, parseInt(val, 10) || 0)
+    setAdjustments(prev => ({
+      ...prev,
+      [teamId]: {
+        bonus: prev[teamId]?.bonus || 0,
+        minus: num
+      }
+    }))
+  }
+
+  const addBonusDelta = (teamId, delta) => {
+    setAdjustments(prev => {
+      const cur = prev[teamId]?.bonus || 0
+      return {
+        ...prev,
+        [teamId]: {
+          bonus: Math.max(0, cur + delta),
+          minus: prev[teamId]?.minus || 0
+        }
+      }
+    })
+  }
+
+  const addMinusDelta = (teamId, delta) => {
+    setAdjustments(prev => {
+      const cur = prev[teamId]?.minus || 0
+      return {
+        ...prev,
+        [teamId]: {
+          bonus: prev[teamId]?.bonus || 0,
+          minus: Math.max(0, cur + delta)
+        }
+      }
+    })
+  }
+
+  const handleResetAll = () => {
+    const reset = {}
+    teams.forEach(t => { reset[t.id] = { bonus: 0, minus: 0 } })
+    setAdjustments(reset)
+  }
+
+  return createPortal(
+    <div className="dash-modal-overlay" onClick={onClose} style={{ zIndex: 999999 }}>
+      <div className="dash-modal" style={{ maxWidth: 660, width: '100%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>⚖️</span> Team Bonus & Penalty Points
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+              Give separate bonus (+) and minus (-) points. Final points are calculated as Base + Bonus - Minus.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {teams.map(t => {
+            const adj = adjustments[t.id] || { bonus: 0, minus: 0 }
+            const bonus = adj.bonus || 0
+            const minus = adj.minus || 0
+            const net = bonus - minus
+            const base = baselinePoints?.[t.id] || 0
+            const finalScore = base + net
+            const hasAdj = bonus > 0 || minus > 0
+
+            return (
+              <div key={t.id} style={{
+                background: hasAdj ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.02)',
+                border: hasAdj ? '1px solid rgba(247, 201, 72, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 10,
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                boxSizing: 'border-box',
+                width: '100%',
+                minWidth: 0
+              }}>
+                {/* Header: Team Name, Base points, Final score */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: '#fff' }}>{t.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      Base: <strong style={{ color: '#ddd' }}>{base} pts</strong>
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Final Status:</span>
+                    <span style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: net > 0 ? '#2ed573' : net < 0 ? '#ef4444' : '#f7c948',
+                      background: net > 0 ? 'rgba(46, 213, 115, 0.12)' : net < 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(247, 201, 72, 0.12)',
+                      padding: '2px 8px',
+                      borderRadius: 6
+                    }}>
+                      {finalScore} pts {hasAdj && `(${base}${bonus > 0 ? ` +${bonus}` : ''}${minus > 0 ? ` -${minus}` : ''})`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Inputs: Two separate columns for Bonus and Minus */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, width: '100%', boxSizing: 'border-box' }}>
+                  {/* Bonus column */}
+                  <div style={{
+                    background: 'rgba(46, 213, 115, 0.05)',
+                    border: '1px solid rgba(46, 213, 115, 0.25)',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    minWidth: 0,
+                    boxSizing: 'border-box'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#2ed573' }}>➕ Bonus Points</span>
+                      {bonus > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: '#2ed573' }}>+{bonus}</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                      <button type="button" onClick={() => addBonusDelta(t.id, 1)} style={{ flexShrink: 0, background: 'rgba(46,213,115,0.15)', color: '#2ed573', border: '1px solid rgba(46,213,115,0.3)', borderRadius: 4, padding: '3px 6px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+1</button>
+                      <button type="button" onClick={() => addBonusDelta(t.id, 5)} style={{ flexShrink: 0, background: 'rgba(46,213,115,0.2)', color: '#2ed573', border: '1px solid rgba(46,213,115,0.35)', borderRadius: 4, padding: '3px 6px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+5</button>
+                      <input
+                        type="number"
+                        min="0"
+                        value={bonus || ''}
+                        placeholder="0"
+                        onChange={e => updateBonus(t.id, e.target.value)}
+                        style={{
+                          width: 0,
+                          flex: 1,
+                          minWidth: 0,
+                          boxSizing: 'border-box',
+                          textAlign: 'center',
+                          background: '#1c2128',
+                          border: '1px solid rgba(46,213,115,0.4)',
+                          borderRadius: 6,
+                          color: '#2ed573',
+                          fontWeight: 800,
+                          fontSize: 13,
+                          padding: '4px 0'
+                        }}
+                      />
+                      {bonus > 0 && (
+                        <button type="button" onClick={() => updateBonus(t.id, 0)} title="Reset Bonus" style={{ flexShrink: 0, background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', padding: '0 2px' }}>↺</button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Minus column */}
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.05)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    minWidth: 0,
+                    boxSizing: 'border-box'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>➖ Minus / Penalty</span>
+                      {minus > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444' }}>-{minus}</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                      <button type="button" onClick={() => addMinusDelta(t.id, 1)} style={{ flexShrink: 0, background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 4, padding: '3px 6px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+1</button>
+                      <button type="button" onClick={() => addMinusDelta(t.id, 5)} style={{ flexShrink: 0, background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 4, padding: '3px 6px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>+5</button>
+                      <input
+                        type="number"
+                        min="0"
+                        value={minus || ''}
+                        placeholder="0"
+                        onChange={e => updateMinus(t.id, e.target.value)}
+                        style={{
+                          width: 0,
+                          flex: 1,
+                          minWidth: 0,
+                          boxSizing: 'border-box',
+                          textAlign: 'center',
+                          background: '#1c2128',
+                          border: '1px solid rgba(239,68,68,0.4)',
+                          borderRadius: 6,
+                          color: '#ef4444',
+                          fontWeight: 800,
+                          fontSize: 13,
+                          padding: '4px 0'
+                        }}
+                      />
+                      {minus > 0 && (
+                        <button type="button" onClick={() => updateMinus(t.id, 0)} title="Reset Minus" style={{ flexShrink: 0, background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', padding: '0 2px' }}>↺</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+          <button type="button" onClick={handleResetAll} style={{ background: 'none', border: 'none', color: '#e07c7c', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+            Reset All
+          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={onClose} style={{ padding: '7px 14px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: 6, color: '#ddd', fontSize: 12, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => onSave(adjustments)}
+              style={{
+                padding: '7px 18px',
+                background: '#f7c948',
+                color: '#0e0b07',
+                border: 'none',
+                borderRadius: 6,
+                fontWeight: 800,
+                fontSize: 12,
+                cursor: saving ? 'wait' : 'pointer'
+              }}
+            >
+              {saving ? 'Saving...' : 'Save Adjustments'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }

@@ -93,7 +93,7 @@ export default function DashboardSection() {
       supabase.from('teams').select('id, name'),
       supabase.from('participants').select('id, team_id'),
       supabase.from('competition_schedule').select('competition_id, status'),
-      supabase.from('app_settings').select('key, value').in('key', ['leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'team_colors']),
+      supabase.from('app_settings').select('key, value').in('key', ['leaderboard_suspense_active', 'leaderboard_reveal_threshold', 'announcer_sequence', 'team_colors', 'leaderboard_revealed_milestone', 'team_point_adjustments']),
 
       // Activities queries (lookup names from comps array instead of PostgREST join to prevent 400 Bad Request errors)
       supabase.from('competition_results').select('competition_id, published_at, published').eq('published', true).order('published_at', { ascending: false }).limit(100),
@@ -107,9 +107,11 @@ export default function DashboardSection() {
     const activeSetting = settings?.find(s => s.key === 'leaderboard_suspense_active')
     const threshSetting = settings?.find(s => s.key === 'leaderboard_reveal_threshold')
     const seqSetting = settings?.find(s => s.key === 'announcer_sequence')
+    const revSetting = settings?.find(s => s.key === 'leaderboard_revealed_milestone')
 
     const suspenseActive = activeSetting?.value === 'true'
     const revealThreshold = parseInt(threshSetting?.value || '10')
+    const revMilestone = parseInt(revSetting?.value || '0', 10)
     let seqIds = []
     try {
       if (seqSetting?.value) seqIds = JSON.parse(seqSetting.value)
@@ -127,6 +129,7 @@ export default function DashboardSection() {
     const seqSet = new Set(seqIds)
     const publishedSeqCount = seqIds.filter(id => publishedSet.has(id)).length
     const isSuspense = suspenseActive && (publishedSeqCount < revealThreshold) && (seqIds.length > 0)
+    const isFinalStatus = revMilestone > 0 && all.length > 0 && revMilestone >= all.length
 
     const pubRows = pubResults || []
     const pointsResults = isSuspense ? pubRows.filter(r => !seqSet.has(r.competition_id)) : pubRows
@@ -160,6 +163,7 @@ export default function DashboardSection() {
       participants: (participantsRows || []).length,
       published: isSuspense ? new Set(pubRows.filter(r => !seqSet.has(r.competition_id)).map(r => r.competition_id)).size : publishedSet.size,
       isSuspense,
+      isFinalStatus,
       suspenseCount: publishedSeqCount,
       suspenseThreshold: revealThreshold,
 
@@ -190,6 +194,22 @@ export default function DashboardSection() {
       if (!teamMap[team.name]) teamMap[team.name] = { id: team.id, name: team.name, color: colorMap[team.id] || null, pts: 0 }
       teamMap[team.name].pts += (r.placement_points || 0) + (r.grade_points || 0)
     })
+
+    if (isFinalStatus) {
+      const adjSetting = settings?.find(s => s.key === 'team_point_adjustments')
+      let adjMap = {}
+      if (adjSetting?.value) {
+        try { adjMap = JSON.parse(adjSetting.value) } catch (e) {}
+      }
+      Object.values(teamMap).forEach(t => {
+        const raw = adjMap[t.id]
+        const net = typeof raw === 'number'
+          ? raw
+          : ((Number(raw?.bonus) || 0) - (Number(raw?.minus) || 0))
+        t.pts += net
+      })
+    }
+
     const sortedTeamPoints = Object.values(teamMap).sort((a, b) => b.pts - a.pts)
     setTeamPoints(sortedTeamPoints)
 
@@ -411,7 +431,22 @@ export default function DashboardSection() {
                   <div className="db-lb-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="db-lb-title">Team Points</span>
-                      {stats?.isSuspense && (
+                      {stats?.isFinalStatus ? (
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          background: 'rgba(247, 201, 72, 0.15)',
+                          color: '#f7c948',
+                          border: '1px solid rgba(247, 201, 72, 0.35)',
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}>
+                          <span>🏆 Final Status Live</span>
+                        </span>
+                      ) : stats?.isSuspense ? (
                         <span style={{
                           fontSize: 10,
                           fontWeight: 700,
@@ -426,7 +461,7 @@ export default function DashboardSection() {
                         }}>
                           <span>🔒 Withheld ({stats.suspenseCount}/{stats.suspenseThreshold})</span>
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     {(stats?.published ?? 0) > 0 && (
                       <div className="db-lb-pub">
