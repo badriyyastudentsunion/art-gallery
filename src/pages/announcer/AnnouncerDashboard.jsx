@@ -240,7 +240,11 @@ export default function AnnouncerDashboard() {
       const isFinalStatus = totalComps > 0 && (!isSuspense || revealedMilestoneVal >= totalComps)
       if (isFinalStatus) {
         Object.keys(teamMap).forEach(teamId => {
-          teamMap[teamId].points += (Number(adjMap[teamId]) || 0)
+          const raw = adjMap[teamId]
+          const net = typeof raw === 'number'
+            ? raw
+            : ((Number(raw?.bonus) || 0) - (Number(raw?.minus) || 0))
+          teamMap[teamId].points += net
         })
       }
 
@@ -269,11 +273,27 @@ export default function AnnouncerDashboard() {
     if (isInitial && competitions.length === 0) setFetching(true)
 
     try {
-      const { data } = await supabase.rpc('get_announcer_dashboard_data', { p_announcer_id: announcerId })
+      const [
+        { data },
+        { data: extraSettings }
+      ] = await Promise.all([
+        supabase.rpc('get_announcer_dashboard_data', { p_announcer_id: announcerId }),
+        supabase.from('app_settings').select('key, value').in('key', [
+          'leaderboard_suspense_active',
+          'leaderboard_reveal_milestones',
+          'leaderboard_revealed_milestone',
+          'announcer_sequence',
+          'leaderboard_revealed_by_admin',
+          'team_point_adjustments'
+        ])
+      ])
       
       if (data) {
         const comps = data.competitions || []
         const settingsMap = data.settings || {}
+        if (extraSettings) {
+          extraSettings.forEach(s => { settingsMap[s.key] = s.value })
+        }
 
         const active = settingsMap['leaderboard_suspense_active'] === 'true'
         const revealMilestonesVal = settingsMap['leaderboard_reveal_milestones']
@@ -402,7 +422,11 @@ export default function AnnouncerDashboard() {
 
         if (comp.isFinalStatus) {
           Object.keys(teamMap).forEach(teamId => {
-            teamMap[teamId].points += (Number(adjMap[teamId]) || 0)
+            const raw = adjMap[teamId]
+            const net = typeof raw === 'number'
+              ? raw
+              : ((Number(raw?.bonus) || 0) - (Number(raw?.minus) || 0))
+            teamMap[teamId].points += net
           })
         }
 
@@ -533,7 +557,7 @@ export default function AnnouncerDashboard() {
         const isReady = publishedCount >= milestoneLimit && !isRevealed && milestoneLimit > 0
         const isLocked = !isReady
 
-        const totalEventComps = competitions.length
+        const totalEventComps = (totalSeqComps > 0) ? totalSeqComps : competitions.length
         const isFinalStatus = totalEventComps > 0 && milestoneLimit >= totalEventComps
 
         const dividerCard = {
