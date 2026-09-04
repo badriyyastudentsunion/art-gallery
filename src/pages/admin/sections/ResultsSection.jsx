@@ -461,6 +461,10 @@ export default function ResultsSection() {
 
     const rawTitleSvg = `<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 372.33 100.24" width="372" height="100"><defs><style>.cls-1{fill:#0f172a;}.cls-2{fill:#B8193C;}</style></defs><g id="Layer_1-2" data-name="Layer 1"><g><g><path class="cls-1" d="M184.6,71.02v29.19s-27.08-.01-27.08-.01V0s59.67,0,59.67,0l.02,71.01h-32.61ZM190.61,22.21h-6.01v30.45h6.01v-30.45Z"/><path class="cls-1" d="M151.9,100.2h-58.36s0-27.72,0-27.72h33.23s-.04-7.62-.04-7.62l-27.17-.06c-3.51-.06-6.02-2.23-6.02-5.77V0s58.36,0,58.36,0v28.5s-34.45,0-34.45,0v7.36s29.17,0,29.17,0c2.82-.07,4.91,1.79,5.28,4.66v59.68Z"/><path class="cls-1" d="M60.05,41.72l-18.86-18.94.08,7.75,14.08,13.98c2.6,2.58,4.77,5.35,6.65,8.47,2.29,4.18,2.83,8.52,3.37,13.32l.13,33.91h-32.78s0-100.2,0-100.2h55.4s0,100.22,0,100.22l-12.09-.12c-2.65-.03-4.57-2.35-5.16-4.62l-.49-3.73-.2-24.8c-.08-9.71-3.09-18.19-10.12-25.24Z"/><rect class="cls-1" y="0" width="27.1" height="100.24"/><path class="cls-1" d="M368.25,100.19l-40.23.03c-2.83,0-5.95-1.71-5.95-5.03l-.04-89.16c0-2.75,1.48-5.96,4.64-5.96h41.35c2.93,0,4.3,3.07,4.3,5.61v90.24c0,2.19-2.13,3.7-4.08,4.28ZM350.52,74.99V24.32c0-1.8-1.64-2.26-3.2-2.19-.93.04-2.98.21-2.98,1.65l-.02,50.56c0,.67.33,1.89.82,1.97l2.3.38c.89.15,3.08-.05,3.08-1.7Z"/><path class="cls-1" d="M286.19,72.16c.19,1.61,1.11,2.4,2.47,2.37h28.11s0,25.68,0,25.68l-53.79-.02V0s53.79,0,53.79,0v23.91s-27.76,0-27.76,0c-1.72-.02-2.68,1.15-2.82,2.9v45.36Z"/><path class="cls-1" d="M257.02,100.21h-34.11s.01-86.79.01-86.79c10.02,7.66,21.58,11.85,34.1,11.91v74.88Z"/></g><path class="cls-2" d="M257.03,20.56c-12.78-.24-24.71-5.29-34.06-14.01l-.05-6.55h34.1s0,20.56,0,20.56Z"/></g></g></svg>`
 
+    const rawGlobeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></svg>`
+
+    const rawCursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" fill="#2563eb" stroke="#1d4ed8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2l11 10.5-5 1 3.2 6.5-2.4 1.2-3.2-6.5L4 18V2z"/></svg>`
+
     const convertSvgToPng = (svgString, w, h) => {
       return new Promise((resolve) => {
         try {
@@ -518,29 +522,38 @@ export default function ResultsSection() {
       // Fallback to inline SVG
     }
 
-    const [logoPng, titlePng] = await Promise.all([
+    const [logoPng, titlePng, globePng, cursorPng] = await Promise.all([
       convertSvgToPng(logoSvg, 120, 120),
-      convertSvgToPng(titleSvg, 372, 100)
+      convertSvgToPng(titleSvg, 372, 100),
+      convertSvgToPng(rawGlobeSvg, 96, 96),
+      convertSvgToPng(rawCursorSvg, 96, 96)
     ])
 
-    cachedFooterAssets = { logoDataUrl: logoPng, titleDataUrl: titlePng }
+    cachedFooterAssets = {
+      logoDataUrl: logoPng,
+      titleDataUrl: titlePng,
+      globeDataUrl: globePng,
+      cursorDataUrl: cursorPng
+    }
     return cachedFooterAssets
   }
 
   // Helper to render branded Inspico header bar and interactive footer across all pages with real logo & title
   const renderInspicoFooter = async (doc) => {
-    let assets = { logoDataUrl: null, titleDataUrl: null }
+    let assets = { logoDataUrl: null, titleDataUrl: null, globeDataUrl: null, cursorDataUrl: null }
     try {
       assets = await getFooterAssets()
     } catch {
       // safe fallback
     }
-    const { logoDataUrl, titleDataUrl } = assets
+    const { logoDataUrl, titleDataUrl, globeDataUrl, cursorDataUrl } = assets
 
     const totalPages = doc.internal.getNumberOfPages()
     const pageHeight = doc.internal.pageSize.height
     const pageWidth = doc.internal.pageSize.width
-    const webUrl = typeof window !== 'undefined' && window.location ? window.location.origin : 'https://inspico.art'
+    const isLocal = typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost'
+    const webHost = isLocal ? 'inspico26.web.app' : (window.location.host || 'inspico26.web.app')
+    const webUrl = isLocal ? 'https://inspico26.web.app' : (window.location.origin || 'https://inspico26.web.app')
     const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
     for (let i = 1; i <= totalPages; i++) {
@@ -593,24 +606,36 @@ export default function ResultsSection() {
       doc.setFont("helvetica", "normal")
       doc.setFontSize(7)
       doc.setTextColor(148, 163, 184)
-      doc.text(` · Official Results · ${dateStr}`, currentX + 4.5, footerY + 0.6)
+      doc.text(` · ${dateStr}`, currentX + 4.5, footerY + 0.6)
 
-      // Center-Right: Interactive "See More / Web" button
-      const btnX = 132
+      // Center-Right: Interactive website URL pill with Web globe and Cursor icons
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(7)
+      const textW = doc.getTextWidth(webHost)
+      const btnW = Math.max(38, textW + 11.5)
+      const btnX = 130
       const btnY = footerY - 3
-      const btnW = 38
-      const btnH = 5.8
+      const btnH = 5.6
 
-      doc.setFillColor(241, 245, 249) // light slate pill background
+      doc.setFillColor(248, 250, 252) // clean light slate pill background
       doc.roundedRect(btnX, btnY, btnW, btnH, 1.5, 1.5, "F")
       doc.setDrawColor(203, 213, 225)
       doc.setLineWidth(0.25)
       doc.roundedRect(btnX, btnY, btnW, btnH, 1.5, 1.5, "S")
 
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(7)
+      // Web (Globe) icon on the left
+      if (globeDataUrl) {
+        doc.addImage(globeDataUrl, 'PNG', btnX + 1.8, btnY + 1.1, 3.4, 3.4)
+      }
+
+      // Clean website text (no unicode symbols that corrupt in PDF fonts)
       doc.setTextColor(37, 99, 235) // royal blue
-      doc.text("See More Online ↗", btnX + 4.5, footerY + 0.7)
+      doc.text(webHost, btnX + 5.8, footerY + 0.6)
+
+      // Cursor pointer icon on the right
+      if (cursorDataUrl) {
+        doc.addImage(cursorDataUrl, 'PNG', btnX + btnW - 4.4, btnY + 1.2, 3.1, 3.1)
+      }
 
       // Clickable PDF link
       doc.link(btnX, btnY, btnW, btnH, { url: webUrl })
