@@ -1,0 +1,112 @@
+[
+  {
+    "key": "maintenance_status",
+    "value": "{\"all\":false,\"landing_page\":false,\"team_leaders\":false,\"judges\":false,\"announcers\":false,\"invigilators\":false,\"media\":false,\"allow_localhost_bypass\":false,\"notice\":\"System is currently undergoing scheduled maintenance. Please check back shortly.\"}",
+    "updated_at": "2026-08-03T01:26:58.906441+00:00"
+  },
+  {
+    "key": "tv_remote_control",
+    "value": "{\"blank_screen\":false,\"updated_at\":1788432905484}",
+    "updated_at": "2026-09-03T09:13:05.833575+00:00"
+  },
+  {
+    "key": "app_client_broadcast",
+    "value": "{\"version\":\"v1.0.38\",\"timestamp\":1788352712441,\"target\":\"all\",\"forceImmediate\":false}",
+    "updated_at": "2026-09-02T08:35:28.147867+00:00"
+  },
+  {
+    "key": "show_result_poster",
+    "value": "true",
+    "updated_at": "2026-08-30T10:34:36.811559+00:00"
+  },
+  {
+    "key": "leaderboard_revealed_milestone",
+    "value": "70",
+    "updated_at": "2026-09-02T07:41:49.791423+00:00"
+  },
+  {
+    "key": "gallery_overlays",
+    "value": "{\"overlay43\":\"\",\"overlay34\":\"\"}",
+    "updated_at": "2026-08-09T02:54:33.630895+00:00"
+  },
+  {
+    "key": "media_uploaders",
+    "value": "[{\"id\":\"30uq4zr-1785719696227\",\"name\":\"Media\",\"username\":\"media\",\"password\":\"media\",\"created_at\":\"2026-08-03T01:14:56.227Z\"}]",
+    "updated_at": "2026-08-03T01:14:58.099057+00:00"
+  },
+  {
+    "key": "team_category_permissions",
+    "value": "{}",
+    "updated_at": "2026-08-02T12:27:40.397481+00:00"
+  },
+  {
+    "key": "leaderboard_reveal_threshold",
+    "value": "10",
+    "updated_at": "2026-08-09T03:04:44.58335+00:00"
+  },
+  {
+    "key": "leaderboard_revealed_by_admin",
+    "value": "false",
+    "updated_at": "2026-08-09T08:43:56.960988+00:00"
+  },
+  {
+    "key": "results_password",
+    "value": "er",
+    "updated_at": "2026-07-30T17:56:18.585+00:00"
+  },
+  {
+    "key": "team_leader_access",
+    "value": "true",
+    "updated_at": "2026-07-30T17:56:18.748+00:00"
+  },
+  {
+    "key": "max_stage_events",
+    "value": "4",
+    "updated_at": "2026-07-30T17:56:18.931+00:00"
+  },
+  {
+    "key": "max_offstage_events",
+    "value": "6",
+    "updated_at": "2026-07-30T17:56:19.083+00:00"
+  },
+  {
+    "key": "team_colors",
+    "value": "{\"b20b3d6d-c661-4b99-a176-765b7189fa01\":\"#ff4757\",\"207ebce5-f044-487c-a4a9-40a954e9d4cd\":\"#e056fd\",\"d179e8bb-5263-419f-88f4-cd388fa73df5\":\"#1e90ff\"}",
+    "updated_at": "2026-07-30T17:56:19.609+00:00"
+  },
+  {
+    "key": "leaderboard_reveal_milestones",
+    "value": "[10,15,20,25,30,40,50,60,70,80]",
+    "updated_at": "2026-08-09T17:25:09.546289+00:00"
+  },
+  {
+    "key": "leaderboard_suspense_active",
+    "value": "true",
+    "updated_at": "2026-08-09T03:04:44.583399+00:00"
+  },
+  {
+    "key": "global_assign",
+    "value": "false",
+    "updated_at": "2026-08-02T12:41:54.063098+00:00"
+  },
+  {
+    "key": "registration_start_time",
+    "value": "",
+    "updated_at": "2026-08-02T12:27:40.345747+00:00"
+  },
+  {
+    "key": "registration_end_time",
+    "value": "",
+    "updated_at": "2026-08-02T12:27:40.365093+00:00"
+  },
+  {
+    "key": "locked_categories_global",
+    "value": "[\"d85a7367-6d26-4504-a26c-e50093111330\",\"33b972a7-6477-4a6d-ac27-cc20b47fc1cc\",\"c277087c-e6c2-4961-aa4c-b3a0f5f7735e\",\"f4836f20-4c0c-4748-8ea8-4ce7d0c292bd\",\"4b1a4259-690b-41ee-aa5d-ee2ab06261dd\",\"fad52ef3-db3d-4a38-9aab-3fd7fed06efa\"]",
+    "updated_at": "2026-08-02T12:27:40.364992+00:00"
+  },
+  {
+    "key": "announcer_sequence",
+    "value": "[\"eb59aca9-7daf-4951-bd2c-0afcb4249a83\",\"1b728477-e27e-480e-b39e-a61cbf5069b6\",\"95bda9eb-6961-403e-8646-9ea676116f97\",\"c4c7439d-3bb8-4646-8ebc-0a9098daeb6d\",\"7eb3d2d9-632a-4de8-bc6b-d64d634dc346\",\"b61d151b-5a1f-46c8-8d95-9d200f2d6356\",\"7216da98-7930-4e8d-91d8-8abcacf79910\",\"2b678e31-f048-4f58-b008-86640b8826c3\",\"1bee4826-ba0f-4bf0-b223-4efb4ef47fc0\",\"6fd67183-ada5-4eaa-bbf9-4764805890a6\",{\"id\":\"divider-10\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"b4d0b439-6d34-43d3-9418-df6114ba583f\",\"9d74fdca-b169-4783-8802-978b92928ef8\",\"48abc9ac-a4e8-40d5-8b5d-19b94d64c44d\",\"4d694ce0-cb49-4ce1-b913-040826560b26\",\"340398b8-2126-4041-ae03-9b6091e02fc2\",{\"id\":\"divider-15\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"171bb89e-7de6-4f5a-b34e-5d4988ea548a\",\"eaa99a5e-55c8-4bc1-9fdb-5a0d27e53682\",\"78ea6042-0fba-409a-b60f-9406146221cf\",\"e21cfe0e-4905-46d6-b570-7a0f1863ff8e\",\"f8488777-d434-4025-b83b-a5600da200dc\",{\"id\":\"divider-1788348889099-0i4q\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"54bc8ad0-ab5f-4d56-8579-dfb6e0d8af9e\",\"3caf9852-8687-4e20-a4e4-e661925f57f7\",\"274573d7-5a2d-4735-a831-a362ff2be2de\",\"e946ac69-00e6-4a22-854a-85f636b73958\",\"afbd7967-5aca-454a-b3b8-75d45b750233\",{\"id\":\"divider-1788351369639-stya\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"c207abf3-95fc-4565-97d1-a5bfc98aea8f\",\"6c9a3b9c-cf23-44c2-838d-99ad888613f7\",\"e37711f6-3ade-48a5-81b0-e72486dd4b1f\",\"e5d1d56c-09bb-4e2e-a990-41656393c7d1\",\"d35ecb46-c9fa-4cdf-91f5-8e7f48f32ddf\",{\"id\":\"divider-1788351630956-5awo\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"6ba060ea-499b-4a94-9824-93fad0ebc4d2\",\"c9facac8-1019-4717-80b4-475083a486f1\",\"cec26d9f-aae5-4402-8ff4-158c2fb8d075\",\"9e2ce46a-64ac-4e6f-988b-caaebc75148a\",\"687a1716-2d96-4d85-9e9d-2c1108a0f81a\",\"6cca2d48-3bcc-40c0-a47b-78ef12568717\",\"1eb46607-f550-4137-9c5d-a4573347d803\",\"e27e3648-46a7-4f30-badd-c9e67aec98ae\",\"54996ac7-ed7a-4b91-a470-f2b3eb8cd830\",\"a0800290-6861-4be5-baf6-8b9733d3629c\",{\"id\":\"divider-1788361309425-xbdz\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"72b662ca-7a09-402a-99b0-0460927e55c0\",\"2ac4f11b-47e0-4bbd-bb1c-38a4fbf0cbd5\",\"47b241a9-fe42-4bb9-a906-cdc485afcdc2\",\"28854468-993f-4fb8-b6b2-70c569d83f74\",\"9c069e74-a53d-4de5-943e-d134020a4d9b\",\"985dce7f-9817-4c61-b475-8d3d008eb12a\",\"4a5f8aaf-4749-4cf9-b39c-625d6d2a2775\",\"50f06317-df75-4944-aba8-983e7b83992f\",\"371b35ae-a50a-4f98-8550-b46dfb771b35\",\"c71d49e7-fd22-4d6a-b491-c9bb9c4cc5c1\",{\"id\":\"divider-1788361869316-xiz2\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"51ddeb0e-8c02-4750-81e7-308faeb9723e\",\"0567314a-ea15-4378-b0df-8497d85c74ff\",\"c6ede8fb-332f-47af-a3c3-8d4fbbbc3c6e\",\"fc1bad7d-6859-484d-91e8-1eefd7bbf0a4\",\"a766fbc1-21e5-4d63-ace6-ed5f9a301bda\",\"b9be347a-3c36-4f5b-a448-bf659e5360a4\",\"d8771511-4749-4ff0-83e7-e8c08074e4f3\",\"fc6c6207-d0de-4658-8904-1aa1d987a567\",\"b1953e5d-9a10-48e3-bd20-e5a0f2b19460\",\"09a03246-fa2b-4c1c-a2f6-306674653020\",{\"id\":\"divider-1788414901122-l966\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"e47a1cd5-460d-46e0-952c-e1a92b671642\",\"a762aded-4800-4d6b-9fe2-d7842c37e5dd\",\"52bf94b2-9176-4570-b258-3b158eb07589\",\"9b8e763e-5b41-4127-a3cd-e98a6f60a92f\",\"3ca651a5-4a02-4ed9-a5cc-16ce1dd7678a\",\"d9d947af-c723-4865-b26e-927e98c8cd38\",\"1f22849f-17e2-4d7c-8d3a-a6e438b18841\",\"7de75303-cc4d-43e9-95ec-4b12615a8d27\",\"ee649e27-c83d-410c-ba24-049d07ce55c1\",\"de119165-7bb1-4a19-8598-2cee73d13807\",{\"id\":\"divider-1788421287924-wqgn\",\"isDivider\":true,\"title\":\"Points Standing Status\"},\"84d8db81-9324-4407-ace4-77d9da8d2779\",\"5531b7e3-3e92-4d18-b0ae-65774e202e6e\",\"f386f173-bdbc-4a31-95e3-56b70ba117f6\",\"929c94c3-180b-4341-b55a-c816a2c72d18\",\"45864e20-4afd-42f4-9054-a0c72033bfc6\",\"99c80fd9-bc0f-4900-8b99-56a36b61010d\",\"389e8489-5c15-4416-8030-8bb79b5f8956\",\"0e552f1b-32b4-4e88-9370-0b45da5b93b3\",\"9dc312e5-64da-40e8-96aa-ae8314406290\",\"ffb2ce05-3206-406a-ad86-b96eb7820fee\",{\"id\":\"divider-1788426196626-xaj5\",\"isDivider\":true,\"title\":\"Points Standing Status\"}]",
+    "updated_at": "2026-08-09T03:04:44.583659+00:00"
+  }
+]

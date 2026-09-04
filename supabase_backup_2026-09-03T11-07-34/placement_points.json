@@ -1,0 +1,74 @@
+[
+  {
+    "id": "9dab457c-55e7-4f96-bef2-67c5c2432a91",
+    "competition_category": "group_2",
+    "position": 1,
+    "points": 7
+  },
+  {
+    "id": "dd52b2fd-5954-44a8-820d-e3884f350532",
+    "competition_category": "group_2",
+    "position": 2,
+    "points": 5
+  },
+  {
+    "id": "92d2d762-fe82-42de-af81-795f23077c58",
+    "competition_category": "group_2",
+    "position": 3,
+    "points": 3
+  },
+  {
+    "id": "d698e93e-d3b0-43e9-8453-8d2e8f999f56",
+    "competition_category": "group_3",
+    "position": 1,
+    "points": 10
+  },
+  {
+    "id": "2b8750ed-78fd-42c9-9c07-3b8fe42c4623",
+    "competition_category": "group_3",
+    "position": 2,
+    "points": 7
+  },
+  {
+    "id": "7e10d93b-81e3-4bb5-9a95-b963c5df5aa1",
+    "competition_category": "group_3",
+    "position": 3,
+    "points": 4
+  },
+  {
+    "id": "6d989b39-7a53-45f2-8873-6d04c7f305ff",
+    "competition_category": "group_45",
+    "position": 1,
+    "points": 15
+  },
+  {
+    "id": "966c6a3a-e65c-422c-b89b-96641bc67be2",
+    "competition_category": "group_45",
+    "position": 2,
+    "points": 10
+  },
+  {
+    "id": "b786eddb-53b4-4786-864f-694b931a57d9",
+    "competition_category": "group_45",
+    "position": 3,
+    "points": 5
+  },
+  {
+    "id": "7958f69b-3924-4c6d-92ac-44c35a863918",
+    "competition_category": "individual",
+    "position": 1,
+    "points": 5
+  },
+  {
+    "id": "97bd149b-334e-4198-8d60-0b8c74cf0530",
+    "competition_category": "individual",
+    "position": 2,
+    "points": 3
+  },
+  {
+    "id": "42345bd1-5e25-458d-8b7d-aa5d20be1074",
+    "competition_category": "individual",
+    "position": 3,
+    "points": 1
+  }
+]

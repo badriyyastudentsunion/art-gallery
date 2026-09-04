@@ -1,0 +1,58 @@
+[
+  {
+    "id": "eb0e7540-114e-4218-9d47-2c872090bfbb",
+    "name": "STAGE 2",
+    "location": "ATHIKODE",
+    "capacity": 0,
+    "created_at": "2026-07-19T09:14:22.598749+00:00"
+  },
+  {
+    "id": "c471dc4d-5eb4-408b-bb99-56b10362554a",
+    "name": "STAGE 3",
+    "location": "ATHIKODE",
+    "capacity": 0,
+    "created_at": "2026-07-19T09:14:33.92512+00:00"
+  },
+  {
+    "id": "3ed74f87-6fb2-41c7-8f2d-3de66a9e09c3",
+    "name": "STAGE 4",
+    "location": "ATHIKODE",
+    "capacity": 0,
+    "created_at": "2026-07-19T09:14:49.788492+00:00"
+  },
+  {
+    "id": "f0f93738-2ecc-49d2-a14d-a3ac113cd919",
+    "name": "STAGE 1",
+    "location": "ATHIKODE",
+    "capacity": 0,
+    "created_at": "2026-07-19T09:13:25.113252+00:00"
+  },
+  {
+    "id": "92ebf479-49f5-4a7d-93a5-894c89e342d4",
+    "name": "STAGE 5",
+    "location": "ATHIKODE",
+    "capacity": 0,
+    "created_at": "2026-08-27T06:03:35.701129+00:00"
+  },
+  {
+    "id": "33c4c6e7-206c-4600-86dd-780cc3097598",
+    "name": "STAGE 6",
+    "location": "BADRIYYA",
+    "capacity": 0,
+    "created_at": "2026-08-27T06:03:57.770224+00:00"
+  },
+  {
+    "id": "3d7dc088-dbac-456a-b28e-ee2c0b13d348",
+    "name": "MAIN STAGE",
+    "location": "ATHIKODE",
+    "capacity": 0,
+    "created_at": "2026-09-01T12:49:15.745991+00:00"
+  },
+  {
+    "id": "5f786eeb-f198-4857-a4f4-8840d31fbb75",
+    "name": "SECOND STAGE",
+    "location": "ATHIKODE",
+    "capacity": 0,
+    "created_at": "2026-09-01T12:49:32.335895+00:00"
+  }
+]

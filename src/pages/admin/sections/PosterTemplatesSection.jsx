@@ -465,7 +465,8 @@ export default function PosterTemplatesSection() {
         .from('poster_templates')
         .update({
           layer_mapping: currentMapping,
-          result_range: currentResultRange.trim()
+          result_range: currentResultRange.trim(),
+          updated_at: new Date().toISOString()
         })
         .eq('id', activePreviewTpl.id)
 

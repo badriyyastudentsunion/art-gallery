@@ -825,7 +825,7 @@ export default function AnnouncerFlowSection() {
         }
       }))
 
-      setSuccess(`✓ Status poster for milestone #${milestone} uploaded!`)
+      setSuccess(`Status poster for milestone #${milestone} uploaded!`)
       setTimeout(() => setSuccess(''), 3500)
     } catch (err) {
       console.error("Error uploading milestone poster:", err)
@@ -916,7 +916,10 @@ export default function AnnouncerFlowSection() {
               borderRadius: 20,
               border: '1px solid rgba(46, 213, 115, 0.2)'
             }}>
-              ✓ Auto-saved
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: 12, height: 12 }}>
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Auto-saved
             </span>
           )}
           {saveStatus === 'error' && (
@@ -932,7 +935,12 @@ export default function AnnouncerFlowSection() {
               borderRadius: 20,
               border: '1px solid rgba(239, 68, 68, 0.2)'
             }}>
-              ⚠️ Save failed
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 12, height: 12 }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              Save failed
             </span>
           )}
         </div>
@@ -1017,10 +1025,18 @@ export default function AnnouncerFlowSection() {
       </div>
 
       {/* ── Main Two-Column Workflow: Tray Builder & Ready Comps ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1.2fr) minmax(300px, 1fr)', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1.2fr) minmax(300px, 1fr)', gap: 24, alignItems: 'stretch' }}>
         
         {/* ── LEFT: ANNOUNCEMENT TRAY (QUEUE) ── */}
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: 20 }}>
+        <div style={{ 
+          background: 'var(--bg-card)', 
+          border: '1px solid var(--border-subtle)', 
+          borderRadius: 14, 
+          padding: 20, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          height: 680 
+        }}>
           
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div>
@@ -1076,7 +1092,17 @@ export default function AnnouncerFlowSection() {
           </div>
 
           {trayWithStandings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '48px 20px', border: '2px dashed rgba(255,255,255,0.06)', borderRadius: 10 }}>
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '48px 20px', 
+              border: '2px dashed rgba(255,255,255,0.06)', 
+              borderRadius: 10,
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
               <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0, fontWeight: 600 }}>
                 Your Announcement Tray is empty.
               </p>
@@ -1085,7 +1111,15 @@ export default function AnnouncerFlowSection() {
               </p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 10, 
+              flex: 1,
+              minHeight: 0, 
+              overflowY: 'auto', 
+              paddingRight: 6 
+            }}>
               {trayWithStandings.map((item, idx) => {
                 
                 // ── CASE A: STATUS DIVIDER CARD ──
@@ -1122,8 +1156,10 @@ export default function AnnouncerFlowSection() {
                               background: '#2ed573', padding: '2.5px 9px', borderRadius: 12,
                               textTransform: 'uppercase', letterSpacing: 0.5, display: 'inline-flex', alignItems: 'center', gap: 4
                             }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0e0b07' }} />
-                              ✓ REVEALED TO PUBLIC
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: 10, height: 10 }}>
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              REVEALED TO PUBLIC
                             </span>
                           ) : isReady ? (
                             <span style={{
@@ -1131,15 +1167,22 @@ export default function AnnouncerFlowSection() {
                               background: '#f7c948', padding: '2.5px 9px', borderRadius: 12,
                               textTransform: 'uppercase', letterSpacing: 0.5, display: 'inline-flex', alignItems: 'center', gap: 4
                             }}>
-                              ⚡ READY TO ANNOUNCE
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 10, height: 10 }}>
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                              </svg>
+                              READY TO ANNOUNCE
                             </span>
                           ) : (
                             <span style={{
                               fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
                               background: 'rgba(255,255,255,0.08)', padding: '2.5px 8px', borderRadius: 12,
-                              textTransform: 'uppercase', letterSpacing: 0.5
+                              textTransform: 'uppercase', letterSpacing: 0.5, display: 'inline-flex', alignItems: 'center', gap: 4
                             }}>
-                              ⏳ QUEUED ({item.publishedCountBeforeDivider}/{item.compCountAtDivider})
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 10, height: 10 }}>
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              QUEUED ({item.publishedCountBeforeDivider}/{item.compCountAtDivider})
                             </span>
                           )}
 
@@ -1308,12 +1351,18 @@ export default function AnnouncerFlowSection() {
                                       fontWeight: 800,
                                       color: '#2ed573',
                                       background: 'rgba(46, 213, 115, 0.15)',
-                                      padding: '1.5px 6px',
+                                      padding: '2px 7px',
                                       borderRadius: 4,
                                       textTransform: 'uppercase',
-                                      letterSpacing: 0.5
+                                      letterSpacing: 0.5,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4
                                     }}>
-                                      ✓ Poster Attached
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: 9.5, height: 9.5 }}>
+                                        <polyline points="20 6 9 17 4 12" />
+                                      </svg>
+                                      Poster Attached
                                     </span>
                                   </div>
                                   <p style={{ margin: '2px 0 0 0', fontSize: 11, color: '#ddd', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1508,7 +1557,11 @@ export default function AnnouncerFlowSection() {
                           padding: '3px 8px',
                           borderRadius: 6
                         }}>
-                          🔒 Completed
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 11, height: 11 }}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                          </svg>
+                          Completed
                         </span>
                       ) : (
                         <>
@@ -1549,7 +1602,16 @@ export default function AnnouncerFlowSection() {
         </div>
 
         {/* ── RIGHT: JUDGED COMPETITIONS (SOURCE POOL) ── */}
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: 20 }}>
+        <div style={{ 
+          background: 'var(--bg-card)', 
+          border: '1px solid var(--border-subtle)', 
+          borderRadius: 14, 
+          padding: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          height: 680,
+          boxSizing: 'border-box'
+        }}>
           
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <div>
@@ -1624,11 +1686,27 @@ export default function AnnouncerFlowSection() {
           </div>
 
           {sortedReadyComps.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0, textAlign: 'center', padding: '36px 0' }}>
-              {readyComps.length === 0 ? 'No more judged competitions waiting.' : 'No competitions match your search.'}
-            </p>
+            <div style={{ 
+              flex: 1, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              padding: '36px 0' 
+            }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0, textAlign: 'center' }}>
+                {readyComps.length === 0 ? 'No more judged competitions waiting.' : 'No competitions match your search.'}
+              </p>
+            </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '600px', overflowY: 'auto' }}>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 8, 
+              flex: 1,
+              minHeight: 0, 
+              overflowY: 'auto', 
+              paddingRight: 6 
+            }}>
               {sortedReadyComps.map(c => {
                 return (
                   <div key={c.id} style={{

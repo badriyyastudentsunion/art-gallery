@@ -1,0 +1,98 @@
+{
+  "timestamp": "2026-09-03T11:08:00.565Z",
+  "totalTables": 24,
+  "summary": [
+    {
+      "table": "teams",
+      "rows": 3
+    },
+    {
+      "table": "categories",
+      "rows": 6
+    },
+    {
+      "table": "competitions",
+      "rows": 135
+    },
+    {
+      "table": "participants",
+      "rows": 103
+    },
+    {
+      "table": "competition_participants",
+      "rows": 961
+    },
+    {
+      "table": "settings",
+      "rows": 1
+    },
+    {
+      "table": "invigilators",
+      "rows": 8
+    },
+    {
+      "table": "judges",
+      "rows": 17
+    },
+    {
+      "table": "announcers",
+      "rows": 1
+    },
+    {
+      "table": "stages",
+      "rows": 8
+    },
+    {
+      "table": "competition_invigilators",
+      "rows": 126
+    },
+    {
+      "table": "competition_judges",
+      "rows": 126
+    },
+    {
+      "table": "point_settings",
+      "rows": 4
+    },
+    {
+      "table": "placement_points",
+      "rows": 12
+    },
+    {
+      "table": "competition_schedule",
+      "rows": 126
+    },
+    {
+      "table": "competition_reports",
+      "rows": 780
+    },
+    {
+      "table": "judge_results",
+      "rows": 765
+    },
+    {
+      "table": "competition_results",
+      "rows": 551
+    },
+    {
+      "table": "app_settings",
+      "rows": 22
+    },
+    {
+      "table": "gallery_media",
+      "rows": 73
+    },
+    {
+      "table": "media_presets",
+      "rows": 1
+    },
+    {
+      "table": "award_users",
+      "rows": 1
+    },
+    {
+      "table": "poster_templates",
+      "rows": 3
+    }
+  ]
+}

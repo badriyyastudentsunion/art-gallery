@@ -38,6 +38,93 @@ export function matchesResultRange(rangeStr, num) {
 
 // In-memory cache across component mounts for instant zero-latency renders
 let cachedTemplates = null
+let lastMetadataSyncTime = 0
+let inFlightSyncPromise = null
+
+function getLocalTemplates() {
+  if (cachedTemplates) return cachedTemplates
+  try {
+    const local = localStorage.getItem('inspico_poster_templates_cache')
+    if (local) {
+      cachedTemplates = JSON.parse(local)
+      return cachedTemplates
+    }
+  } catch (_) {}
+  return null
+}
+
+/**
+ * Smart Metadata Sync:
+ * Queries ONLY lightweight metadata (~100 bytes: id, updated_at, result_range, is_default).
+ * If remote metadata matches local cache, it uses cached HTML with 0 BYTES heavy egress!
+ * If Admin edited, renamed, or deleted a template, it pulls the full template data immediately.
+ */
+async function syncTemplatesWithRemote(forceFull = false) {
+  if (inFlightSyncPromise) return inFlightSyncPromise
+
+  inFlightSyncPromise = (async () => {
+    try {
+      const currentCache = getLocalTemplates()
+      const now = Date.now()
+
+      // If we synced within the last 15s and have valid cache, skip network check
+      if (!forceFull && currentCache && (now - lastMetadataSyncTime < 15000)) {
+        return currentCache
+      }
+
+      // Step 1: Lightweight check (only 100 bytes)
+      const { data: remoteMeta, error: metaErr } = await supabase
+        .from('poster_templates')
+        .select('id, result_range, is_default, updated_at')
+        .order('created_at', { ascending: false })
+
+      if (metaErr) throw metaErr
+
+      lastMetadataSyncTime = Date.now()
+      const remotes = remoteMeta || []
+
+      // If length matches, check if every template updated_at and range matches
+      if (!forceFull && currentCache && currentCache.length === remotes.length) {
+        let isIdentical = true
+        for (const r of remotes) {
+          const cached = currentCache.find(c => c.id === r.id)
+          if (!cached || cached.updated_at !== r.updated_at || cached.result_range !== r.result_range || cached.is_default !== r.is_default) {
+            isIdentical = false
+            break
+          }
+        }
+
+        if (isIdentical) {
+          // Cache is 100% verified & fresh! 0 bytes heavy egress!
+          return currentCache
+        }
+      }
+
+      // Step 2: Only if metadata changed or no cache, download full template content
+      const { data: fullTemplates, error: fullErr } = await supabase
+        .from('poster_templates')
+        .select('id, name, html_content, canvas_width, canvas_height, layer_mapping, result_range, is_default, updated_at, created_at')
+        .order('created_at', { ascending: false })
+
+      if (!fullErr && fullTemplates) {
+        cachedTemplates = fullTemplates
+        try {
+          localStorage.setItem('inspico_poster_templates_cache', JSON.stringify(fullTemplates))
+          localStorage.setItem('inspico_poster_templates_version', Date.now().toString())
+        } catch (_) {}
+        return fullTemplates
+      }
+    } catch (err) {
+      console.warn('Smart template sync error, using fallback cache:', err)
+    } finally {
+      inFlightSyncPromise = null
+    }
+
+    return getLocalTemplates() || []
+  })()
+
+  return inFlightSyncPromise
+}
 
 export default function ResultPoster({ competition, results = [] }) {
   const codeNumber = competition?.announcementNumber
@@ -45,20 +132,11 @@ export default function ResultPoster({ competition, results = [] }) {
     : null
 
   const [template, setTemplate] = useState(() => {
-    // Optimistic initial render from memory/localStorage
-    if (cachedTemplates && codeNumber !== null) {
-      return cachedTemplates.find(t => matchesResultRange(t.result_range, codeNumber)) || null
+    // Instant optimistic render from memory / localStorage
+    const tpls = getLocalTemplates()
+    if (tpls && codeNumber !== null) {
+      return tpls.find(t => matchesResultRange(t.result_range, codeNumber)) || null
     }
-    try {
-      const local = localStorage.getItem('inspico_poster_templates_cache')
-      if (local) {
-        const parsed = JSON.parse(local)
-        cachedTemplates = parsed
-        if (codeNumber !== null) {
-          return parsed.find(t => matchesResultRange(t.result_range, codeNumber)) || null
-        }
-      }
-    } catch (_) {}
     return null
   })
 
@@ -69,62 +147,30 @@ export default function ResultPoster({ competition, results = [] }) {
   useEffect(() => {
     let isMounted = true
 
-    async function fetchActiveTemplate() {
-      try {
-        // Always query Supabase as source of truth to avoid stale or deleted templates
-        const { data: allTemplates, error } = await supabase
-          .from('poster_templates')
-          .select('id, name, html_content, canvas_width, canvas_height, layer_mapping, result_range, is_default, created_at')
-          .order('created_at', { ascending: false })
+    async function ensureFreshTemplate(forceFull = false) {
+      const allTemplates = await syncTemplatesWithRemote(forceFull)
+      if (!isMounted) return
 
-        if (!error && allTemplates) {
-          cachedTemplates = allTemplates
-          try {
-            localStorage.setItem('inspico_poster_templates_cache', JSON.stringify(allTemplates))
-          } catch (_) {}
-
-          let matched = null
-          if (allTemplates.length > 0 && codeNumber !== null) {
-            matched = allTemplates.find(t => matchesResultRange(t.result_range, codeNumber)) || null
-          }
-
-          if (isMounted) {
-            setTemplate(matched && matched.html_content ? matched : null)
-            setLoadingTemplate(false)
-          }
-          return
-        }
-      } catch (err) {
-        console.error('Error fetching poster templates from Supabase:', err)
+      let matched = null
+      if (allTemplates && allTemplates.length > 0 && codeNumber !== null) {
+        matched = allTemplates.find(t => matchesResultRange(t.result_range, codeNumber)) || null
       }
 
-      // Offline or network error fallback
-      try {
-        const localStr = localStorage.getItem('inspico_poster_templates_cache')
-        if (localStr) {
-          const parsed = JSON.parse(localStr)
-          cachedTemplates = parsed
-          if (isMounted) {
-            const matched = codeNumber !== null ? parsed.find(t => matchesResultRange(t.result_range, codeNumber)) : null
-            setTemplate(matched && matched.html_content ? matched : null)
-          }
-        }
-      } catch (_) {}
-
-      if (isMounted) setLoadingTemplate(false)
+      setTemplate(matched && matched.html_content ? matched : null)
+      setLoadingTemplate(false)
     }
 
-    fetchActiveTemplate()
+    ensureFreshTemplate()
 
-    // Realtime listener for template additions / deletions / edits
+    // Listen for postgres changes on poster_templates table
     const ch = supabase.channel(`rt-templates-${Math.random().toString(36).substring(2, 7)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'poster_templates' }, () => {
-        fetchActiveTemplate()
+        ensureFreshTemplate(true)
       })
       .subscribe()
 
-    // Local event listener when admin updates templates in the same session
-    const handleLocalUpdate = () => fetchActiveTemplate()
+    // Instant local listener when admin updates templates in the same browser session
+    const handleLocalUpdate = () => ensureFreshTemplate(true)
     window.addEventListener('poster_templates_updated', handleLocalUpdate)
 
     return () => {

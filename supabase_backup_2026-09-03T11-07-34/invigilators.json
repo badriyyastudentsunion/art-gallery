@@ -1,0 +1,58 @@
+[
+  {
+    "id": "0e81fa18-6989-4474-89dc-bcc1f3e827bb",
+    "name": "STAGE 1",
+    "username": "stage 1",
+    "password": "stage1",
+    "created_at": "2026-07-19T11:28:27.446167+00:00"
+  },
+  {
+    "id": "5d260ba0-e63b-44f1-875a-be0bfaad5898",
+    "name": "STAGE 2",
+    "username": "stage 2",
+    "password": "stage2",
+    "created_at": "2026-07-19T11:49:57.556009+00:00"
+  },
+  {
+    "id": "9cd2342f-c4ad-4877-9962-a2eb72bbeefc",
+    "name": "STAGE 3",
+    "username": "stage 3",
+    "password": "stage3",
+    "created_at": "2026-07-31T14:04:34.664009+00:00"
+  },
+  {
+    "id": "623efcb0-c1ea-4b57-b807-2835c26699ec",
+    "name": "STAGE 4",
+    "username": "stage 4",
+    "password": "stage4",
+    "created_at": "2026-07-31T14:04:52.40369+00:00"
+  },
+  {
+    "id": "d2fae163-f0bd-4eb0-a719-54a6fa42228f",
+    "name": "STAGE 5",
+    "username": "stage 5",
+    "password": "stage5",
+    "created_at": "2026-08-27T06:04:42.183863+00:00"
+  },
+  {
+    "id": "05638f9e-35cc-4e04-a612-a074c5e46536",
+    "name": "STAGE 6",
+    "username": "stage 6",
+    "password": "stage6",
+    "created_at": "2026-08-27T06:05:14.931749+00:00"
+  },
+  {
+    "id": "ede10b23-aad2-4faf-a6ff-741ae074defa",
+    "name": "MAIN STAGE",
+    "username": "main",
+    "password": "main",
+    "created_at": "2026-09-01T12:50:14.098694+00:00"
+  },
+  {
+    "id": "c9390716-973b-4744-9a5e-3757e75ae150",
+    "name": "SECOND STAGE",
+    "username": "second",
+    "password": "second",
+    "created_at": "2026-09-01T12:50:34.587231+00:00"
+  }
+]
