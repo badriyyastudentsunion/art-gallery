@@ -131,6 +131,29 @@ export default function DashboardSection() {
     const pubRows = pubResults || []
     const pointsResults = isSuspense ? pubRows.filter(r => !seqSet.has(r.competition_id)) : pubRows
 
+    // Build index map of sequence positions for sorted announcement tray order
+    const seqCompIndexMap = {}
+    let seqOrder = 0
+    seqIds.forEach(item => {
+      const cId = typeof item === 'string' ? item : item?.id
+      if (cId && !seqCompIndexMap[cId]) {
+        seqCompIndexMap[cId] = ++seqOrder
+      }
+    })
+
+    const anncPendingList = all
+      .filter(c => (seqCompIndexMap[c.id] || c.announcer_id) && !publishedSet.has(c.id))
+      .map(c => ({
+        ...c,
+        trayNumber: seqCompIndexMap[c.id] || null
+      }))
+      .sort((a, b) => {
+        const orderA = a.trayNumber || 9999
+        const orderB = b.trayNumber || 9999
+        if (orderA !== orderB) return orderA - orderB
+        return a.name.localeCompare(b.name)
+      })
+
     const computedStats = {
       total: all,
       teams: (teamsRows || []).length,
@@ -146,7 +169,7 @@ export default function DashboardSection() {
       judgePending:   all.filter(c => hasJudgeSet.has(c.id) && completedScheduleSet.has(c.id) && !judgedSet.has(c.id)),
       judgeCompleted: all.filter(c => hasJudgeSet.has(c.id) && judgedSet.has(c.id)),
       judgeNone:      all.filter(c => !hasJudgeSet.has(c.id)),
-      anncPending:    all.filter(c => hasAnncSet.has(c.id) && judgedSet.has(c.id) && !publishedSet.has(c.id)),
+      anncPending:    anncPendingList,
       anncDone:       all.filter(c => publishedSet.has(c.id)),
       anncNone:       all.filter(c => !hasAnncSet.has(c.id)),
     }
@@ -542,7 +565,14 @@ export default function DashboardSection() {
                 <div key={c.id} className="db-popup-item">
                   <span className="db-popup-num">{i + 1}</span>
                   <div className="db-popup-info">
-                    <span className="db-popup-name">{c.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="db-popup-name">{c.name}</span>
+                      {c.trayNumber && (
+                        <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.08)', color: 'var(--accent-light)' }} title={`Tray Position #${c.trayNumber}`}>
+                          #{c.trayNumber}
+                        </span>
+                      )}
+                    </div>
                     {c.categories?.name && <span className="db-popup-cat">{c.categories.name}</span>}
                   </div>
                   <span className="db-popup-dot" style={{ background: popup.color }} />

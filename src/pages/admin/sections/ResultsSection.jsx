@@ -79,6 +79,10 @@ export default function ResultsSection() {
     }
   }, [unlocked])
 
+  useEffect(() => {
+    getFooterAssets().catch(() => {})
+  }, [])
+
   async function tryUnlock(e) {
     e.preventDefault()
     setVerifying(true)
@@ -447,8 +451,92 @@ export default function ResultsSection() {
     return matchSearch && matchTeam && matchCat && matchType
   })
 
-  // Helper to render branded Inspico header bar and interactive footer across all pages
-  const renderInspicoFooter = (doc) => {
+  // Cache for rasterized logo and title assets for PDF generation
+  let cachedFooterAssets = null
+
+  const getFooterAssets = async () => {
+    if (cachedFooterAssets) return cachedFooterAssets
+
+    const rawLogoSvg = `<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 377.06 376.79" width="377" height="377"><g id="Layer_1-2" data-name="Layer 1"><path fill="#0f172a" d="M188.86,376.79l-89.18-88.18,48.68-48.48-9.96-10.68-48.6,48.68-40.69-40.16,47.75-47.86-9.73-9.45-47.36,47.33L0,188.71l88.52-89.21,49.86,48.38,9.32-9.39-49.52-48.91,40.1-39.89,48.74,48.53,10.23-10.02-48.95-49.03L187.78,0l89.89,87.94-50.84,50.8,9.87,9.97,50.44-50.39,39.99,40.05-48.9,48.84,9.61,9.57,48.47-48.11,40.74,39.61-89.2,89.1-50.7-49.09-10.03,9.54,50.41,49.95-40.06,39.9-48.62-47.9c-2.82,2.48-5.7,5.52-8.66,9.24l48.23,47.86-39.58,39.9ZM187.93,198.26l10.41-10.32-9.87-9.57-10.52,10.37,9.98,9.52Z"/></g></svg>`
+
+    const rawTitleSvg = `<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 372.33 100.24" width="372" height="100"><defs><style>.cls-1{fill:#0f172a;}.cls-2{fill:#B8193C;}</style></defs><g id="Layer_1-2" data-name="Layer 1"><g><g><path class="cls-1" d="M184.6,71.02v29.19s-27.08-.01-27.08-.01V0s59.67,0,59.67,0l.02,71.01h-32.61ZM190.61,22.21h-6.01v30.45h6.01v-30.45Z"/><path class="cls-1" d="M151.9,100.2h-58.36s0-27.72,0-27.72h33.23s-.04-7.62-.04-7.62l-27.17-.06c-3.51-.06-6.02-2.23-6.02-5.77V0s58.36,0,58.36,0v28.5s-34.45,0-34.45,0v7.36s29.17,0,29.17,0c2.82-.07,4.91,1.79,5.28,4.66v59.68Z"/><path class="cls-1" d="M60.05,41.72l-18.86-18.94.08,7.75,14.08,13.98c2.6,2.58,4.77,5.35,6.65,8.47,2.29,4.18,2.83,8.52,3.37,13.32l.13,33.91h-32.78s0-100.2,0-100.2h55.4s0,100.22,0,100.22l-12.09-.12c-2.65-.03-4.57-2.35-5.16-4.62l-.49-3.73-.2-24.8c-.08-9.71-3.09-18.19-10.12-25.24Z"/><rect class="cls-1" y="0" width="27.1" height="100.24"/><path class="cls-1" d="M368.25,100.19l-40.23.03c-2.83,0-5.95-1.71-5.95-5.03l-.04-89.16c0-2.75,1.48-5.96,4.64-5.96h41.35c2.93,0,4.3,3.07,4.3,5.61v90.24c0,2.19-2.13,3.7-4.08,4.28ZM350.52,74.99V24.32c0-1.8-1.64-2.26-3.2-2.19-.93.04-2.98.21-2.98,1.65l-.02,50.56c0,.67.33,1.89.82,1.97l2.3.38c.89.15,3.08-.05,3.08-1.7Z"/><path class="cls-1" d="M286.19,72.16c.19,1.61,1.11,2.4,2.47,2.37h28.11s0,25.68,0,25.68l-53.79-.02V0s53.79,0,53.79,0v23.91s-27.76,0-27.76,0c-1.72-.02-2.68,1.15-2.82,2.9v45.36Z"/><path class="cls-1" d="M257.02,100.21h-34.11s.01-86.79.01-86.79c10.02,7.66,21.58,11.85,34.1,11.91v74.88Z"/></g><path class="cls-2" d="M257.03,20.56c-12.78-.24-24.71-5.29-34.06-14.01l-.05-6.55h34.1s0,20.56,0,20.56Z"/></g></g></svg>`
+
+    const convertSvgToPng = (svgString, w, h) => {
+      return new Promise((resolve) => {
+        try {
+          const img = new Image()
+          const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+          const url = URL.createObjectURL(svgBlob)
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            const scale = 4 // 4x supersampling for ultra-crisp print quality
+            canvas.width = w * scale
+            canvas.height = h * scale
+            const ctx = canvas.getContext('2d')
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            URL.revokeObjectURL(url)
+            resolve(canvas.toDataURL('image/png'))
+          }
+          img.onerror = () => {
+            URL.revokeObjectURL(url)
+            resolve(null)
+          }
+          img.src = url
+        } catch {
+          resolve(null)
+        }
+      })
+    }
+
+    let logoSvg = rawLogoSvg
+    let titleSvg = rawTitleSvg
+
+    try {
+      const [logoRes, titleRes] = await Promise.all([
+        fetch('/inspico-logo.svg').catch(() => null),
+        fetch('/inspico.svg').catch(() => null)
+      ])
+
+      if (logoRes && logoRes.ok) {
+        const txt = await logoRes.text()
+        if (txt && txt.includes('<svg')) {
+          logoSvg = txt
+            .replace(/<svg\b([^>]*)>/i, (m, a) => `<svg${a} width="377" height="377">`)
+            .replace('<path ', '<path fill="#0f172a" ')
+        }
+      }
+
+      if (titleRes && titleRes.ok) {
+        const txt = await titleRes.text()
+        if (txt && txt.includes('<svg')) {
+          titleSvg = txt
+            .replace(/<svg\b([^>]*)>/i, (m, a) => `<svg${a} width="372" height="100">`)
+            .replace(/fill:\s*#fff/gi, 'fill: #0f172a')
+        }
+      }
+    } catch {
+      // Fallback to inline SVG
+    }
+
+    const [logoPng, titlePng] = await Promise.all([
+      convertSvgToPng(logoSvg, 120, 120),
+      convertSvgToPng(titleSvg, 372, 100)
+    ])
+
+    cachedFooterAssets = { logoDataUrl: logoPng, titleDataUrl: titlePng }
+    return cachedFooterAssets
+  }
+
+  // Helper to render branded Inspico header bar and interactive footer across all pages with real logo & title
+  const renderInspicoFooter = async (doc) => {
+    let assets = { logoDataUrl: null, titleDataUrl: null }
+    try {
+      assets = await getFooterAssets()
+    } catch {
+      // safe fallback
+    }
+    const { logoDataUrl, titleDataUrl } = assets
+
     const totalPages = doc.internal.getNumberOfPages()
     const pageHeight = doc.internal.pageSize.height
     const pageWidth = doc.internal.pageSize.width
@@ -470,21 +558,42 @@ export default function ResultsSection() {
       doc.setLineWidth(0.3)
       doc.line(14, footerY - 4, 196, footerY - 4)
 
-      // Left: Logo Icon Emblem & Title
-      doc.setFillColor(30, 41, 59)
-      doc.circle(17, footerY - 0.2, 2.4, "F")
-      doc.setFillColor(79, 156, 249)
-      doc.circle(17, footerY - 0.2, 1.2, "F")
+      // Left: Real Logo Icon & Real INSPICO Title
+      let currentX = 14
+      if (logoDataUrl) {
+        // Real geometric emblem logo
+        doc.addImage(logoDataUrl, 'PNG', currentX, footerY - 3, 5.6, 5.6)
+        currentX += 7.2
+      } else {
+        doc.setFillColor(30, 41, 59)
+        doc.circle(currentX + 2.5, footerY - 0.2, 2.4, "F")
+        doc.setFillColor(79, 156, 249)
+        doc.circle(currentX + 2.5, footerY - 0.2, 1.2, "F")
+        currentX += 6.5
+      }
 
+      if (titleDataUrl) {
+        // Real INSPICO logotype (372x100 -> aspect ratio 3.72)
+        doc.addImage(titleDataUrl, 'PNG', currentX, footerY - 2.5, 17.5, 4.7)
+        currentX += 19.5
+      } else {
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(8.5)
+        doc.setTextColor(30, 41, 59)
+        doc.text("INSPICO", currentX, footerY + 0.6)
+        currentX += 16
+      }
+
+      // Year badge / Subtitle
       doc.setFont("helvetica", "bold")
-      doc.setFontSize(8.5)
-      doc.setTextColor(30, 41, 59)
-      doc.text("INSPICO '26", 21.5, footerY + 0.6)
+      doc.setFontSize(7.5)
+      doc.setTextColor(79, 156, 249)
+      doc.text("'26", currentX, footerY + 0.6)
 
       doc.setFont("helvetica", "normal")
       doc.setFontSize(7)
       doc.setTextColor(148, 163, 184)
-      doc.text(`· Official Results System · ${dateStr}`, 47, footerY + 0.6)
+      doc.text(` · Official Results · ${dateStr}`, currentX + 4.5, footerY + 0.6)
 
       // Center-Right: Interactive "See More / Web" button
       const btnX = 132
@@ -515,7 +624,7 @@ export default function ResultsSection() {
   }
 
   // Export standings to PDF (strictly filtered rows)
-  const downloadPDF = (list) => {
+  const downloadPDF = async (list) => {
     if (list.length === 0) {
       alert("No standings data found matching current filters.")
       return
@@ -605,12 +714,12 @@ export default function ResultsSection() {
       y += 8
     })
     
-    renderInspicoFooter(doc)
+    await renderInspicoFooter(doc)
     doc.save(`Inspico_Participant_Standings_${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
   // Export absentees to PDF (strictly filtered rows)
-  const downloadAbsenteesPDF = (list) => {
+  const downloadAbsenteesPDF = async (list) => {
     if (list.length === 0) {
       alert("No absentees found matching current filters.")
       return
@@ -689,12 +798,12 @@ export default function ResultsSection() {
       y += 8
     })
     
-    renderInspicoFooter(doc)
+    await renderInspicoFooter(doc)
     doc.save(`Inspico_Absentees_Report_${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
   // Export judged competition results with detailed points to a single PDF (strictly filtered competitions)
-  const downloadAllJudgedResultsPDF = (compsToExport = filtered) => {
+  const downloadAllJudgedResultsPDF = async (compsToExport = filtered) => {
     if (compsToExport.length === 0) {
       alert("No competitions found matching current filters.")
       return
@@ -830,7 +939,7 @@ export default function ResultsSection() {
       doc.text(teamSummaryList || "No team points", 56, (y - 0.5).toFixed(1))
     })
     
-    renderInspicoFooter(doc)
+    await renderInspicoFooter(doc)
     doc.save(`Inspico_Results_${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
