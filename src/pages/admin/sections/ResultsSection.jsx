@@ -148,7 +148,7 @@ export default function ResultsSection() {
     setCompetitions(judgedComps)
 
     // Compute live standings for Kalaprathipa and Sargaprathipa from ALL judged competitions
-    const participantPoints = {} // name -> { name, team, stagePts, offStagePts, pts }
+    const participantPoints = {} // participant.id -> { id, name, team, stagePts, offStagePts, pts }
     const detailsMap = {}
 
     judgedComps.forEach(comp => {
@@ -208,7 +208,7 @@ export default function ResultsSection() {
         const isGroupComp = !!comp.is_group
 
         if (!isGroupComp && r.participant) {
-          const key = r.participant.name
+          const key = r.participant.id || r.participant.name
           if (!participantPoints[key]) {
             participantPoints[key] = {
               id: r.participant.id,
@@ -1201,10 +1201,10 @@ export default function ResultsSection() {
                     {award.list.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {award.list.map((w, i) => {
-                          const matched = standings.find(s => s.name === w.name) || w
+                          const matched = standings.find(s => (w.id && s.id === w.id) || s.name === w.name) || w
                           return (
                             <div 
-                              key={i} 
+                              key={w.id || w.name || i} 
                               style={{ 
                                 padding: '12px 14px',
                                 background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%)',
@@ -1408,7 +1408,7 @@ export default function ResultsSection() {
                 <tbody>
                   {filteredStandings.map((p, idx) => (
                     <tr 
-                      key={p.name}
+                      key={p.id || p.name || idx}
                       onClick={() => openParticipantModal(p, null)}
                       className="row-clickable"
                       style={{ cursor: 'pointer' }}
@@ -1800,7 +1800,7 @@ export default function ResultsSection() {
                         fontWeight: 800, 
                         fontSize: 15 
                       }}>
-                        #{filteredStandings.findIndex(x => x.name === selectedParticipant.name) + 1}
+                        #{filteredStandings.findIndex(x => (selectedParticipant.id && x.id === selectedParticipant.id) || x.name === selectedParticipant.name) + 1}
                       </div>
                     )}
                     
